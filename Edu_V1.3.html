@@ -443,7 +443,7 @@
       connected = isConn;
       document.getElementById('statusText').textContent = text;
       document.getElementById('statusDot').classList.toggle('connected', isConn);
-      document.getElementById('btnConnect').style.display = isConn ? 'none' : 'block';
+      document.getElementById('btnConnect').style.display = isConn ? 'none' : 'inline-flex';
       document.querySelectorAll('.conn-dot').forEach(d => d.classList.toggle('connected', isConn));
     }
 
@@ -469,10 +469,17 @@
 
     async function connectBLE() {
       try {
-        if (!navigator.bluetooth) { alert('Browser unterst\u00fctzt kein Web Bluetooth!'); return; }
+        if (!navigator.bluetooth) { alert('Browser unterstuetzt kein Web Bluetooth!'); return; }
         updateConnectionUI(false, 'Suche...');
-        device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID] });
-        device.addEventListener('gattserverdisconnected', () => { updateConnectionUI(false, 'Getrennt'); });
+        device = await navigator.bluetooth.requestDevice({ 
+          acceptAllDevices: true, 
+          optionalServices: [SERVICE_UUID] 
+        });
+        device.addEventListener('gattserverdisconnected', () => { 
+          updateConnectionUI(false, 'Getrennt'); 
+          connected = false;
+          stopSending();
+        });
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService(SERVICE_UUID);
         cmdChar = await service.getCharacteristic(CMD_UUID);
@@ -481,11 +488,12 @@
         statusChar.addEventListener('characteristicvaluechanged', e => {
           handleStatusMessage(new TextDecoder().decode(e.target.value));
         });
+        connected = true;
         updateConnectionUI(true, 'Verbunden');
         startSending();
       } catch (e) {
-        updateConnectionUI(false, 'Getrennt');
         console.error(e);
+        updateConnectionUI(false, 'Getrennt');
       }
     }
 
@@ -493,7 +501,10 @@
       if (!connected || !cmdChar) return;
       if (writing) { queuedCommand = cmd; return; }
       writing = true;
-      try { await cmdChar.writeValueWithoutResponse(new TextEncoder().encode(cmd)); } catch (e) {}
+      try { 
+        const encoder = new TextEncoder();
+        await cmdChar.writeValueWithoutResponse(encoder.encode(cmd)); 
+      } catch (e) { connected = false; }
       writing = false;
       if (queuedCommand) { const n = queuedCommand; queuedCommand = null; sendCommand(n); }
     }
@@ -503,7 +514,10 @@
       const msg = 'KEYS:' + keys.w + keys.a + keys.s + keys.d;
       if (!force && msg === lastSent) return;
       lastSent = msg;
-      try { await cmdChar.writeValueWithoutResponse(new TextEncoder().encode(msg)); } catch (e) {}
+      try { 
+        const encoder = new TextEncoder();
+        await cmdChar.writeValueWithoutResponse(encoder.encode(msg)); 
+      } catch (e) { connected = false; }
     }
 
     function startSending() { stopSending(); heartbeatInterval = setInterval(() => sendKeys(true), 50); }
@@ -563,7 +577,6 @@
       const n = document.getElementById('meshRobotNameInput').value;
       if (n) sendCommand('MESH:NAME:' + n);
     });
-    document.getElementById('btnRefreshPeers').addEventListener('click', () => sendCommand('MESHPEERS'));
     document.getElementById('btnSendMeshMsg').addEventListener('click', () => {
       const t = document.getElementById('meshTargetSelect').value;
       const m = document.getElementById('meshMsgInput').value;
