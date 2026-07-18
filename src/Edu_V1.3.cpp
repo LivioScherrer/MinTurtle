@@ -1112,7 +1112,6 @@ void setup() {
   advertising->start();
 
   Serial.println("[BLE] Werbung gestartet (EduBot)");
-  Serial.println("======================================\n");
 
   // WiFi/Mesh NACH BLE starten
   WiFi.mode(WIFI_STA);
@@ -1124,6 +1123,11 @@ void setup() {
   } else {
     Serial.println("[MESH] ESP-NOW NICHT aktivierbar");
   }
+
+  // WICHTIG: Advertising nach WiFi-Init neu starten
+  // WiFi.mode() kann die BLE-Advertising auf ESP32-S3 stoeren
+  advertising->start();
+  Serial.println("[BLE] Advertising erneut gestartet nach WiFi-Init");
 }
 
 // =====================================================
