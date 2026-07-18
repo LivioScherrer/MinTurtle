@@ -19,6 +19,7 @@
 #include "soc/gpio_struct.h"
 #include <esp_task_wdt.h>
 #include "mesh.h"
+#include <esp_wifi.h>
 
 // Function prototypes (Arduino-typ)
 bool IRAM_ATTR stepperTimerISR(void *arg);
@@ -1082,11 +1083,7 @@ void setup() {
     Serial.println("[BLE] Fehler: Queue konnte nicht erstellt werden!");
   }
 
-  // WiFi-Modus vor BLE setzen (wichtig für Koexistenz auf ESP32-S3)
-  WiFi.mode(WIFI_STA);
-  delay(100);
-
-  // BLE initialisieren
+  // BLE VOR WiFi initialisieren (Espressif-Empfehlung fuer Koexistenz)
   BLEDevice::init("EduBot");
 
   BLEServer* server = BLEDevice::createServer();
@@ -1117,8 +1114,11 @@ void setup() {
   Serial.println("[BLE] Werbung gestartet (EduBot)");
   Serial.println("======================================\n");
 
-  // --- Mesh (ESP-NOW) starten ---
-  // WiFi ist bereits im STA-Modus, BLE läuft koexistent
+  // WiFi/Mesh NACH BLE starten
+  WiFi.mode(WIFI_STA);
+  delay(100);
+  esp_wifi_set_channel(6, WIFI_SECOND_CHAN_NONE);
+
   if (EduMesh::begin(g_robotName, onMeshMessage)) {
     Serial.println("[MESH] ESP-NOW aktiv");
   } else {

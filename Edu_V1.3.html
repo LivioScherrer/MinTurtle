@@ -471,9 +471,9 @@
       try {
         if (!navigator.bluetooth) { alert('Browser unterstuetzt kein Web Bluetooth!'); return; }
         updateConnectionUI(false, 'Suche...');
-        device = await navigator.bluetooth.requestDevice({ 
-          acceptAllDevices: true, 
-          optionalServices: [SERVICE_UUID] 
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [SERVICE_UUID] }],
+          optionalServices: [SERVICE_UUID]
         });
         device.addEventListener('gattserverdisconnected', () => { 
           updateConnectionUI(false, 'Getrennt'); 
