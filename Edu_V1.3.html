@@ -44,6 +44,11 @@
     .tile>div:not(.tile-ic){flex:1}.tile-ttl{font-size:var(--fs-base);font-weight:var(--fw-bold)}.tile-desc{font-size:var(--fs-xs);color:var(--slate-400);margin-top:1px}
     .view{display:none}.view.active{display:block;animation:fadeUp .3s ease}
     @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pulseCount {
+      0% { transform: scale(0.8); opacity: 0.5; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.8); opacity: 0.5; }
+    }
     .game-view{position:fixed;inset:0;z-index:100;background:#f5f5f0;overflow-y:auto}
     .game-header{height:54px;background:var(--white);border-bottom:1px solid var(--slate-200);display:flex;align-items:center;padding:0 14px;gap:12px;position:sticky;top:0;z-index:10}
     .back-btn{width:34px;height:34px;border-radius:10px;border:none;background:var(--slate-100);color:var(--slate-600);font-size:var(--fs-lg);cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -75,6 +80,31 @@
     .color-choice{padding:16px;border-radius:var(--radius-md);color:white;font-size:var(--fs-lg);font-weight:var(--fw-bold);cursor:pointer;border:none;box-shadow:0 2px 8px rgba(0,0,0,.1);transition:.2s}
     .color-choice:hover{transform:translateY(-3px);box-shadow:0 6px 16px rgba(0,0,0,.15)}.color-choice:active{transform:scale(.95)}
     .color-choice.selected{outline:4px solid var(--teal-500);outline-offset:2px}
+    .kn-add {
+      width: 50px;
+      height: 50px;
+      border-radius: var(--radius-md);
+      font-size: 24px;
+      font-weight: var(--fw-bold);
+      background: var(--white);
+      border: 2px solid var(--slate-200);
+      color: var(--slate-900);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s;
+      user-select: none;
+    }
+    .kn-add:hover {
+      border-color: var(--violet-500);
+      color: var(--violet-600);
+      transform: translateY(-2px);
+    }
+    .kn-add:active {
+      transform: scale(.94);
+      background: var(--violet-50);
+    }
   </style>
 </head>
 <body>
@@ -99,19 +129,15 @@
         <div class="tile-ic" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg></div>
         <div><div class="tile-ttl">Mathe-Rennen</div><div class="tile-desc">Rechne gegen einen anderen Roboter</div></div>
       </div>
+      <div class="cat-header"><span>Knobeln</span></div>
+      <div class="tile" data-view="knobeln">
+        <div class="tile-ic" style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 3v18M5 10l7-7 7 7M5 14l7 7 7-7"/></svg></div>
+        <div><div class="tile-ttl">Pfeil-Knobeln</div><div class="tile-desc">Folge wird laenger - Roboter faehrt sie ab</div></div>
+      </div>
       <div class="cat-header"><span>Lernen</span></div>
       <div class="tile" data-view="colorquiz">
         <div class="tile-ic" style="background:linear-gradient(135deg,#f0fdfa,#ccfbf1);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="#0d9488"/></svg></div>
-        <div><div class="tile-ttl">Farben-Quiz</div><div class="tile-desc">Lege Plattchen &amp; der Roboter prueft</div></div>
-      </div>
-      <div class="cat-header"><span>Knobeln</span></div>
-      <div class="tile" data-view="memory">
-        <div class="tile-ic" style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 6a4 4 0 0 1 4 4c0 2-1.5 3-4 5-2.5-2-4-3-4-5a4 4 0 0 1 4-4z"/></svg></div>
-        <div><div class="tile-ttl">Robo-Memory</div><div class="tile-desc">Sequenzen merken</div></div>
-      </div>
-      <div class="tile" data-view="colorseq">
-        <div class="tile-ic" style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><rect x="2" y="6" width="5" height="12" rx="1.5" fill="#7c3aed"/></svg></div>
-        <div><div class="tile-ttl">Farb-Folge</div><div class="tile-desc">Farbsequenzen sammeln</div></div>
+        <div><div class="tile-ttl">Korrigieren</div><div class="tile-desc">Quiz - Lege Plättchen, Roboter prüft</div></div>
       </div>
     </div></div>
   </div>
@@ -147,39 +173,64 @@
   <div id="view-mathrace" class="view game-view">
     <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Mathe-Rennen</div><div class="conn-dot" id="raceConnDot"></div></div>
     <div class="game-body"><div class="arena">
-      <div class="game-title">Mathe-Rennen</div>
-      <div class="game-desc">Wer zuerst 10 Aufgaben richtig hat, gewinnt!</div>
-      <div style="display:flex;justify-content:space-around;margin-bottom:20px;">
-        <div><div style="font-size:12px;color:#94a3b8;font-weight:600;">ICH</div><div class="race-score" id="raceMyScore">0/10</div><div class="race-progress-bar" style="width:120px;"><div class="race-progress-fill" id="raceMyBar" style="width:0%"></div></div></div>
-        <div><div style="font-size:12px;color:#94a3b8;font-weight:600;">GEGNER</div><div class="race-score" id="raceOppScore">0/10</div><div class="race-progress-bar" style="width:120px;"><div class="race-progress-fill" id="raceOppBar" style="width:0%;background:linear-gradient(90deg,#3b82f6,#2563eb);"></div></div></div>
-      </div>
-      <div id="raceQuestionArea">
-        <div class="quiz-display" id="raceQuestion">Bereit?</div>
-        <div style="display:flex;gap:8px;justify-content:center;margin:20px 0;">
-          <input type="number" id="raceAnswer" class="quiz-input" placeholder="Antwort" style="display:none;">
-          <button class="btn btn-lg btn-primary" id="btnRaceStart">Rennen starten</button>
-          <button class="btn btn-lg btn-success" id="btnRaceAnswer" style="display:none;">Pruefen</button>
+      
+      <!-- SETUP- UND ERKLÄRUNGSBEREICH (wird im aktiven Spiel ausgeblendet) -->
+      <div id="raceSetupArea">
+        <div class="game-title">Mathe-Rennen</div>
+        <div class="game-desc" style="margin-bottom:16px;">Wer zuerst 10 Aufgaben richtig hat, gewinnt!</div>
+        <div id="raceSetup" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:16px;text-align:left;">
+          <div style="font-size:13px;font-weight:600;color:#475569;margin-bottom:10px;text-align:center;">Multiplayer-Setup</div>
+          <div id="raceStatus" style="font-size:13px;color:#64748b;margin-bottom:10px;text-align:center;font-weight:bold;">Noch nicht verbunden</div>
+          <div id="raceHint" style="font-size:12px;color:#94a3b8;margin-bottom:10px;background:#white;border-radius:8px;padding:8px;border:1px dashed #cbd5e1;line-height:1.4;">
+            1. Beide Roboter einschalten<br>
+            2. Auf beiden Seiten "Gegner suchen" druecken<br>
+            3. Gefundenen EduBot auswaehlen (auch auf Gegner-Seite)<br>
+            4. Einer drueckt "Rennen starten" - das Rennen startet auf beiden automatisch
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+            <button class="btn btn-primary" id="btnRaceScan">Gegner suchen</button>
+            <button class="btn btn-grey" id="btnRaceUnpair" style="display:none;">Trennen</button>
+          </div>
+          <div id="racePeers" style="margin-top:12px;"></div>
         </div>
       </div>
+
+      <!-- COUNTDOWN ANZEIGE -->
+      <div id="raceCountdownArea" style="display:none;font-size:72px;font-weight:900;color:var(--teal-500);margin:30px 0;animation:pulseCount 1s infinite;">3</div>
+
+      <!-- SPIEL BEREICH (WIRD ERST BEI RECHNERISCHEM SPIEL GEZEIGT) -->
+      <div id="raceActiveArea" style="display:none;">
+        <div style="display:flex;justify-content:space-around;margin-bottom:20px;">
+          <div><div style="font-size:12px;color:#94a3b8;font-weight:600;">ICH</div><div class="race-score" id="raceMyScore">0/10</div><div class="race-progress-bar" style="width:120px;"><div class="race-progress-fill" id="raceMyBar" style="width:0%"></div></div></div>
+          <div><div style="font-size:12px;color:#94a3b8;font-weight:600;">GEGNER</div><div class="race-score" id="raceOppScore">0/10</div><div class="race-progress-bar" style="width:120px;"><div class="race-progress-fill" id="raceOppBar" style="width:0%;background:linear-gradient(90deg,#3b82f6,#2563eb);"></div></div></div>
+        </div>
+        <div id="raceQuestionArea">
+          <div class="quiz-display" id="raceQuestion" style="font-size:32px;font-weight:800;">Bereit?</div>
+          <div style="display:flex;gap:8px;justify-content:center;margin:20px 0;">
+            <input type="number" id="raceAnswer" class="quiz-input" placeholder="Antwort">
+            <button class="btn btn-lg btn-success" id="btnRaceAnswer">Pruefen</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="raceStartBtnArea" style="margin-top:12px;">
+        <button class="btn btn-lg btn-primary" id="btnRaceStart">Rennen starten</button>
+      </div>
+
       <div class="feedback-msg" id="raceFeedback"></div>
       <div id="raceWinnerMsg" style="font-size:24px;font-weight:800;margin-top:16px;display:none;"></div>
     </div></div>
   </div>
 
-  <!-- FARBEN-QUIZ -->
+  <!-- KORRIGIEREN (Farben-Quiz) -->
   <div id="view-colorquiz" class="view game-view">
-    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Farben-Quiz</div><div class="conn-dot" id="cqConnDot"></div></div>
+    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Korrigieren</div><div class="conn-dot" id="cqConnDot"></div></div>
     <div class="game-body"><div class="arena">
-      <div class="game-title">Farben-Quiz</div>
-      <div class="game-desc">Loese 10 Aufgaben. Lege Farbplaettchen in einer Reihe auf den Boden. Am Ende faehrt der Roboter drueber und prueft!</div>
+      <div class="game-title">Korrigieren</div>
+      <div class="game-desc">Loese 10 Aufgaben. Jede Antwort hat eine Farbe. Lege die Plaettchen mit diesen Farben in einer Reihe auf den Boden. Am Ende faehrt der Roboter drueber und prueft!</div>
       <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;">Aufgabe <span id="cqNumber">1</span> / 10</div>
       <div class="quiz-display" id="cqQuestion">Bereit?</div>
-      <div id="cqChoices" style="display:none;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0;">
-        <button class="color-choice" data-color="ROT" style="background:#ef4444;">ROT</button>
-        <button class="color-choice" data-color="GRUEN" style="background:#10b981;">GRUEN</button>
-        <button class="color-choice" data-color="BLAU" style="background:#3b82f6;">BLAU</button>
-        <button class="color-choice" data-color="GELB" style="background:#f59e0b;">GELB</button>
-      </div>
+      <div id="cqChoices" style="display:none;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0;"></div>
       <div style="display:flex;gap:8px;justify-content:center;margin:20px 0;">
         <button class="btn btn-lg btn-primary" id="btnCqStart">Quiz starten</button>
         <button class="btn btn-lg btn-success" id="btnCqNext" style="display:none;">Naechste Aufgabe</button>
@@ -193,36 +244,26 @@
     </div></div>
   </div>
 
-  <!-- ROBO-MEMORY -->
-  <div id="view-memory" class="view game-view">
-    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Robo-Memory</div><div class="conn-dot" id="memConnDot"></div></div>
+  <!-- KNOBELN (Pfeil-Sequenz) -->
+  <div id="view-knobeln" class="view game-view">
+    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Pfeil-Knobeln</div><div class="conn-dot" id="knConnDot"></div></div>
     <div class="game-body"><div class="arena">
-      <div class="game-title">Robo-Memory</div>
-      <div class="game-desc">Merke dir die Pfeil-Folge und gib sie wieder!</div>
-      <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;">Level <span id="memLevel">1</span></div>
-      <div style="display:flex;justify-content:center;align-items:center;min-height:80px;margin:20px 0;">
-        <span class="mem-arrow" id="memArrow0">&larr;</span>
-        <span class="mem-arrow" id="memArrow1">&uarr;</span>
-        <span class="mem-arrow" id="memArrow2">&rarr;</span>
-        <span class="mem-arrow" id="memArrow3">&darr;</span>
+      <div class="game-title">Pfeil-Knobeln</div>
+      <div class="game-desc">Stelle eine Pfeil-Folge zusammen. Der Roboter faehrt sie anschliessend ab!</div>
+      <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;">Folge (max 12)</div>
+      <div id="knSeq" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;min-height:48px;margin-bottom:16px;"></div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px;">
+        <button class="kn-add" data-arrow="0" style="font-size:24px;">&uarr;</button>
+        <button class="kn-add" data-arrow="1" style="font-size:24px;">&rarr;</button>
+        <button class="kn-add" data-arrow="2" style="font-size:24px;">&darr;</button>
+        <button class="kn-add" data-arrow="3" style="font-size:24px;">&larr;</button>
       </div>
-      <div style="display:flex;gap:8px;justify-content:center;">
-        <button class="btn btn-primary btn-lg" id="btnMemStart">Start</button>
-        <button class="btn btn-grey btn-lg" id="btnMemCheck" disabled>Pruefen</button>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+        <button class="btn btn-grey btn-lg" id="btnKnClear">Leeren</button>
+        <button class="btn btn-danger btn-lg" id="btnKnStop">STOP</button>
+        <button class="btn btn-primary btn-lg" id="btnKnRun">Roboter starten!</button>
       </div>
-      <div class="feedback-msg" id="memFeedback"></div>
-    </div></div>
-  </div>
-
-  <!-- FARB-FOLGE -->
-  <div id="view-colorseq" class="view game-view">
-    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Farb-Folge</div><div class="conn-dot" id="csConnDot"></div></div>
-    <div class="game-body"><div class="arena">
-      <div class="game-title">Farb-Folge</div>
-      <div class="game-desc">Fahre die geforderten Farben der Reihe nach ab!</div>
-      <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:20px 0;" id="csStrip"></div>
-      <button class="btn btn-primary btn-lg" id="btnCsStart">Neue Folge</button>
-      <div class="feedback-msg" id="csFeedback"></div>
+      <div class="feedback-msg" id="knFeedback"></div>
     </div></div>
   </div>
 
@@ -266,6 +307,27 @@
         handleRaceMessage(msg);
       } else if (msg.startsWith('QUIZ:')) {
         handleQuizMessage(msg);
+      } else if (msg.startsWith('KNOBELN:')) {
+        handleKnobelnMessage(msg);
+      }
+    }
+
+    function handleKnobelnMessage(msg) {
+      if (msg === 'KNOBELN:RUNNING') {
+        showFeedback('knFeedback', 'success', 'Roboter startet...');
+      } else if (msg.startsWith('KNOBELN:READY:')) {
+        const n = msg.substring(14);
+        showFeedback('knFeedback', 'success', 'Folge geladen: ' + n + ' Pfeile');
+      } else if (msg === 'KNOBELN:DONE') {
+        showFeedback('knFeedback', 'success', 'Fertig!');
+      } else if (msg === 'KNOBELN:ABORT') {
+        showFeedback('knFeedback', 'error', 'Abgebrochen!');
+      } else if (msg === 'KNOBELN:STOPPED') {
+        showFeedback('knFeedback', 'error', 'Gestoppt!');
+      } else if (msg === 'KNOBELN:BADLEN' || msg === 'KNOBELN:BADARROW') {
+        showFeedback('knFeedback', 'error', 'Ungueltige Folge!');
+      } else if (msg === 'KNOBELN:NONE') {
+        showFeedback('knFeedback', 'error', 'Keine Folge gesetzt!');
       }
     }
 
@@ -383,8 +445,6 @@
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       const el = document.getElementById('view-' + viewId);
       if (el) el.classList.add('active');
-      if (viewId === 'memory') initMemoryGame();
-      if (viewId === 'colorseq') initColorseqGame();
     }
     document.querySelectorAll('.tile[data-view]').forEach(t => t.addEventListener('click', () => nav(t.dataset.view)));
     document.querySelectorAll('[data-view]').forEach(b => {
@@ -424,22 +484,133 @@
     // MATHE-RENNEN
     // ==========================================
     let raceActive = false, raceMyScore = 0, raceOppScore = 0, raceCurrentAnswer = 0;
-    document.getElementById('btnRaceStart').addEventListener('click', () => {
-      raceActive = true; raceMyScore = 0; raceOppScore = 0;
-      updateRaceUI();
-      document.getElementById('btnRaceStart').style.display = 'none';
-      document.getElementById('raceAnswer').style.display = 'block';
-      document.getElementById('btnRaceAnswer').style.display = 'inline-flex';
+    let racePairedMac = null;
+    let raceScanPeers = [];
+    let raceScanTimer = null;
+    let raceScanEndTime = 0;
+    let raceCountdownTimer = null;
+
+    function setRaceStatus(text, color) {
+      const el = document.getElementById('raceStatus');
+      if (!el) return;
+      el.textContent = text;
+      el.style.color = color || '#64748b';
+    }
+    function renderRacePeers() {
+      const list = document.getElementById('racePeers');
+      list.innerHTML = '';
+      if (raceScanPeers.length === 0) {
+        list.innerHTML = '<div style="font-size:13px;color:#94a3b8;text-align:center;">Keine EduBots gefunden. Beide Roboter muessen an sein.</div>';
+        return;
+      }
+      raceScanPeers.forEach(mac => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:white;border:1px solid #e2e8f0;border-radius:8px;margin-top:6px;';
+        const name = document.createElement('span');
+        name.style.cssText = 'font-family:monospace;font-size:13px;color:#475569;';
+        name.textContent = 'EduBot ' + mac;
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary';
+        btn.style.fontSize = '13px';
+        btn.style.padding = '6px 12px';
+        btn.textContent = 'Auswaehlen';
+        btn.addEventListener('click', () => {
+          sendCommand('RACE:PAIR:' + mac);
+          showFeedback('raceFeedback', 'success', 'Verbinde mit ' + mac);
+        });
+        row.appendChild(name);
+        row.appendChild(btn);
+        list.appendChild(row);
+      });
+    }
+    document.getElementById('btnRaceScan').addEventListener('click', () => {
+      setRaceStatus('Suche nach EduBots in der Naehe (5s)...', '#3b82f6');
+      sendCommand('RACE:SCAN');
+      // Nach 5s Timeout-Meldung falls nichts gefunden
+      raceScanEndTime = Date.now() + 5000;
+      if (raceScanTimer) clearInterval(raceScanTimer);
+      raceScanTimer = setInterval(() => {
+        if (Date.now() > raceScanEndTime) {
+          clearInterval(raceScanTimer);
+          raceScanTimer = null;
+          if (raceScanPeers.length === 0) {
+            setRaceStatus('Keine EduBots gefunden. Beide an? Erneut versuchen.', '#ef4444');
+          } else {
+            setRaceStatus(raceScanPeers.length + ' EduBot(s) gefunden.', '#10b981');
+          }
+        }
+      }, 200);
+    });
+    document.getElementById('btnRaceUnpair').addEventListener('click', () => {
+      sendCommand('RACE:UNPAIR');
+      racePairedMac = null;
+      document.getElementById('btnRaceUnpair').style.display = 'none';
+      document.getElementById('btnRaceScan').style.display = 'inline-flex';
+      setRaceStatus('Getrennt. Suche einen neuen Gegner.', '#64748b');
+    });
+
+    function startRaceCountdown(callback) {
+      if (raceCountdownTimer) clearInterval(raceCountdownTimer);
+      
+      // Blende Setup und Start-Button komplett aus
+      document.getElementById('raceSetupArea').style.display = 'none';
+      document.getElementById('raceStartBtnArea').style.display = 'none';
       document.getElementById('raceWinnerMsg').style.display = 'none';
-      nextRaceQuestion();
+      document.getElementById('raceActiveArea').style.display = 'none';
+      
+      const countEl = document.getElementById('raceCountdownArea');
+      countEl.style.display = 'block';
+      countEl.style.color = 'var(--teal-500)';
+      
+      let count = 3;
+      countEl.textContent = count;
+      
+      raceCountdownTimer = setInterval(() => {
+        count--;
+        if (count > 0) {
+          countEl.textContent = count;
+        } else if (count === 0) {
+          countEl.textContent = "LOS!";
+          countEl.style.color = 'var(--green-500)';
+        } else {
+          clearInterval(raceCountdownTimer);
+          raceCountdownTimer = null;
+          countEl.style.display = 'none';
+          
+          // Blende Spielbereich ein
+          document.getElementById('raceActiveArea').style.display = 'block';
+          if (callback) callback();
+        }
+      }, 1000);
+    }
+
+    document.getElementById('btnRaceStart').addEventListener('click', () => {
+      if (!racePairedMac) {
+        showFeedback('raceFeedback', 'error', 'Erst einen Gegner auswaehlen!');
+        return;
+      }
+      raceMyScore = 0; raceOppScore = 0;
+      updateRaceUI();
+      document.getElementById('raceWinnerMsg').style.display = 'none';
+      document.getElementById('raceAnswer').value = '';
+      
+      // Starte lokalen Countdown, schalte danach das Spiel aktiv
+      startRaceCountdown(() => {
+        raceActive = true;
+        nextRaceQuestion();
+      });
+      
+      // Sende Startsignal ans Board (loest dort und beim Gegner das Rennen aus)
+      sendCommand('RACE:START');
     });
     document.getElementById('btnRaceAnswer').addEventListener('click', () => {
+      if (!raceActive) return;
       const ans = parseInt(document.getElementById('raceAnswer').value);
       if (isNaN(ans)) return;
       if (ans === raceCurrentAnswer) {
         raceMyScore++;
         showFeedback('raceFeedback', 'success', 'Richtig!');
-        sendCommand('RACE:PROGRESS:' + raceMyScore);
+        sendCommand('RACE:STEP');
         if (raceMyScore >= 10) {
           raceActive = false;
           const w = document.getElementById('raceWinnerMsg');
@@ -473,55 +644,182 @@
         updateRaceUI();
         if (raceOppScore >= 10) {
           raceActive = false;
-          const w = document.getElementById('raceWinnerMsg');
-          w.textContent = 'Gegner hat gewonnen!'; w.style.color = '#ef4444'; w.style.display = 'block';
-          resetRaceBtn();
+          showRaceWinner('Gegner hat gewonnen!', '#ef4444');
         }
+      } else if (msg === 'RACE:YOU_WIN') {
+        raceActive = false;
+        raceMyScore = 10;
+        updateRaceUI();
+        showRaceWinner('Du hast gewonnen!', '#10b981');
+      } else if (msg === 'RACE:OPP_WIN') {
+        raceActive = false;
+        raceOppScore = 10;
+        updateRaceUI();
+        showRaceWinner('Gegner hat gewonnen!', '#ef4444');
       } else if (msg === 'RACE:WIN') {
-        raceOppScore = 10; updateRaceUI();
-        const w = document.getElementById('raceWinnerMsg');
-        w.textContent = 'Gegner hat gewonnen!'; w.style.color = '#ef4444'; w.style.display = 'block';
-        raceActive = false; resetRaceBtn();
+        raceActive = false;
+        showRaceWinner('Spiel beendet', '#6b7280');
+      } else if (msg === 'RACE:STARTED') {
+        // Eigener Start wurde vom Board bestaetigt (falls noch kein Countdown laeuft)
+        if (!raceCountdownTimer && !raceActive) {
+          raceMyScore = 0; raceOppScore = 0;
+          updateRaceUI();
+          startRaceCountdown(() => {
+            raceActive = true;
+            nextRaceQuestion();
+          });
+        }
+        // Wenn schon ein Countdown laeuft oder Rennen aktiv: KEIN Reset!
+        // Sonst wuerden waehrend des Countdowns ankommende Gegner-Punkte
+        // (RACE:PROGRESS) immer wieder auf 0 zurueckgesetzt werden.
+      } else if (msg === 'RACE:REMOTE_START') {
+        // Gegner hat das Rennen gestartet - starte Countdown und schalte danach aktiv
+        // Nur einmal starten, nicht bei jedem REMOTE_START-Reset wiederholen!
+        if (!raceCountdownTimer && !raceActive) {
+          raceMyScore = 0; raceOppScore = 0;
+          updateRaceUI();
+          startRaceCountdown(() => {
+            raceActive = true;
+            nextRaceQuestion();
+          });
+          showFeedback('raceFeedback', 'success', 'Gegner hat das Rennen gestartet!');
+        }
+        // Wenn der Countdown schon laeuft oder Rennen aktiv ist, resettieren wir NICHT.
+        // Jegliche RACE:PROGRESS-Werte, die in der Zwischenzeit ankommen,
+        // bleiben erhalten und werden korrekt angezeigt.
+      } else if (msg.startsWith('RACE:ME:')) {
+        const v = parseInt(msg.substring(7)) || 0;
+        // nur übernehmen, wenn v größer/gleich ist - sonst resettet uns ein
+        // Board-Reset (z.B. durch Remote-Start-Paket) die eigene Anzeige auf 0
+        if (v >= raceMyScore) {
+          raceMyScore = v;
+          updateRaceUI();
+        }
+      } else if (msg === 'RACE:SCAN_START') {
+        // Scan bestätigt von Firmware
+        raceScanPeers = [];
+        renderRacePeers();
+      } else if (msg.startsWith('RACE:PEER:')) {
+        const mac = msg.substring(10);
+        if (raceScanPeers.indexOf(mac) === -1) {
+          raceScanPeers.push(mac);
+          renderRacePeers();
+          setRaceStatus(raceScanPeers.length + ' EduBot(s) gefunden:', '#10b981');
+        }
+      } else if (msg.startsWith('RACE:PAIRED:')) {
+        racePairedMac = msg.substring(12);
+        setRaceStatus('Verbunden mit Gegner ' + racePairedMac, '#10b981');
+        document.getElementById('btnRaceScan').style.display = 'none';
+        document.getElementById('btnRaceUnpair').style.display = 'inline-flex';
+        showFeedback('raceFeedback', 'success', 'Gegner verbunden - Rennen kann starten!');
+      } else if (msg === 'RACE:PAIR_FAIL') {
+        showFeedback('raceFeedback', 'error', 'Paaring fehlgeschlagen!');
+      } else if (msg === 'RACE:UNPAIRED') {
+        racePairedMac = null;
+        document.getElementById('btnRaceUnpair').style.display = 'none';
+        document.getElementById('btnRaceScan').style.display = 'inline-flex';
       }
     }
+    function showRaceWinner(text, color) {
+      const w = document.getElementById('raceWinnerMsg');
+      w.textContent = text; w.style.color = color; w.style.display = 'block';
+      resetRaceBtn();
+    }
     function resetRaceBtn() {
+      // Blende Setup und Start-Button wieder ein
+      document.getElementById('raceSetupArea').style.display = 'block';
+      document.getElementById('raceStartBtnArea').style.display = 'block';
+      document.getElementById('raceActiveArea').style.display = 'none';
+      document.getElementById('raceCountdownArea').style.display = 'none';
+      
       document.getElementById('btnRaceStart').style.display = 'inline-flex';
       document.getElementById('btnRaceStart').textContent = 'Neues Rennen';
-      document.getElementById('raceAnswer').style.display = 'none';
-      document.getElementById('btnRaceAnswer').style.display = 'none';
     }
 
     // ==========================================
-    // FARBEN-QUIZ
+    // KORRIGIEREN (Farben-Quiz mit Zahlen-Optionen)
     // ==========================================
     let cqIndex = 0, cqAnswers = [];
+    const CQ_COLORS = [
+      { name: 'ROT',   bg: '#ef4444' },
+      { name: 'GRUEN', bg: '#10b981' },
+      { name: 'BLAU',  bg: '#3b82f6' },
+      { name: 'GELB',  bg: '#f59e0b' }
+    ];
+    function cqShuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+    function getColorBg(c) {
+      for (const e of CQ_COLORS) if (e.name === c) return e.bg;
+      return '#ccc';
+    }
+    function nextCqQuestion() {
+      const a = Math.floor(Math.random() * 10) + 1;
+      const b = Math.floor(Math.random() * 10) + 1;
+      const correct = a + b;
+      // 4 falsche Optionen, alle unterschiedlich, plus correct
+      const opts = new Set([correct]);
+      while (opts.size < 4) {
+        const delta = Math.floor(Math.random() * 9) - 4; // -4..+4
+        const candidate = correct + delta;
+        if (candidate > 0 && candidate !== correct) opts.add(candidate);
+      }
+      const arr = cqShuffle(Array.from(opts));
+      // Farben ebenfalls mischen, damit Optionindex nicht gleich Farbindex bleibt
+      const colorOrder = cqShuffle([...CQ_COLORS]);
+      const container = document.getElementById('cqChoices');
+      container.innerHTML = '';
+      arr.forEach((val, i) => {
+        const col = colorOrder[i];
+        const btn = document.createElement('button');
+        btn.className = 'color-choice';
+        btn.dataset.value = val;
+        btn.dataset.color = col.name;
+        btn.style.background = col.bg;
+        btn.style.color = 'white';
+        btn.style.fontSize = '22px';
+        btn.style.fontWeight = 'bold';
+        btn.style.padding = '14px';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '10px';
+        btn.style.cursor = 'pointer';
+        btn.textContent = val;
+        btn.addEventListener('click', () => {
+          container.querySelectorAll('.color-choice').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+        });
+        container.appendChild(btn);
+      });
+      document.getElementById('cqNumber').textContent = (cqIndex + 1);
+      document.getElementById('cqQuestion').textContent = a + ' + ' + b + ' = ?';
+    }
     document.getElementById('btnCqStart').addEventListener('click', () => {
       cqIndex = 0; cqAnswers = [];
       document.getElementById('btnCqStart').style.display = 'none';
       document.getElementById('cqChoices').style.display = 'grid';
       document.getElementById('btnCqNext').style.display = 'inline-flex';
+      document.getElementById('btnCqCheck').style.display = 'none';
       document.getElementById('cqAnswerList').innerHTML = '';
       nextCqQuestion();
     });
-    document.querySelectorAll('.color-choice').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.color-choice').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-      });
-    });
     document.getElementById('btnCqNext').addEventListener('click', () => {
       const sel = document.querySelector('.color-choice.selected');
-      if (!sel) { showFeedback('cqFeedback', 'error', 'Bitte eine Farbe waehlen!'); return; }
+      if (!sel) { showFeedback('cqFeedback', 'error', 'Bitte eine Antwort waehlen!'); return; }
       const color = sel.dataset.color;
+      const value = sel.dataset.value;
       cqAnswers.push(color);
       const list = document.getElementById('cqAnswerList');
-      list.innerHTML += '<div style="width:30px;height:30px;border-radius:6px;background:' + getColorBg(color) + ';display:flex;align-items:center;justify-content:center;font-size:11px;color:white;font-weight:bold;">' + (cqIndex + 1) + '</div>';
+      list.innerHTML += '<div title="' + value + ' = ' + color + '" style="width:36px;height:36px;border-radius:8px;background:' + getColorBg(color) + ';display:flex;align-items:center;justify-content:center;font-size:14px;color:white;font-weight:bold;">' + value + '</div>';
       cqIndex++;
       if (cqIndex >= 10) {
         document.getElementById('cqNumber').textContent = '10';
         document.getElementById('btnCqNext').style.display = 'none';
         document.getElementById('btnCqCheck').style.display = 'inline-flex';
-        document.getElementById('cqQuestion').textContent = 'Fertig! Lege die Plattchen auf und starte die Korrektur.';
+        document.getElementById('cqQuestion').textContent = 'Fertig! Lege die Plaettchen mit den Farben in dieser Reihenfolge auf den Boden und starte die Korrektur.';
         document.getElementById('cqChoices').style.display = 'none';
       } else nextCqQuestion();
     });
@@ -530,81 +828,90 @@
       showFeedback('cqFeedback', 'success', 'Roboter startet die Korrektur!');
       document.getElementById('btnCqCheck').style.display = 'none';
     });
-    function nextCqQuestion() {
-      const a = Math.floor(Math.random() * 10) + 1;
-      const b = Math.floor(Math.random() * 10) + 1;
-      document.getElementById('cqNumber').textContent = (cqIndex + 1);
-      document.getElementById('cqQuestion').textContent = a + ' + ' + b + ' = ?';
-      document.querySelectorAll('.color-choice').forEach(b => b.classList.remove('selected'));
-    }
-    function getColorBg(c) {
-      return { 'ROT':'#ef4444', 'GRUEN':'#10b981', 'BLAU':'#3b82f6', 'GELB':'#f59e0b' }[c] || '#ccc';
+    // Sammelt die einzelnen Pruefschritte fuer eine abschliessende Anzeige
+    let cqCheckSteps = [];
+    function showCqResultSummary() {
+      const wrong = cqCheckSteps.filter(s => !s.ok);
+      if (wrong.length === 0) return;
+      let detail = 'Falsch: ';
+      wrong.forEach((s, i) => {
+        detail += 'Plaettchen ' + (s.idx + 1) + ' (erw. ' + s.expected + ', gef. ' + s.found + ')';
+        if (i < wrong.length - 1) detail += '; ';
+      });
+      showFeedback('cqFeedback', 'error', detail);
     }
     function handleQuizMessage(msg) {
-      if (msg.startsWith('QUIZ:RESULT:')) {
+      if (msg.startsWith('QUIZ:CHECKING')) {
+        cqCheckSteps = [];
+        showFeedback('cqFeedback', 'success', 'Roboter prueft jetzt...');
+      } else if (msg.startsWith('QUIZ:STEP:')) {
+        const d = msg.substring(10).split(',');
+        if (d.length >= 3) {
+          const idx = parseInt(d[0]);
+          const expected = d[1];
+          const found = d[2];
+          const ok = expected.toUpperCase() === found.toUpperCase();
+          cqCheckSteps.push({ idx, expected, found, ok });
+          showFeedback('cqFeedback', ok ? 'success' : 'error', 'Plaettchen ' + (idx + 1) + ': erwartet ' + expected + ', gefunden ' + found);
+        }
+      } else if (msg.startsWith('QUIZ:RESULT:')) {
         const d = msg.substring(12).split(',');
-        if (d[0] === 'OK') showFeedback('cqFeedback', 'success', 'Alles richtig! (' + d[1] + '/' + d[2] + ')');
-        else if (d[0] === 'WRONG') showFeedback('cqFeedback', 'error', 'Fehler bei ' + d[1] + ' (gefunden: ' + d[2] + ') - ' + d[3] + '/' + d[4]);
+        if (d[0] === 'OK') {
+          showFeedback('cqFeedback', 'success', 'Alles richtig! (' + (d[1] || 0) + '/' + (d[2] || 0) + ')');
+        } else if (d[0] === 'WRONG') {
+          showCqResultSummary();
+        } else if (d[0] === 'ABORT') {
+          showFeedback('cqFeedback', 'error', 'Abgebrochen!');
+        }
         document.getElementById('btnCqStart').style.display = 'inline-flex';
         document.getElementById('btnCqStart').textContent = 'Nochmal';
+        document.getElementById('btnCqCheck').style.display = 'none';
       }
     }
 
     // ==========================================
-    // ROBO-MEMORY
+    // KNOBELN (Pfeil-Sequenz)
     // ==========================================
-    let memLevel = 1, memSequence = [], memUserInput = [];
-    function initMemoryGame() { document.getElementById('memLevel').textContent = memLevel; }
-    function genMemSequence(len) { const s = []; for (let i = 0; i < len; i++) s.push(Math.floor(Math.random() * 4)); return s; }
-    function flashMemSequence(seq) {
-      let i = 0;
-      const iv = setInterval(() => {
-        if (i >= seq.length) { clearInterval(iv); enableMemInput(); return; }
-        const arrow = document.getElementById('memArrow' + seq[i]);
-        if (arrow) { arrow.classList.add('flash'); setTimeout(() => arrow.classList.remove('flash'), 400); }
-        i++;
-      }, 600);
+    const KNOBELN_MAX = 12;
+    const KN_ARROWS = ['\u2191', '\u2192', '\u2193', '\u2190'];
+    let knSequence = [];
+    function knRender() {
+      const strip = document.getElementById('knSeq');
+      strip.innerHTML = '';
+      knSequence.forEach((a, i) => {
+        const span = document.createElement('span');
+        span.className = 'mem-arrow';
+        span.textContent = KN_ARROWS[a];
+        span.title = (i + 1) + '. ' + KN_ARROWS[a];
+        strip.appendChild(span);
+      });
     }
-    function enableMemInput() { document.getElementById('btnMemCheck').disabled = false; }
-    function disableMemInput() { document.getElementById('btnMemCheck').disabled = true; }
-    document.getElementById('btnMemStart').addEventListener('click', () => {
-      memSequence = genMemSequence(memLevel + 2); memUserInput = []; disableMemInput(); flashMemSequence(memSequence);
-    });
-    document.querySelectorAll('.mem-arrow').forEach((arrow, idx) => {
-      arrow.addEventListener('click', () => {
-        if (document.getElementById('btnMemCheck').disabled) return;
-        arrow.classList.add('flash'); setTimeout(() => arrow.classList.remove('flash'), 200);
-        memUserInput.push(idx);
+    document.querySelectorAll('.kn-add').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (knSequence.length >= KNOBELN_MAX) {
+          showFeedback('knFeedback', 'error', 'Max ' + KNOBELN_MAX + ' Pfeile!');
+          return;
+        }
+        knSequence.push(parseInt(btn.dataset.arrow));
+        knRender();
       });
     });
-    document.getElementById('btnMemCheck').addEventListener('click', () => {
-      const correct = memSequence.length === memUserInput.length && memSequence.every((v, i) => v === memUserInput[i]);
-      if (correct) { showFeedback('memFeedback', 'success', 'Richtig!'); memLevel++; document.getElementById('memLevel').textContent = memLevel; }
-      else showFeedback('memFeedback', 'error', 'Falsch! Nochmal.');
-      disableMemInput();
+    document.getElementById('btnKnClear').addEventListener('click', () => {
+      knSequence = []; knRender();
+      showFeedback('knFeedback', 'success', 'Folge geleert');
     });
-
-    // ==========================================
-    // FARB-FOLGE
-    // ==========================================
-    let csSequence = [], csIndex = 0;
-    const csColors = ['ROT', 'GRUEN', 'BLAU', 'GELB'];
-    function initColorseqGame() {
-      const strip = document.getElementById('csStrip');
-      if (strip.children.length === 0) {
-        for (let i = 1; i <= 5; i++)
-          strip.innerHTML += '<div class="colorseq-item" data-idx="'+i+'" style="padding:8px 16px;border-radius:9999px;border:2px solid #ddd;font-weight:bold;">Farbe '+i+': ?</div>';
+    document.getElementById('btnKnStop').addEventListener('click', () => {
+      sendCommand('KNOBELN:STOP');
+      showFeedback('knFeedback', 'error', 'Stop!');
+    });
+    document.getElementById('btnKnRun').addEventListener('click', () => {
+      if (knSequence.length === 0) {
+        showFeedback('knFeedback', 'error', 'Erst Pfeile hinzufuegen!');
+        return;
       }
-    }
-    document.getElementById('btnCsStart').addEventListener('click', () => {
-      csSequence = []; csIndex = 0;
-      for (let i = 0; i < 5; i++) csSequence.push(csColors[Math.floor(Math.random() * 4)]);
-      const strip = document.getElementById('csStrip');
-      Array.from(strip.children).forEach((el, i) => {
-        el.textContent = 'Farbe ' + (i+1) + ': ' + csSequence[i];
-        el.style.background = getColorBg(csSequence[i]);
-        el.style.color = 'white'; el.style.borderColor = 'transparent';
-      });
+      sendCommand('KNOBELN:SET:' + knSequence.length + ':' + knSequence.join(','));
+      showFeedback('knFeedback', 'success', 'Folge gesendet - starte Roboter...');
+      setTimeout(() => sendCommand('KNOBELN:RUN'), 400);
     });
 
     // ==========================================
