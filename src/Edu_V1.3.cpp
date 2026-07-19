@@ -1,10 +1,14 @@
 // =====================================================
-// EduBot V1.3R – Firmware für Xiao ESP32-S3 + DRV8834
+// EduBot V1.3R - Firmware fuer Xiao ESP32-S3 + DRV8834
 // =====================================================
-// Hardware: Seeed Studio Xiao ESP32-S3
-// Motortreiber: DRV8834 (STEP/DIR)
-// Farbsensor: TCS34725 (I2C)
-// Kommunikation: BLE (Web Bluetooth API)
+// Hardware:       Seeed Studio Xiao ESP32-S3
+// Motortreiber:   DRV8834 (STEP/DIR)
+// Farbsensor:     TCS34725 (I2C)
+// Kommunikation:  BLE (Web Bluetooth API)
+// =====================================================
+// BLE-Architektur: 1:1 uebernommen aus der funktionierenden
+// .ino-Version. Event-Queue entkoppelt onWrite/onConnect/onDisconnect
+// vom loop(). sendStatus macht notify direkt (wie im .ino).
 // =====================================================
 
 #include <Arduino.h>
@@ -18,48 +22,10 @@
 #include <driver/timer.h>
 #include "soc/gpio_struct.h"
 #include <esp_task_wdt.h>
-#include "mesh.h"
-#include <esp_wifi.h>
-
-// Function prototypes (Arduino-typ)
-bool IRAM_ATTR stepperTimerISR(void *arg);
-void initStepperTimer();
-void setMotorSpeed(int motorIdx, float speed);
-void stopMotors();
-int calibrateColor(uint16_t raw, uint16_t blackVal, uint16_t whiteVal);
-const char* detectColorName(int r, int g, int b);
-void setupColorSensor();
-void resetI2CBus();
-void colorSensorTask(void* parameter);
-void sendStatus(const char* msg);
-void sendColorToWebsite();
-void clearKeys();
-void hardStop();
-void handleCommand(String cmd);
-void processBleEvents();
-float rampSpeed(float current, float target, float dt);
-void updateDrive();
-void saveConfigIfDirty();
-void validateConfig();
-void setup();
-void loop();
-
-// Mesh-Forward-Deklarationen
-void onMeshMessage(const uint8_t* fromMac, uint8_t opcode, const char* text, size_t len);
-void updateFormation(); // NEU
-char g_robotName[16] = "EduBot-01";
 
 // =====================================================
 // PIN-KONFIGURATION (Xiao ESP32-S3)
 // =====================================================
-// DRV8834 Anschlüsse:
-//   STEP_L  -> GPIO 4
-//   DIR_L   -> GPIO 3
-//   STEP_R  -> GPIO 2
-//   DIR_R   -> GPIO 1
-//   ENABLE  -> GPIO 7 (optional, LOW = aktiv)
-// TCS34725  -> I2C (SDA=GPIO5, SCL=GPIO6)
-
 #define PIN_DIR_L      3
 #define PIN_STEP_L     4
 #define PIN_DIR_R      1
@@ -76,7 +42,6 @@ portMUX_TYPE stepperMux = portMUX_INITIALIZER_UNLOCKED;
 // KONSTANTEN
 // =====================================================
 constexpr unsigned long BAUD_RATE = 115200;
-constexpr const char* FIRMWARE_VERSION = "EduBot V1.3";
 constexpr int STACK_COLOR_SENSOR = 8192;
 constexpr int BLE_QUEUE_LENGTH = 16;
 constexpr int TASK_PRIORITY_SENSOR = 2;
@@ -102,9 +67,7 @@ constexpr uint32_t MIN_STEP_INTERVAL = 50;
 constexpr uint32_t MAX_STEP_INTERVAL = 50000;
 constexpr uint32_t STEP_PERIOD_US = 1000000UL;
 
-constexpr uint32_t FRAC_SCALE = 0x10000UL;
-
-constexpr unsigned long COLOR_NOTIFY_MS = 200;
+constexpr unsigned long COLOR_NOTIFY_MS = 100;
 constexpr uint32_t LOOP_DELAY_MS = 5;
 
 // =====================================================
@@ -120,20 +83,14 @@ struct Config {
   uint32_t commandTimeoutMs = 500;
   uint16_t blackR = 152, blackG = 137, blackB = 98;
   uint16_t whiteR = 4143, whiteG = 4258, whiteB = 3036;
-  uint16_t yellowRmin = 160, yellowGmin = 120, yellowBmax = 120;
 };
 
 Config config;
 Preferences prefs;
 
 // =====================================================
-// HARDWARE-TIMER FÜR STEPPER (Bresenham)
+// HARDWARE-TIMER FUER STEPPER (Bresenham)
 // =====================================================
-// Timer läuft mit 1 MHz (APB 80 MHz / 80 = 1 MHz)
-// ISR feuert alle STEP_TIMER_US = 10 µs
-// Q16.16 Bresenham-Akkumulator für maximale Präzision
-// ISR setzt STEP HIGH, nächster Aufruf cleared → Pulsbreite = 10 µs
-
 uint32_t stepFracAddL = 0;
 uint32_t stepFracAddR = 0;
 uint32_t stepFracAccumL = 0;
@@ -150,8 +107,8 @@ bool IRAM_ATTR stepperTimerISR(void *arg) {
 
   if (stepIntervalL > 0) {
     stepFracAccumL += stepFracAddL;
-    if (stepFracAccumL >= FRAC_SCALE) {
-      stepFracAccumL -= FRAC_SCALE;
+    if (stepFracAccumL >= 0x10000UL) {
+      stepFracAccumL -= 0x10000UL;
       GPIO.out_w1ts = STEP_BIT_L;
       stepPhaseL = 1;
     }
@@ -161,8 +118,8 @@ bool IRAM_ATTR stepperTimerISR(void *arg) {
 
   if (stepIntervalR > 0) {
     stepFracAccumR += stepFracAddR;
-    if (stepFracAccumR >= FRAC_SCALE) {
-      stepFracAccumR -= FRAC_SCALE;
+    if (stepFracAccumR >= 0x10000UL) {
+      stepFracAccumR -= 0x10000UL;
       GPIO.out_w1ts = STEP_BIT_R;
       stepPhaseR = 1;
     }
@@ -172,6 +129,9 @@ bool IRAM_ATTR stepperTimerISR(void *arg) {
   return false;
 }
 
+// =====================================================
+// TIMER INIT
+// =====================================================
 void initStepperTimer() {
   timer_config_t cfg = {};
   cfg.alarm_en = TIMER_ALARM_EN;
@@ -190,10 +150,9 @@ void initStepperTimer() {
 }
 
 // =====================================================
-// MOTOR-ANSTEUERUNG (DRV8834)
+// MOTOR-ANSTEUERUNG (DRV8834) - in IRAM wegen critical section
 // =====================================================
-
-void setMotorSpeed(int motorIdx, float speed) {
+void IRAM_ATTR setMotorSpeed(int motorIdx, float speed) {
   portENTER_CRITICAL(&stepperMux);
   const int dirPin = (motorIdx == 0) ? PIN_DIR_L : PIN_DIR_R;
   const int sign = (motorIdx == 0) ? config.leftSign : config.rightSign;
@@ -213,14 +172,14 @@ void setMotorSpeed(int motorIdx, float speed) {
     return;
   }
 
-  uint32_t interval;
-  uint32_t actualSpeedInt = static_cast<uint32_t>(actualSpeed);
-  if (actualSpeedInt < 1) actualSpeedInt = 1;
-  interval = STEP_PERIOD_US / actualSpeedInt;
-  if (interval < MIN_STEP_INTERVAL) interval = MIN_STEP_INTERVAL;
-  if (interval > MAX_STEP_INTERVAL) interval = MAX_STEP_INTERVAL;
+  uint32_t speedInt = static_cast<uint32_t>(actualSpeed);
+  if (speedInt < 1) speedInt = 1;    // Schutz gegen Division durch Null
 
-  uint32_t fracAdd = (STEP_TIMER_US * FRAC_SCALE) / interval;
+  uint32_t interval = STEP_PERIOD_US / speedInt;
+  if (interval < MIN_STEP_INTERVAL) interval = MIN_STEP_INTERVAL;
+  if (interval > MAX_STEP_INTERVAL) interval = MAX_STEP_INTERVAL;  // BUG FIX: nie 0!
+
+  uint32_t fracAdd = (STEP_TIMER_US * 0x10000UL) / interval;  // sicher: interval >= MIN
 
   if (motorIdx == 0) {
     stepIntervalL = interval;
@@ -234,7 +193,7 @@ void setMotorSpeed(int motorIdx, float speed) {
   portEXIT_CRITICAL(&stepperMux);
 }
 
-void stopMotors() {
+void IRAM_ATTR stopMotors() {
   portENTER_CRITICAL(&stepperMux);
   stepIntervalL = 0;
   stepIntervalR = 0;
@@ -250,7 +209,6 @@ void stopMotors() {
 // =====================================================
 // FARBSENSOR (TCS34725)
 // =====================================================
-
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(
   TCS34725_INTEGRATIONTIME_50MS,
   TCS34725_GAIN_4X
@@ -265,35 +223,36 @@ volatile char sensorName[16] = "UNBEKANNT";
 SemaphoreHandle_t colorSem = nullptr;
 bool colorSensorOk = false;
 
-// Kalibrierung: Rohwerte -> 0-255
 int calibrateColor(uint16_t raw, uint16_t blackVal, uint16_t whiteVal) {
   if (whiteVal <= blackVal) return 0;
-  float value = (static_cast<float>(raw) - blackVal) * 255.0f / (whiteVal - blackVal);
-  if (value < 0.0f) value = 0.0f;
-  if (value > 255.0f) value = 255.0f;
-  return static_cast<int>(value + 0.5f);
+  long value = map(static_cast<long>(raw), static_cast<long>(blackVal), static_cast<long>(whiteVal), 0L, 255L);
+  value = constrain(value, 0L, 255L);
+  return static_cast<int>(value);
 }
 
+// Verbesserte Farbenkennung mit Schwellwert-Logik
 const char* detectColorName(int r, int g, int b) {
-  if (r < static_cast<int>(COLOR_LOW) && g < static_cast<int>(COLOR_LOW) && b < static_cast<int>(COLOR_LOW)) return "SCHWARZ";
+  // Erst pruefen ob ueberhaupt eine Farbe erkannt wird (sehr dunkel)
+  int total = r + g + b;
+  if (total < 60) return "SCHWARZ";
   if (r > static_cast<int>(COLOR_HIGH) && g > static_cast<int>(COLOR_HIGH) && b > static_cast<int>(COLOR_HIGH)) return "WEISS";
+  // dominant channel
+  int maxC = r > g ? (r > b ? r : b) : (g > b ? g : b);
+  if (maxC < 50) return "UNBEKANNT";  // zu dunkel fuer echte Farbe
   if (r > g * RATIO_RED && r > b * RATIO_RED) return "ROT";
   if (g > r * RATIO_GB && g > b * RATIO_GB) return "GRUEN";
   if (b > r * RATIO_GB && b > g * RATIO_GB) return "BLAU";
-  if (r > config.yellowRmin && g > config.yellowGmin && b < config.yellowBmax) return "GELB";
+  if (r > 160 && g > 120 && b < 120) return "GELB";
   return "UNBEKANNT";
 }
 
 void setupColorSensor() {
   Wire.begin(SDA_PIN, SCL_PIN);
-  delay(1000); // Mehr Zeit zum Initialisieren
-  
-  if (tcs.begin()) {
+  colorSensorOk = tcs.begin();
+  if (colorSensorOk) {
     Serial.println("[SENSOR] TCS34725 gefunden");
-    colorSensorOk = true;
   } else {
-    Serial.println("[SENSOR] TCS34725 NICHT gefunden!");
-    colorSensorOk = false;
+    Serial.println("[SENSOR] TCS34725 NICHT gefunden! (Trotzdem gestartet)");
   }
   colorSem = xSemaphoreCreateBinary();
   if (colorSem) xSemaphoreGive(colorSem);
@@ -314,56 +273,56 @@ void resetI2CBus() {
 
 void colorSensorTask(void* parameter) {
   TickType_t lastWakeTime = xTaskGetTickCount();
-  const TickType_t period = pdMS_TO_TICKS(120);
+  const TickType_t period = pdMS_TO_TICKS(150);
   int failCount = 0;
 
   while (true) {
     if (colorSensorOk) {
-      uint16_t r, g, b, c;
-      tcs.getRawData(&r, &g, &b, &c);
+      uint16_t rawR = 0, rawG = 0, rawB = 0, rawC = 0;
+      tcs.getRawData(&rawR, &rawG, &rawB, &rawC);
+      rawSensorR = rawR; rawSensorG = rawG; rawSensorB = rawB; rawSensorC = rawC;
 
-      if (r == 0 && g == 0 && b == 0 && c == 0) {
+      if (rawR == 0 && rawG == 0 && rawB == 0 && rawC == 0) {
         failCount++;
         if (failCount >= 3) {
           colorSensorOk = false;
-          Serial.println("[SENSOR] 3x Null-Daten -> Sensor als offline markiert");
         }
       } else {
         failCount = 0;
-        rawSensorR = r; rawSensorG = g; rawSensorB = b; rawSensorC = c;
 
-        if (xSemaphoreTake(colorSem, pdMS_TO_TICKS(10)) == pdTRUE) {
-          int calR = calibrateColor(r, config.blackR, config.whiteR);
-          int calG = calibrateColor(g, config.blackG, config.whiteG);
-          int calB = calibrateColor(b, config.blackB, config.whiteB);
+        int r = calibrateColor(rawR, config.blackR, config.whiteR);
+        int g = calibrateColor(rawG, config.blackG, config.whiteG);
+        int b = calibrateColor(rawB, config.blackB, config.whiteB);
 
-          sensorR = calR; sensorG = calG; sensorB = calB;
-          strlcpy((char*)sensorName, detectColorName(calR, calG, calB), sizeof(sensorName));
+        const char* detected = detectColorName(r, g, b);
+
+        // Timeout statt portMAX_DELAY - verhindert Task-Hang
+        if (xSemaphoreTake(colorSem, pdMS_TO_TICKS(100)) == pdTRUE) {
+          sensorR = r;
+          sensorG = g;
+          sensorB = b;
+          strlcpy((char*)sensorName, detected, sizeof(sensorName));
           xSemaphoreGive(colorSem);
         }
       }
     } else {
       Serial.println("[SENSOR] Recovery attempt...");
       resetI2CBus();
-      if (tcs.begin()) {
-        colorSensorOk = true;
-        failCount = 0;
+      colorSensorOk = tcs.begin();
+      if (colorSensorOk) {
         Serial.println("[SENSOR] Recovered!");
-      } else {
-        Serial.println("[SENSOR] Recovery fehlgeschlagen");
+        failCount = 0;
       }
       vTaskDelay(pdMS_TO_TICKS(5000));
       lastWakeTime = xTaskGetTickCount();
-      continue;
     }
     vTaskDelayUntil(&lastWakeTime, period);
   }
 }
 
 // =====================================================
-// BLE UUIDs (müssen mit HTML-Frontend übereinstimmen)
+// BLE UUIDs (muessen mit HTML-Frontend uebereinstimmen)
 // =====================================================
-
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CMD_UUID     "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define STATUS_UUID  "a9b1c2d3-1111-2222-3333-abcdefabcdef"
@@ -374,7 +333,6 @@ bool deviceConnected = false;
 // =====================================================
 // BLE EVENT-QUEUE (ISR-sicher)
 // =====================================================
-
 enum BleEventType : uint8_t {
   BLE_EVT_CONNECTED,
   BLE_EVT_DISCONNECTED,
@@ -391,7 +349,6 @@ QueueHandle_t bleEventQueue = nullptr;
 // =====================================================
 // STEUERUNGSZUSTAND
 // =====================================================
-
 bool keyW = false;
 bool keyA = false;
 bool keyS = false;
@@ -400,34 +357,19 @@ bool keyD = false;
 float speedL = 0.0;
 float speedR = 0.0;
 
-bool formationMode = false; // RSSI-basiertes Zusammenfinden
-bool isLeaderMode = false;
-bool isFollowerMode = false;
-
-bool configDirty = false; // Flag für NVS-Speicherung
 unsigned long lastCommandTime = 0;
 unsigned long lastColorNotify = 0;
 unsigned long lastUpdateMicros = 0;
 
-// =====================================================
-// RACE / QUIZ Zustand
-// =====================================================
-int raceScore = 0;
-unsigned long raceDriveUntil = 0;
-
-enum QuizState { QUIZ_IDLE, QUIZ_DRIVE, QUIZ_READ, QUIZ_DONE };
-QuizState quizState = QUIZ_IDLE;
-String quizExpected[10];
-int quizExpectedLen = 0;
-int quizIndex = 0;
-String quizReadColors[10];
-unsigned long quizStepTime = 0;
-int quizStepMs = 800; // ms pro Farbe
+// Spiel-Logik (Stub-Handler damit Frontend nicht haengt)
+int  raceMyScore = 0;
+int  raceOppScore = 0;
+bool raceActive = false;
+bool quizActive = false;
 
 // =====================================================
-// BLE-NACHRICHTEN
+// BLE-NACHRICHTEN (direktes notify, wie im .ino)
 // =====================================================
-
 void sendStatus(const char* msg) {
   Serial.printf("[BLE] %s\n", msg);
   if (statusChar != nullptr && deviceConnected) {
@@ -454,15 +396,11 @@ void sendColorToWebsite() {
   char msg[64];
   snprintf(msg, sizeof(msg), "COLOR:%d,%d,%d,%s", r, g, b, name);
   sendStatus(msg);
-
-  // Optional: Farbereignis an Mesh weiterleiten (deaktivierbar)
-  EduMesh::sendColor(r, g, b, name);
 }
 
 // =====================================================
 // COMMAND-HANDLING
 // =====================================================
-
 void clearKeys() {
   keyW = false;
   keyA = false;
@@ -478,12 +416,11 @@ void hardStop() {
   sendStatus("STOP");
 }
 
-void handleCommand(String cmd) {
+void handleCommand(const char* cmdStr) {
+  String cmd(cmdStr);
   cmd.trim();
   cmd.toUpperCase();
   lastCommandTime = millis();
-
-  Serial.printf("[CMD] %s\n", cmd.c_str());
 
   if (cmd.startsWith("KEYS:")) {
     String data = cmd.substring(5);
@@ -493,21 +430,26 @@ void handleCommand(String cmd) {
       keyS = (data.charAt(2) == '1');
       keyD = (data.charAt(3) == '1');
     }
-    if (isLeaderMode) EduMesh::sendCmd(cmd.c_str(), cmd.length());
-    return;
+    return;  // KEYS: nicht loggen - alle 50ms sonst spam
   }
+
+  Serial.printf("[CMD] %s\n", cmd.c_str());
 
   if (cmd == "STOP") {
     hardStop();
     return;
   }
 
+  // Stack-Buffer statt String heap alloc
+  char buf[48];
+
   if (cmd.startsWith("MAX:")) {
     float v = cmd.substring(4).toFloat();
     if (v >= MAX_SPEED_MIN && v <= MAX_SPEED_MAX) {
       config.maxSpeed = v;
-      configDirty = true;
-      char buf[32];
+      prefs.begin("edubot", false);
+      prefs.putFloat("maxSpeed", config.maxSpeed);
+      prefs.end();
       snprintf(buf, sizeof(buf), "MAX=%.0f", config.maxSpeed);
       sendStatus(buf);
     }
@@ -518,8 +460,9 @@ void handleCommand(String cmd) {
     float t = cmd.substring(5).toFloat();
     if (t >= TURN_MIN && t <= TURN_MAX) {
       config.turnFactor = t;
-      configDirty = true;
-      char buf[32];
+      prefs.begin("edubot", false);
+      prefs.putFloat("turnFactor", config.turnFactor);
+      prefs.end();
       snprintf(buf, sizeof(buf), "TURN=%.2f", config.turnFactor);
       sendStatus(buf);
     }
@@ -530,8 +473,9 @@ void handleCommand(String cmd) {
     float a = cmd.substring(4).toFloat();
     if (a >= ACCEL_MIN && a <= ACCEL_MAX) {
       config.accelRate = a;
-      configDirty = true;
-      char buf[32];
+      prefs.begin("edubot", false);
+      prefs.putFloat("accelRate", config.accelRate);
+      prefs.end();
       snprintf(buf, sizeof(buf), "ACC=%.0f", config.accelRate);
       sendStatus(buf);
     }
@@ -540,197 +484,64 @@ void handleCommand(String cmd) {
 
   if (cmd == "CAL:BLACK") {
     config.blackR = rawSensorR; config.blackG = rawSensorG; config.blackB = rawSensorB;
-    configDirty = true;
+    prefs.begin("edubot", false);
+    prefs.putUShort("blackR", config.blackR);
+    prefs.putUShort("blackG", config.blackG);
+    prefs.putUShort("blackB", config.blackB);
+    prefs.end();
     sendStatus("CAL:BLACK OK");
     return;
   }
 
   if (cmd == "CAL:WHITE") {
     config.whiteR = rawSensorR; config.whiteG = rawSensorG; config.whiteB = rawSensorB;
-    configDirty = true;
+    prefs.begin("edubot", false);
+    prefs.putUShort("whiteR", config.whiteR);
+    prefs.putUShort("whiteG", config.whiteG);
+    prefs.putUShort("whiteB", config.whiteB);
+    prefs.end();
     sendStatus("CAL:WHITE OK");
     return;
   }
 
-  // --- Mesh-Kommandos ---
-
-  if (cmd.startsWith("MESH:NAME:")) {
-    String name = cmd.substring(10);
-    if (name.length() > 0 && name.length() < sizeof(g_robotName)) {
-      strlcpy(g_robotName, name.c_str(), sizeof(g_robotName));
-      prefs.begin("edubot", false);
-      prefs.putString("robotName", String(g_robotName));
-      prefs.end();
-      char buf[48];
-      snprintf(buf, sizeof(buf), "MESH:NAME=%s", g_robotName);
+  // Mathe-Rennen Stub
+  if (cmd.startsWith("RACE:")) {
+    String sub = cmd.substring(5);
+    if (sub == "START") {
+      raceMyScore = 0; raceOppScore = 0; raceActive = true;
+      sendStatus("RACE:STARTED");
+    } else if (sub.startsWith("PROGRESS:")) {
+      raceOppScore = sub.substring(9).toInt();
+      snprintf(buf, sizeof(buf), "RACE:PROGRESS:%d", raceOppScore);
       sendStatus(buf);
+    } else if (sub == "WIN") {
+      raceOppScore = 10; raceActive = false;
+      sendStatus("RACE:LOSE");
+    } else if (sub == "LOSE") {
+      raceActive = false;
+      sendStatus("RACE:WIN");
     }
     return;
   }
 
-  if (cmd.startsWith("MESHMSG:")) {
-    String text = cmd.substring(8);
-    bool ok = EduMesh::sendMsg(text.c_str(), text.length());
-    sendStatus(ok ? "MESHMSG:OK" : "MESHMSG:FAIL");
-    return;
-  }
-
-  if (cmd.startsWith("MESHSEND:")) {
-    // Format: MESHSEND:AA:BB:CC:DD:EE:FF,Nachricht
-    String rest = cmd.substring(9);
-    int comma = rest.indexOf(',');
-    if (comma < 0) { sendStatus("MESHSEND:FORMAT"); return; }
-    String macStr = rest.substring(0, comma);
-    String text = rest.substring(comma + 1);
-
-    uint8_t mac[6];
-    if (sscanf(macStr.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-               &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) != 6) {
-      sendStatus("MESHSEND:BADMAC");
-      return;
-    }
-    // Direkt an Peer senden - sicherstellen, dass Peer existiert
-    if (!esp_now_is_peer_exist(mac)) {
-      esp_now_peer_info_t info = {};
-      memcpy(info.peer_addr, mac, 6);
-      info.channel = EduMesh::MESH_CHANNEL;
-      info.encrypt = false;
-      esp_now_add_peer(&info);
-    }
-    bool ok = EduMesh::sendMsg(text.c_str(), text.length());
-    sendStatus(ok ? "MESHSEND:OK" : "MESHSEND:FAIL");
-    return;
-  }
-
-  if (cmd == "MESHPEERS") {
-    EduMesh::Peer peers[EduMesh::MESH_MAX_PEERS];
-    size_t count = 0;
-    EduMesh::getPeers(peers, EduMesh::MESH_MAX_PEERS, &count);
-    char buf[64];
-    snprintf(buf, sizeof(buf), "MESHPEERS:%u", (unsigned)count);
-    sendStatus(buf);
-    for (size_t i = 0; i < count; i++) {
-      char line[80];
-      unsigned age = (millis() - peers[i].lastSeen) / 1000;
-      snprintf(line, sizeof(line), "PEER:%s,%s,%us",
-               EduMesh::macString(peers[i].mac).c_str(),
-               peers[i].name, age);
-      sendStatus(line);
+  // Farben-Quiz Stub
+  if (cmd.startsWith("QUIZ:")) {
+    String sub = cmd.substring(5);
+    if (sub.startsWith("CHECK:")) {
+      quizActive = true;
+      sendStatus("QUIZ:CHECKING");
+    } else if (sub == "STOP") {
+      quizActive = false;
     }
     return;
   }
 
-  if (cmd == "MESHPING") {
-    bool ok = EduMesh::sendPing(nullptr);
-    sendStatus(ok ? "MESHPING:OK" : "MESHPING:FAIL");
-    return;
-  }
-
-  if (cmd == "FORMATION:ON") {
-    formationMode = true;
-    sendStatus("FORMATION:ON");
-    return;
-  }
-
-  if (cmd == "FORMATION:OFF") {
-    formationMode = false;
-    clearKeys();
-    sendStatus("FORMATION:OFF");
-    return;
-  }
-
-  if (cmd == "MODE:LEADER") {
-    isLeaderMode = true; isFollowerMode = false; formationMode = false;
-    clearKeys();
-    sendStatus("MODE:LEADER");
-    return;
-  }
-  if (cmd == "MODE:FOLLOWER") {
-    isFollowerMode = true; isLeaderMode = false; formationMode = false;
-    clearKeys();
-    sendStatus("MODE:FOLLOWER");
-    return;
-  }
-  if (cmd == "MODE:NORMAL") {
-    isLeaderMode = false; isFollowerMode = false; formationMode = false;
-    clearKeys();
-    sendStatus("MODE:NORMAL");
-    return;
-  }
-
-  // === MATHE-RENNEN ===
-  if (cmd.startsWith("RACE:PROGRESS:")) {
-    String scoreStr = cmd.substring(14);
-    int s = scoreStr.toInt();
-    if (s >= 0 && s <= 10) {
-      raceScore = s;
-      // Fahre proportional zur Punktzahl (0=nichts, 10=max)
-      float fraction = raceScore / 10.0f;
-      int driveMs = (int)(fraction * 2000);
-      if (driveMs > 0) {
-        keyW = true; keyA = false; keyS = false; keyD = false;
-        raceDriveUntil = millis() + driveMs;
-      }
-      // An Mesh weiterleiten
-      EduMesh::sendCmd(cmd.c_str(), cmd.length());
-    }
-    sendStatus(cmd.c_str());
-    return;
-  }
-
-  if (cmd == "RACE:WIN") {
-    raceScore = 10;
-    EduMesh::sendCmd(cmd.c_str(), cmd.length());
-    sendStatus("RACE:WIN");
-    return;
-  }
-
-  // === FARBEN-QUIZ ===
-  if (cmd.startsWith("QUIZ:CHECK:")) {
-    String seq = cmd.substring(11);
-    quizExpectedLen = 0;
-    quizIndex = 0;
-    // Parse: "ROT,GRUEN,BLAU,GELB,ROT"
-    int start = 0;
-    while (start < (int)seq.length() && quizExpectedLen < 10) {
-      int comma = seq.indexOf(',', start);
-      if (comma < 0) comma = seq.length();
-      String c = seq.substring(start, comma);
-      c.trim();
-      if (c.length() > 0) {
-        quizExpected[quizExpectedLen] = c;
-        quizReadColors[quizExpectedLen] = "";
-        quizExpectedLen++;
-      }
-      start = comma + 1;
-    }
-    if (quizExpectedLen > 0) {
-      quizState = QUIZ_DRIVE;
-      quizStepTime = millis();
-      clearKeys();
-      sendStatus("QUIZ:START");
-    } else {
-      sendStatus("QUIZ:EMPTY");
-    }
-    return;
-  }
-
-  if (cmd == "QUIZ:STOP") {
-    quizState = QUIZ_IDLE;
-    hardStop();
-    sendStatus("QUIZ:STOP");
-    return;
-  }
-
-  char buf[80];
-  snprintf(buf, sizeof(buf), "UNKNOWN:%s", cmd.c_str());
-  sendStatus(buf);
+  sendStatus((String("UNKNOWN:") + cmd).c_str());
 }
 
 // =====================================================
-// BLE CALBACKS
+// BLE CALLBACKS
 // =====================================================
-
 class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* server) override {
     BleEvent evt = { BLE_EVT_CONNECTED, "" };
@@ -756,7 +567,6 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 // =====================================================
 // EVENT-VERARBEITUNG (wird in loop() aufgerufen)
 // =====================================================
-
 void processBleEvents() {
   BleEvent evt;
   while (bleEventQueue && xQueueReceive(bleEventQueue, &evt, 0) == pdTRUE) {
@@ -764,10 +574,9 @@ void processBleEvents() {
       case BLE_EVT_CONNECTED:
         deviceConnected = true;
         lastCommandTime = millis();
+        lastUpdateMicros = micros();   // BUG FIX: dt-reset bei Connect
         Serial.println("[BLE] Verbunden");
-        char buf[48];
-        snprintf(buf, sizeof(buf), "%s bereit", FIRMWARE_VERSION);
-        sendStatus(buf);
+        sendStatus("EduBot V1.3 bereit");
         break;
       case BLE_EVT_DISCONNECTED:
         deviceConnected = false;
@@ -775,11 +584,13 @@ void processBleEvents() {
         speedL = 0.0;
         speedR = 0.0;
         stopMotors();
-        Serial.println("[BLE] Getrennt -> Werbung neu gestartet");
-        BLEDevice::startAdvertising();
+        raceActive = false;
+        quizActive = false;
+        Serial.println("[BLE] Getrennt - Werbung gestartet");
+        BLEDevice::startAdvertising();   // <-- direkt hier, wie im .ino
         break;
       case BLE_EVT_COMMAND:
-        handleCommand(String(evt.cmd));
+        handleCommand(evt.cmd);
         break;
     }
   }
@@ -788,7 +599,6 @@ void processBleEvents() {
 // =====================================================
 // RAMPE (sanftes Beschleunigen)
 // =====================================================
-
 float rampSpeed(float current, float target, float dt) {
   float diff = target - current;
   if (diff < 1.0f && diff > -1.0f) {
@@ -808,7 +618,6 @@ float rampSpeed(float current, float target, float dt) {
 // =====================================================
 // FAHRLOGIK
 // =====================================================
-
 void updateDrive() {
   float targetL = 0.0;
   float targetR = 0.0;
@@ -873,9 +682,11 @@ void updateDrive() {
   }
 }
 
+// =====================================================
+// NVS-VALIDIERUNG
+// =====================================================
 void validateConfig() {
   bool changed = false;
-
   if (config.maxSpeed < MAX_SPEED_MIN || config.maxSpeed > MAX_SPEED_MAX) {
     config.maxSpeed = static_cast<float>(MAX_SPEED_DEFAULT); changed = true;
   }
@@ -885,32 +696,12 @@ void validateConfig() {
   if (config.accelRate < ACCEL_MIN || config.accelRate > ACCEL_MAX) {
     config.accelRate = ACCEL_DEFAULT; changed = true;
   }
-  if (config.turnOnlySpeed < 50.0f || config.turnOnlySpeed > MAX_SPEED_MAX) {
-    config.turnOnlySpeed = 550.0f; changed = true;
-  }
-  if (config.leftSign != -1 && config.leftSign != 1) {
-    config.leftSign = -1; changed = true;
-  }
-  if (config.rightSign != -1 && config.rightSign != 1) {
-    config.rightSign = -1; changed = true;
-  }
-  if (config.commandTimeoutMs < 100 || config.commandTimeoutMs > 10000) {
-    config.commandTimeoutMs = 500; changed = true;
-  }
   if (config.blackR >= config.whiteR || config.blackG >= config.whiteG || config.blackB >= config.whiteB) {
-    config.blackR = 152;  config.blackG = 137; config.blackB = 98;
+    config.blackR = 152; config.blackG = 137; config.blackB = 98;
     config.whiteR = 4143; config.whiteG = 4258; config.whiteB = 3036;
     changed = true;
   }
-
   if (changed) {
-    configDirty = true;
-    Serial.println("[NVS] Invalid config corrected");
-  }
-}
-
-void saveConfigIfDirty() {
-  if (configDirty) {
     prefs.begin("edubot", false);
     prefs.putFloat("maxSpeed", config.maxSpeed);
     prefs.putFloat("turnFactor", config.turnFactor);
@@ -922,102 +713,21 @@ void saveConfigIfDirty() {
     prefs.putUShort("whiteG", config.whiteG);
     prefs.putUShort("whiteB", config.whiteB);
     prefs.end();
-    configDirty = false;
-    Serial.println("[NVS] Config saved");
+    Serial.println("[NVS] Invalid config corrected");
   }
 }
 
 // =====================================================
-// MESH (ESP-NOW Inter-Roboter Kommunikation)
+// SETUP
 // =====================================================
-
-void onMeshMessage(const uint8_t* fromMac, uint8_t opcode, const char* text, size_t len) {
-  String fromStr = EduMesh::macString(fromMac);
-  switch (opcode) {
-    case EduMesh::MESH_OP_HEARTBEAT:
-      // Stille Pflege; Peers werden in mesh.cpp verwaltet
-      break;
-    case EduMesh::MESH_OP_MSG: {
-      char buf[96];
-      snprintf(buf, sizeof(buf), "MESH_MSG:%s,%s", fromStr.c_str(), text);
-      Serial.printf("[MESH] MSG von %s: %s\n", fromStr.c_str(), text);
-      sendStatus(buf);
-      break;
-    }
-    case EduMesh::MESH_OP_CMD: {
-      // Weitergeleitetes Kommando lokal ausfuehren
-      Serial.printf("[MESH] CMD von %s: %s\n", fromStr.c_str(), text);
-      if (isFollowerMode && bleEventQueue) {
-        BleEvent evt = { BLE_EVT_COMMAND, "" };
-        strlcpy(evt.cmd, text, sizeof(evt.cmd));
-        xQueueSend(bleEventQueue, &evt, pdMS_TO_TICKS(10));
-      }
-      break;
-    }
-    case EduMesh::MESH_OP_COLOR: {
-      // Farbereignis weiterleiten
-      Serial.printf("[MESH] COLOR von %s: %s\n", fromStr.c_str(), text);
-      char buf[96];
-      snprintf(buf, sizeof(buf), "MESH_COLOR:%s,%s", fromStr.c_str(), text);
-      sendStatus(buf);
-      break;
-    }
-    case EduMesh::MESH_OP_PING: {
-      Serial.printf("[MESH] PING von %s\n", fromStr.c_str());
-      char buf[48];
-      snprintf(buf, sizeof(buf), "MESH_PING:%s", fromStr.c_str());
-      sendStatus(buf);
-      break;
-    }
-    case EduMesh::MESH_OP_PONG: {
-      Serial.printf("[MESH] PONG von %s\n", fromStr.c_str());
-      break;
-    }
-    default:
-      Serial.printf("[MESH] unbekannt opcode=%u von %s\n", opcode, fromStr.c_str());
-      break;
-  }
-}
-
-// =====================================================
-// FORMATIONS-LOGIK (Peer-basiert)
-// =====================================================
-void updateFormation() {
-  // Wenn Tasten gedrückt sind, manuelle Steuerung priorisieren
-  if (keyW || keyA || keyS || keyD) return;
-
-  EduMesh::Peer peers[EduMesh::MESH_MAX_PEERS];
-  size_t count = 0;
-  EduMesh::getPeers(peers, EduMesh::MESH_MAX_PEERS, &count);
-
-  if (count == 0) {
-    // Keine Peers in Reichweite: stehend suchen (nicht fahren)
-    keyW = false;
-    return;
-  }
-
-  // Peer gefunden: wir sind "zusammen"
-  keyW = false;
-}
-
-// =====================================================
-
 void setup() {
   Serial.begin(BAUD_RATE);
   vTaskDelay(pdMS_TO_TICKS(500));
   Serial.println("\n======================================");
-  Serial.println("EduBot V1.3 – Xiao ESP32-S3 + DRV8834");
+  Serial.println("EduBot V1.3 - Xiao ESP32-S3 + DRV8834");
   Serial.println("======================================");
 
-    // esp_task_wdt_config_t wdt_config = {
-  //   .timeout_ms = 10000,
-  //   .idle_core_mask = (1 << CONFIG_NUM_CORES) - 1, 
-  //   .trigger_panic = true,
-  // };
-  // esp_task_wdt_init(&wdt_config);
-  // esp_task_wdt_add(NULL);
-  
-  esp_task_wdt_init(20, true);
+  esp_task_wdt_init(10000, true);
   esp_task_wdt_add(NULL);
 
   // NVS-Konfiguration laden und validieren
@@ -1032,12 +742,13 @@ void setup() {
   config.whiteR        = prefs.getUShort("whiteR", 4143);
   config.whiteG        = prefs.getUShort("whiteG", 4258);
   config.whiteB        = prefs.getUShort("whiteB", 3036);
-  String savedName    = prefs.getString("robotName", "EduBot-01");
-  strlcpy(g_robotName, savedName.c_str(), sizeof(g_robotName));
-  Serial.printf("[NVS] maxSpeed=%.0f accelRate=%.0f turnFactor=%.2f name=%s\n",
-                config.maxSpeed, config.accelRate, config.turnFactor, g_robotName);
+  // Schutz: zu kleine white-Werte -> default Kalibrierung
+  if (config.whiteR < 200 || config.whiteG < 200 || config.whiteB < 200) {
+    config.blackR = 152; config.blackG = 137; config.blackB = 98;
+    config.whiteR = 4143; config.whiteG = 4258; config.whiteB = 3036;
+  }
+  Serial.printf("[NVS] maxSpeed=%.0f accelRate=%.0f turnFactor=%.2f\n", config.maxSpeed, config.accelRate, config.turnFactor);
   validateConfig();
-  saveConfigIfDirty();
   prefs.end();
 
   // Pins initialisieren
@@ -1060,7 +771,7 @@ void setup() {
 
   // Hardware-Timer starten
   initStepperTimer();
-  Serial.println("[TIMER] Hardware-Timer gestartet (10 µs)");
+  Serial.println("[TIMER] Hardware-Timer gestartet (10 us)");
 
   // Farbsensor
   setupColorSensor();
@@ -1083,7 +794,7 @@ void setup() {
     Serial.println("[BLE] Fehler: Queue konnte nicht erstellt werden!");
   }
 
-  // BLE VOR WiFi initialisieren (Espressif-Empfehlung fuer Koexistenz)
+  // BLE initialisieren
   BLEDevice::init("EduBot");
 
   BLEServer* server = BLEDevice::createServer();
@@ -1102,48 +813,27 @@ void setup() {
     BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
   );
   statusChar->addDescriptor(new BLE2902());
-  statusChar->setValue(FIRMWARE_VERSION);
+  statusChar->setValue("EduBot V1.3");
 
   service->start();
 
-  BLEAdvertising* advertising = server->getAdvertising();
+  BLEAdvertising* advertising = BLEDevice::getAdvertising();
   advertising->addServiceUUID(SERVICE_UUID);
   advertising->setScanResponse(true);
   advertising->start();
 
   Serial.println("[BLE] Werbung gestartet (EduBot)");
-
-  // WiFi/Mesh NACH BLE starten
-  WiFi.mode(WIFI_STA);
-  delay(100);
-  esp_wifi_set_channel(6, WIFI_SECOND_CHAN_NONE);
-
-  if (EduMesh::begin(g_robotName, onMeshMessage)) {
-    Serial.println("[MESH] ESP-NOW aktiv");
-  } else {
-    Serial.println("[MESH] ESP-NOW NICHT aktivierbar");
-  }
-
-  // WICHTIG: Advertising nach WiFi-Init neu starten
-  // WiFi.mode() kann die BLE-Advertising auf ESP32-S3 stoeren
-  advertising->start();
-  Serial.println("[BLE] Advertising erneut gestartet nach WiFi-Init");
+  Serial.println("======================================\n");
 }
 
 // =====================================================
 // LOOP
 // =====================================================
-
 void loop() {
   esp_task_wdt_reset();
 
-  // BLE-Events verarbeiten (wichtig: wurde in V1.2 vergessen!)
+  // BLE-Events verarbeiten
   processBleEvents();
-
-  // Config in NVS speichern (nur wenn nötig, entkoppelt von BLE-Befehlen)
-  if (configDirty) {
-    saveConfigIfDirty();
-  }
 
   // Fahrlogik aktualisieren
   updateDrive();
@@ -1152,70 +842,6 @@ void loop() {
   if (deviceConnected && millis() - lastColorNotify > COLOR_NOTIFY_MS) {
     lastColorNotify = millis();
     sendColorToWebsite();
-  }
-
-  // Mesh-Heartbeat und Peer-Pflege
-  EduMesh::loop();
-
-  // Formation: Roboter finden sich gegenseitig (RSSI-basiert)
-  if (formationMode) {
-    updateFormation();
-  }
-
-  // Quiz-Statusmaschine (non-blocking)
-  if (quizState == QUIZ_DRIVE) {
-    unsigned long elapsed = millis() - quizStepTime;
-    if (elapsed < (unsigned long)quizStepMs) {
-      // Vorwaerts fahren
-      keyW = true; keyA = false; keyS = false; keyD = false;
-    } else {
-      // Anhalten und Farbe lesen
-      keyW = false;
-      char colorName[16];
-      if (xSemaphoreTake(colorSem, pdMS_TO_TICKS(5)) == pdTRUE) {
-        strlcpy(colorName, (const char*)sensorName, sizeof(colorName));
-        xSemaphoreGive(colorSem);
-      } else {
-        strlcpy(colorName, "UNBEKANNT", sizeof(colorName));
-      }
-      Serial.printf("[QUIZ] Tile %d: %s (erwartet: %s)\n", quizIndex, colorName, quizExpected[quizIndex].c_str());
-      quizReadColors[quizIndex] = String(colorName);
-      quizIndex++;
-      quizStepTime = millis();
-      if (quizIndex >= quizExpectedLen) {
-        quizState = QUIZ_DONE;
-        // Ergebnis auswerten
-        int correct = 0;
-        for (int i = 0; i < quizExpectedLen; i++) {
-          if (quizReadColors[i] == quizExpected[i]) correct++;
-        }
-        char result[64];
-        if (correct == quizExpectedLen) {
-          snprintf(result, sizeof(result), "QUIZ:RESULT:OK,%d,%d", correct, quizExpectedLen);
-        } else {
-          int firstWrong = -1;
-          for (int i = 0; i < quizExpectedLen; i++) {
-            if (quizReadColors[i] != quizExpected[i]) { firstWrong = i; break; }
-          }
-          snprintf(result, sizeof(result), "QUIZ:RESULT:WRONG,%s,%s,%d,%d",
-                   quizExpected[firstWrong].c_str(), quizReadColors[firstWrong].c_str(),
-                   correct, quizExpectedLen);
-        }
-        sendStatus(result);
-        EduMesh::sendCmd(result, strlen(result));
-        hardStop();
-      } else {
-        quizState = QUIZ_DRIVE;
-      }
-    }
-  }
-
-  // Race-Drive-Timeout
-  if (raceDriveUntil > 0 && millis() > raceDriveUntil) {
-    raceDriveUntil = 0;
-    if (quizState == QUIZ_IDLE && !formationMode) {
-      clearKeys();
-    }
   }
 
   vTaskDelay(pdMS_TO_TICKS(LOOP_DELAY_MS));

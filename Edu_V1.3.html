@@ -5,425 +5,225 @@
   <title>EduBot V1.3</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --teal-50: #f0fdfa; --teal-100: #ccfbf1; --teal-200: #99f6e4;
-      --teal-400: #2dd4bf; --teal-500: #14b8a6; --teal-600: #0d9488; --teal-700: #0f766e;
-      --amber-50: #fffbeb; --amber-100: #fef3c7; --amber-200: #fde68a;
-      --amber-400: #fbbf24; --amber-500: #f59e0b; --amber-600: #d97706; --amber-700: #b45309;
-      --violet-50: #f5f3ff; --violet-100: #ede9fe; --violet-500: #8b5cf6; --violet-600: #7c3aed;
-      --red-400: #f87171; --red-500: #ef4444; --red-600: #dc2626;
-      --green-400: #34d399; --green-500: #10b981; --green-600: #059669;
-      --blue-50: #eff6ff; --blue-500: #3b82f6; --blue-600: #2563eb;
-      --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
-      --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
-      --slate-600: #475569; --slate-700: #334155; --slate-900: #0f172a;
-      --white: #fff;
-      --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
-      --space-5: 20px; --space-6: 24px; --space-8: 32px;
-      --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 20px; --radius-full: 9999px;
-      --fs-xs: 12px; --fs-sm: 13px; --fs-base: 14px; --fs-lg: 16px; --fs-xl: 20px; --fs-2xl: 24px; --fs-3xl: 38px;
-      --fw-normal: 500; --fw-semibold: 600; --fw-bold: 700; --fw-extrabold: 800;
+      --teal-50:#f0fdfa;--teal-100:#ccfbf1;--teal-200:#99f6e4;--teal-400:#2dd4bf;--teal-500:#14b8a6;--teal-600:#0d9488;--teal-700:#0f766e;
+      --amber-50:#fffbeb;--amber-100:#fef3c7;--amber-400:#fbbf24;--amber-700:#b45309;
+      --violet-50:#f5f3ff;--violet-500:#8b5cf6;--violet-600:#7c3aed;
+      --red-400:#f87171;--red-500:#ef4444;--red-600:#dc2626;
+      --green-400:#34d399;--green-500:#10b981;--green-600:#059669;
+      --blue-500:#3b82f6;--blue-600:#2563eb;
+      --slate-50:#f8fafc;--slate-100:#f1f5f9;--slate-200:#e2e8f0;--slate-300:#cbd5e1;--slate-400:#94a3b8;--slate-500:#64748b;--slate-600:#475569;--slate-700:#334155;--slate-900:#0f172a;
+      --white:#fff;
+      --radius-sm:8px;--radius-md:12px;--radius-lg:16px;--radius-xl:20px;--radius-full:9999px;
+      --fs-xs:12px;--fs-sm:13px;--fs-base:14px;--fs-lg:16px;--fs-xl:20px;--fs-2xl:24px;--fs-3xl:38px;
+      --fw-normal:500;--fw-semibold:600;--fw-bold:700;--fw-extrabold:800;
     }
-
-    html, body { height: 100%; }
-    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #f5f5f0; color: var(--slate-900); min-height: 100vh; }
-
-    .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      padding: 10px 22px; border-radius: 10px; border: none;
-      font-size: var(--fs-base); font-weight: var(--fw-semibold); cursor: pointer;
-      transition: all 0.2s; white-space: nowrap; font-family: inherit;
-    }
-    .btn:hover { transform: translateY(-2px); }
-    .btn:active { transform: scale(0.95); }
-    .btn-sm { padding: 7px 14px; font-size: var(--fs-sm); }
-    .btn-lg { padding: 14px 32px; font-size: var(--fs-lg); }
-    .btn-xs { padding: 4px 10px; font-size: 11px; }
-    .btn-primary { background: linear-gradient(135deg, var(--teal-500), var(--teal-600)); color: var(--white); }
-    .btn-danger { background: linear-gradient(135deg, var(--red-400), var(--red-500)); color: var(--white); }
-    .btn-success { background: linear-gradient(135deg, var(--green-400), var(--green-500)); color: var(--white); }
-    .btn-red { background: linear-gradient(135deg, var(--red-400), var(--red-600)); color: var(--white); }
-    .btn-grey { background: var(--slate-200); color: var(--slate-700); }
-
-    .header {
-      height: 64px; background: linear-gradient(135deg, var(--teal-700) 0%, var(--teal-600) 50%, var(--teal-500) 100%);
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 var(--space-5); position: sticky; top: 0; z-index: 20;
-    }
-    .header-l-text { font-size: var(--fs-xl); font-weight: var(--fw-extrabold); color: var(--white); }
-    .header-l-text span { color: var(--amber-400); }
-    .header-r { display: flex; align-items: center; gap: var(--space-3); }
-    .conn-badge {
-      display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: var(--fw-semibold);
-      color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.15);
-      padding: var(--space-1) var(--space-3); border-radius: var(--radius-full);
-    }
-    .conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red-500); transition: 0.3s; }
-    .conn-dot.connected { background: var(--green-400); box-shadow: 0 0 8px rgba(52,211,153,0.6); }
-
-    .dashboard { padding: var(--space-3) var(--space-3) var(--space-8); max-width: 740px; margin: 0 auto; }
-    .tile-grid { display: flex; flex-direction: column; gap: var(--space-2); }
-    .cat-header {
-      display: flex; align-items: center; gap: var(--space-2);
-      padding: var(--space-4) 0 var(--space-2); margin-top: var(--space-2);
-      font-size: var(--fs-sm); font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.5px;
-      color: var(--slate-500);
-    }
-    .tile {
-      background: var(--white); border-radius: var(--radius-md);
-      padding: 12px 14px; display: flex; align-items: center; gap: 14px;
-      cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid var(--slate-200);
-    }
-    .tile:hover { transform: translateX(3px); box-shadow: 0 4px 14px rgba(0,0,0,0.07); }
-    .tile:active { transform: scale(0.98); }
-    .tile-ic { width: 42px; height: 42px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .tile > div:not(.tile-ic) { flex: 1; }
-    .tile-ttl { font-size: var(--fs-base); font-weight: var(--fw-bold); }
-    .tile-desc { font-size: var(--fs-xs); color: var(--slate-400); margin-top: 1px; }
-
-    .view { display: none; }
-    .view.active { display: block; animation: fadeUp 0.3s ease; }
-    @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-
-    .game-view {
-      position: fixed; inset: 0; z-index: 100; background: #f5f5f0; overflow-y: auto;
-    }
-    .game-header {
-      height: 54px; background: var(--white); border-bottom: 1px solid var(--slate-200);
-      display: flex; align-items: center; padding: 0 14px; gap: var(--space-3);
-      position: sticky; top: 0; z-index: 10;
-    }
-    .back-btn {
-      width: 34px; height: 34px; border-radius: 10px; border: none;
-      background: var(--slate-100); color: var(--slate-600); font-size: var(--fs-lg); cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .gv-title { font-size: var(--fs-lg); font-weight: var(--fw-bold); flex: 1; }
-    .game-body { padding: var(--space-5) 14px var(--space-8); max-width: 600px; margin: 0 auto; }
-
-    .arena {
-      background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-xl);
-      padding: 28px 24px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    }
-    .game-title { font-size: 22px; font-weight: var(--fw-extrabold); margin-bottom: var(--space-1); }
-    .game-desc { font-size: var(--fs-base); color: var(--slate-400); margin-bottom: var(--space-5); }
-
-    .quiz-display { font-size: var(--fs-3xl); font-weight: var(--fw-extrabold); margin: var(--space-4) 0; }
-    .quiz-input {
-      font-size: var(--fs-xl); padding: var(--space-3) var(--space-5); text-align: center;
-      border-radius: var(--radius-md); border: 2px solid var(--slate-200); background: var(--slate-50);
-      font-weight: var(--fw-semibold); outline: none; transition: 0.15s; max-width: 100%;
-    }
-    .quiz-input:focus { border-color: var(--teal-500); }
-
-    .feedback-msg { font-size: 15px; font-weight: var(--fw-semibold); margin-top: 14px; padding: var(--space-3) var(--space-5); border-radius: var(--radius-md); display: none; }
-    .feedback-msg.show { display: block; animation: popIn 0.3s; }
-    @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-    .feedback-success { background: var(--teal-50); color: var(--green-600); border: 1px solid #a7f3d0; }
-    .feedback-error { background: #fef2f2; color: var(--red-600); border: 1px solid #fecaca; }
-
-    .key-grid { display: grid; grid-template-columns: repeat(3, 60px); gap: var(--space-2); justify-content: center; margin: var(--space-5) 0; }
-    .key-btn {
-      height: 60px; border-radius: var(--radius-md); font-size: var(--fs-xl); font-weight: var(--fw-bold);
-      background: var(--white); border: 2px solid var(--slate-200); color: var(--slate-900); cursor: pointer;
-      display: flex; justify-content: center; align-items: center; user-select: none;
-    }
-    .key-btn:active, .key-btn.active { background: var(--teal-50); border-color: var(--teal-500); transform: scale(0.94); }
-    .key-empty { visibility: hidden; }
-
-    input[type="range"] { width: 100%; height: 6px; -webkit-appearance: none; appearance: none; background: var(--slate-200); border-radius: 4px; outline: none; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: var(--teal-500); border-radius: 50%; cursor: pointer; }
-
-    .mem-arrow { font-size: 40px; padding: var(--space-3); display: inline-block; transition: 0.15s; opacity: 0.3; }
-    .mem-arrow.flash { opacity: 1; transform: scale(1.4); color: var(--teal-500); }
-
-    .reconnect-banner {
-      position: fixed; top: 64px; left: 0; right: 0; z-index: 99;
-      background: var(--amber-100); color: var(--amber-700); text-align: center; padding: var(--space-2);
-      font-size: var(--fs-sm); font-weight: var(--fw-semibold); display: none;
-    }
-    .reconnect-banner.show { display: block; }
-
-    /* Multiplayer/Mesh Styles */
-    .mesh-section {
-      background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: var(--radius-md);
-      padding: var(--space-3); margin-bottom: var(--space-4);
-    }
-    .mesh-section-title { font-weight: 700; font-size: var(--fs-base); margin-bottom: var(--space-2); }
-
-    /* Rennen Styles */
-    .race-progress-bar {
-      height: 24px; background: var(--slate-200); border-radius: var(--radius-full); overflow: hidden; margin: var(--space-2) 0;
-    }
-    .race-progress-fill { height: 100%; background: linear-gradient(90deg, var(--teal-500), var(--green-500)); transition: width 0.3s; }
-    .race-score { font-size: var(--fs-2xl); font-weight: var(--fw-extrabold); }
-
-    /* Farben-Quiz */
-    .color-choice {
-      padding: var(--space-4); border-radius: var(--radius-md); color: white;
-      font-size: var(--fs-lg); font-weight: var(--fw-bold); cursor: pointer; border: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: 0.2s;
-    }
-    .color-choice:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
-    .color-choice:active { transform: scale(0.95); }
-    .color-choice.selected { outline: 4px solid var(--teal-500); outline-offset: 2px; }
+    html,body{height:100%}
+    body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#f5f5f0;color:var(--slate-900);min-height:100vh}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 22px;border-radius:10px;border:none;font-size:var(--fs-base);font-weight:var(--fw-semibold);cursor:pointer;transition:all .2s;white-space:nowrap;font-family:inherit}
+    .btn:hover{transform:translateY(-2px)}.btn:active{transform:scale(.95)}
+    .btn-sm{padding:7px 14px;font-size:var(--fs-sm)}.btn-lg{padding:14px 32px;font-size:var(--fs-lg)}.btn-xs{padding:4px 10px;font-size:11px}
+    .btn-primary{background:linear-gradient(135deg,var(--teal-500),var(--teal-600));color:var(--white)}
+    .btn-danger{background:linear-gradient(135deg,var(--red-400),var(--red-500));color:var(--white)}
+    .btn-success{background:linear-gradient(135deg,var(--green-400),var(--green-500));color:var(--white)}
+    .btn-red{background:linear-gradient(135deg,var(--red-400),var(--red-600));color:var(--white)}
+    .btn-grey{background:var(--slate-200);color:var(--slate-700)}
+    .header{height:64px;background:linear-gradient(135deg,var(--teal-700) 0%,var(--teal-600) 50%,var(--teal-500) 100%);display:flex;align-items:center;justify-content:space-between;padding:0 20px;position:sticky;top:0;z-index:20}
+    .header-l-text{font-size:var(--fs-xl);font-weight:var(--fw-extrabold);color:var(--white)}
+    .header-l-text span{color:var(--amber-400)}
+    .header-r{display:flex;align-items:center;gap:12px}
+    .conn-badge{display:flex;align-items:center;gap:6px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:rgba(255,255,255,.85);background:rgba(255,255,255,.15);padding:4px 12px;border-radius:var(--radius-full)}
+    .conn-dot{width:6px;height:6px;border-radius:50%;background:var(--red-500);transition:.3s}
+    .conn-dot.connected{background:var(--green-400);box-shadow:0 0 8px rgba(52,211,153,.6)}
+    .dashboard{padding:12px 12px 32px;max-width:740px;margin:0 auto}
+    .tile-grid{display:flex;flex-direction:column;gap:8px}
+    .cat-header{display:flex;align-items:center;gap:8px;padding:16px 0 8px;margin-top:8px;font-size:var(--fs-sm);font-weight:var(--fw-bold);text-transform:uppercase;letter-spacing:.5px;color:var(--slate-500)}
+    .tile{background:var(--white);border-radius:var(--radius-md);padding:12px 14px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid var(--slate-200)}
+    .tile:hover{transform:translateX(3px);box-shadow:0 4px 14px rgba(0,0,0,.07)}.tile:active{transform:scale(.98)}
+    .tile-ic{width:42px;height:42px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .tile>div:not(.tile-ic){flex:1}.tile-ttl{font-size:var(--fs-base);font-weight:var(--fw-bold)}.tile-desc{font-size:var(--fs-xs);color:var(--slate-400);margin-top:1px}
+    .view{display:none}.view.active{display:block;animation:fadeUp .3s ease}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+    .game-view{position:fixed;inset:0;z-index:100;background:#f5f5f0;overflow-y:auto}
+    .game-header{height:54px;background:var(--white);border-bottom:1px solid var(--slate-200);display:flex;align-items:center;padding:0 14px;gap:12px;position:sticky;top:0;z-index:10}
+    .back-btn{width:34px;height:34px;border-radius:10px;border:none;background:var(--slate-100);color:var(--slate-600);font-size:var(--fs-lg);cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .gv-title{font-size:var(--fs-lg);font-weight:var(--fw-bold);flex:1}
+    .game-body{padding:20px 14px 32px;max-width:600px;margin:0 auto}
+    .arena{background:var(--white);border:1px solid var(--slate-200);border-radius:var(--radius-xl);padding:28px 24px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+    .game-title{font-size:22px;font-weight:var(--fw-extrabold);margin-bottom:4px}.game-desc{font-size:var(--fs-base);color:var(--slate-400);margin-bottom:20px}
+    .quiz-display{font-size:var(--fs-3xl);font-weight:var(--fw-extrabold);margin:16px 0}
+    .quiz-input{font-size:var(--fs-xl);padding:12px 20px;text-align:center;border-radius:var(--radius-md);border:2px solid var(--slate-200);background:var(--slate-50);font-weight:var(--fw-semibold);outline:none;transition:.15s;max-width:100%}
+    .quiz-input:focus{border-color:var(--teal-500)}
+    .feedback-msg{font-size:15px;font-weight:var(--fw-semibold);margin-top:14px;padding:12px 20px;border-radius:var(--radius-md);display:none}
+    .feedback-msg.show{display:block;animation:popIn .3s}
+    @keyframes popIn{0%{transform:scale(.9);opacity:0}100%{transform:scale(1);opacity:1}}
+    .feedback-success{background:var(--teal-50);color:var(--green-600);border:1px solid #a7f3d0}
+    .feedback-error{background:#fef2f2;color:var(--red-600);border:1px solid #fecaca}
+    .key-grid{display:grid;grid-template-columns:repeat(3,60px);gap:8px;justify-content:center;margin:20px 0}
+    .key-btn{height:60px;border-radius:var(--radius-md);font-size:var(--fs-xl);font-weight:var(--fw-bold);background:var(--white);border:2px solid var(--slate-200);color:var(--slate-900);cursor:pointer;display:flex;justify-content:center;align-items:center;user-select:none}
+    .key-btn:active,.key-btn.active{background:var(--teal-50);border-color:var(--teal-500);transform:scale(.94)}
+    .key-empty{visibility:hidden}
+    input[type="range"]{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:var(--slate-200);border-radius:4px;outline:none}
+    input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;background:var(--teal-500);border-radius:50%;cursor:pointer}
+    .mem-arrow{font-size:40px;padding:12px;display:inline-block;transition:.15s;opacity:.3}
+    .mem-arrow.flash{opacity:1;transform:scale(1.4);color:var(--teal-500)}
+    .mesh-section{background:var(--slate-50);border:1px solid var(--slate-200);border-radius:var(--radius-md);padding:12px;margin-bottom:16px}
+    .mesh-section-title{font-weight:700;font-size:var(--fs-base);margin-bottom:8px}
+    .race-progress-bar{height:24px;background:var(--slate-200);border-radius:var(--radius-full);overflow:hidden;margin:8px 0}
+    .race-progress-fill{height:100%;background:linear-gradient(90deg,var(--teal-500),var(--green-500));transition:width .3s}
+    .race-score{font-size:var(--fs-2xl);font-weight:var(--fw-extrabold)}
+    .color-choice{padding:16px;border-radius:var(--radius-md);color:white;font-size:var(--fs-lg);font-weight:var(--fw-bold);cursor:pointer;border:none;box-shadow:0 2px 8px rgba(0,0,0,.1);transition:.2s}
+    .color-choice:hover{transform:translateY(-3px);box-shadow:0 6px 16px rgba(0,0,0,.15)}.color-choice:active{transform:scale(.95)}
+    .color-choice.selected{outline:4px solid var(--teal-500);outline-offset:2px}
   </style>
 </head>
 <body>
-  <div id="reconnectBanner" class="reconnect-banner">Verbindung getrennt – versuche erneut zu verbinden...</div>
-
   <!-- DASHBOARD -->
   <div id="view-dashboard" class="view active">
     <div class="header">
-      <div class="header-l">
-        <span class="header-l-text"><span>Edu</span>Bot</span>
-      </div>
+      <div class="header-l"><span class="header-l-text"><span>Edu</span>Bot</span></div>
       <div class="header-r">
         <div class="conn-badge"><div class="conn-dot" id="statusDot"></div><span id="statusText">Getrennt</span></div>
         <button class="btn btn-primary btn-sm" id="btnConnect">Verbinden</button>
         <button class="btn btn-danger btn-sm" id="btnEmergencyStop">STOP</button>
       </div>
     </div>
-    <div class="dashboard">
-      <div class="tile-grid" id="tileGrid">
-        <div class="cat-header">
-          <span>Steuern &amp; Fahren</span>
-        </div>
-        <div class="tile" data-view="drive">
-          <div class="tile-ic" style="background:linear-gradient(135deg,#fef3c7,#fde68a);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg>
-          </div>
-          <div><div class="tile-ttl">Frei Fahren</div><div class="tile-desc">Steuern mit WASD oder Touch</div></div>
-        </div>
-
-        <div class="cat-header"><span>Multiplayer</span></div>
-        <div class="tile" data-view="multiplayer">
-          <div class="tile-ic" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-          </div>
-          <div><div class="tile-ttl">Mesh-Netzwerk</div><div class="tile-desc">Leader/Follower, Peers, Chat</div></div>
-        </div>
-        <div class="tile" data-view="mathrace">
-          <div class="tile-ic" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"></path></svg>
-          </div>
-          <div><div class="tile-ttl">Mathe-Rennen</div><div class="tile-desc">Rechne gegen einen anderen Roboter</div></div>
-        </div>
-
-        <div class="cat-header"><span>Lernen</span></div>
-        <div class="tile" data-view="colorquiz">
-          <div class="tile-ic" style="background:linear-gradient(135deg,#f0fdfa,#ccfbf1);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="4" fill="#0d9488"></circle></svg>
-          </div>
-          <div><div class="tile-ttl">Farben-Quiz</div><div class="tile-desc">Lege Plättchen &amp; der Roboter prüft</div></div>
-        </div>
-
-        <div class="cat-header"><span>Knobeln</span></div>
-        <div class="tile" data-view="memory">
-          <div class="tile-ic" style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 6a4 4 0 0 1 4 4c0 2-1.5 3-4 5-2.5-2-4-3-4-5a4 4 0 0 1 4-4z"></path></svg>
-          </div>
-          <div><div class="tile-ttl">Robo-Memory</div><div class="tile-desc">Sequenzen merken</div></div>
-        </div>
-        <div class="tile" data-view="colorseq">
-          <div class="tile-ic" style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><rect x="2" y="6" width="5" height="12" rx="1.5" fill="#7c3aed"></rect></svg>
-          </div>
-          <div><div class="tile-ttl">Farb-Folge</div><div class="tile-desc">Farbsequenzen sammeln</div></div>
-        </div>
+    <div class="dashboard"><div class="tile-grid" id="tileGrid">
+      <div class="cat-header"><span>Steuern &amp; Fahren</span></div>
+      <div class="tile" data-view="drive">
+        <div class="tile-ic" style="background:linear-gradient(135deg,#fef3c7,#fde68a);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></div>
+        <div><div class="tile-ttl">Frei Fahren</div><div class="tile-desc">Steuern mit WASD oder Touch</div></div>
       </div>
-    </div>
+      <div class="cat-header"><span>Multiplayer</span></div>
+      <div class="tile" data-view="mathrace">
+        <div class="tile-ic" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg></div>
+        <div><div class="tile-ttl">Mathe-Rennen</div><div class="tile-desc">Rechne gegen einen anderen Roboter</div></div>
+      </div>
+      <div class="cat-header"><span>Lernen</span></div>
+      <div class="tile" data-view="colorquiz">
+        <div class="tile-ic" style="background:linear-gradient(135deg,#f0fdfa,#ccfbf1);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="#0d9488"/></svg></div>
+        <div><div class="tile-ttl">Farben-Quiz</div><div class="tile-desc">Lege Plattchen &amp; der Roboter prueft</div></div>
+      </div>
+      <div class="cat-header"><span>Knobeln</span></div>
+      <div class="tile" data-view="memory">
+        <div class="tile-ic" style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 6a4 4 0 0 1 4 4c0 2-1.5 3-4 5-2.5-2-4-3-4-5a4 4 0 0 1 4-4z"/></svg></div>
+        <div><div class="tile-ttl">Robo-Memory</div><div class="tile-desc">Sequenzen merken</div></div>
+      </div>
+      <div class="tile" data-view="colorseq">
+        <div class="tile-ic" style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><rect x="2" y="6" width="5" height="12" rx="1.5" fill="#7c3aed"/></svg></div>
+        <div><div class="tile-ttl">Farb-Folge</div><div class="tile-desc">Farbsequenzen sammeln</div></div>
+      </div>
+    </div></div>
   </div>
 
   <!-- DRIVE -->
   <div id="view-drive" class="view game-view">
-    <div class="game-header"><button class="back-btn" data-view="dashboard">←</button><div class="gv-title">Frei Fahren</div><div class="conn-dot" id="driveConnDot"></div></div>
-    <div class="game-body">
-      <div class="arena">
-        <div class="game-title">🎮 Frei Fahren</div>
-        <div class="game-desc">Steuere den Roboter mit WASD oder den Buttons</div>
-        <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:16px;">
-          <div style="width:36px;height:36px;border-radius:50%;background:#ddd;border:2px solid #999;" id="driveColorPreview"></div>
-          <div><div style="font-size:12px;color:#999;">Farb-Sensor</div><div id="driveColorName" style="font-weight:bold;">--</div></div>
-        </div>
-        <div class="key-grid">
-          <div class="key-empty"></div>
-          <button class="key-btn" data-key="w">W</button>
-          <div class="key-empty"></div>
-          <button class="key-btn" data-key="a">A</button>
-          <button class="key-btn" data-key="s">S</button>
-          <button class="key-btn" data-key="d">D</button>
-        </div>
-        <div style="margin-bottom:16px;">
-          <label style="font-size:13px;color:#999;">Tempo: <span id="speedDisplay">900</span></label>
-          <input type="range" id="speedSlider" min="200" max="2500" value="900">
-        </div>
-        <div style="display:flex;gap:8px;justify-content:center;">
-          <button class="btn btn-danger" id="btnStop">STOP</button>
-        </div>
-        <div class="feedback-msg" id="driveFeedback"></div>
+    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Frei Fahren</div><div class="conn-dot" id="driveConnDot"></div></div>
+    <div class="game-body"><div class="arena">
+      <div class="game-title">Frei Fahren</div>
+      <div class="game-desc">Steuere den Roboter mit WASD oder den Buttons</div>
+      <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:16px;">
+        <div style="width:36px;height:36px;border-radius:50%;background:#ddd;border:2px solid #999;" id="driveColorPreview"></div>
+        <div><div style="font-size:12px;color:#999;">Farb-Sensor</div><div id="driveColorName" style="font-weight:bold;">--</div></div>
       </div>
-    </div>
-  </div>
-
-  <!-- MULTIPLAYER -->
-  <div id="view-multiplayer" class="view game-view">
-    <div class="game-header"><button class="back-btn" data-view="dashboard">←</button><div class="gv-title">Mesh-Netzwerk</div><div class="conn-dot" id="mpConnDot"></div></div>
-    <div class="game-body">
-      <div class="arena">
-        <div class="game-title">🆔 Robo-Multiplayer</div>
-        <div class="game-desc">Verbinde mehrere Roboter drahtlos</div>
-
-        <div class="mesh-section">
-          <div class="mesh-section-title">Mein Roboter-Name</div>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="meshRobotNameInput" value="EduBot-01" style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;">
-            <button class="btn btn-sm btn-primary" id="btnSaveMeshName">Speichern</button>
-          </div>
-        </div>
-
-        <div class="mesh-section">
-          <div class="mesh-section-title">Erkannte Roboter (Mesh)</div>
-          <div id="meshPeerList" style="font-size:13px;color:#94a3b8;font-style:italic;text-align:center;padding:10px;">Suche nach EduBots...</div>
-        </div>
-
-        <div class="mesh-section">
-          <div class="mesh-section-title">Nachricht senden</div>
-          <div style="display:flex;flex-direction:column;gap:8px;">
-            <select id="meshTargetSelect" style="padding:6px;border:1px solid #ddd;border-radius:8px;font-size:12px;">
-              <option value="ALL">An Alle (Broadcast)</option>
-            </select>
-            <div style="display:flex;gap:8px;">
-              <input type="text" id="meshMsgInput" placeholder="Hallo Roboter!" style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;">
-              <button class="btn btn-sm btn-primary" id="btnSendMeshMsg">Senden</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="mesh-section">
-          <div class="mesh-section-title">Nachrichten-Log</div>
-          <div id="meshChatLog" style="height:120px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;background:white;padding:8px;font-family:monospace;font-size:12px;">
-            <div style="color:#94a3b8;text-align:center;font-style:italic;">Noch keine Nachrichten...</div>
-          </div>
-        </div>
-
-        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;">
-          <button class="btn btn-sm btn-grey" id="btnMeshPing">📡 Ping</button>
-          <button class="btn btn-sm" id="btnLeader" style="background:linear-gradient(135deg,#3b82f6,#2563eb);color:white;">Leader</button>
-          <button class="btn btn-sm" id="btnFollower" style="background:linear-gradient(135deg,#10b981,#059669);color:white;">Follower</button>
-          <button class="btn btn-sm btn-red" id="btnModeNormal">Normal</button>
-          <button class="btn btn-sm btn-grey" id="btnMeshClear">Log leeren</button>
-        </div>
+      <div class="key-grid">
+        <div class="key-empty"></div>
+        <button class="key-btn" data-key="w">W</button>
+        <div class="key-empty"></div>
+        <button class="key-btn" data-key="a">A</button>
+        <button class="key-btn" data-key="s">S</button>
+        <button class="key-btn" data-key="d">D</button>
       </div>
-    </div>
+      <div style="margin-bottom:16px;">
+        <label style="font-size:13px;color:#999;">Tempo: <span id="speedDisplay">900</span></label>
+        <input type="range" id="speedSlider" min="200" max="2500" value="900">
+      </div>
+      <button class="btn btn-danger" id="btnStop">STOP</button>
+      <div class="feedback-msg" id="driveFeedback"></div>
+    </div></div>
   </div>
 
   <!-- MATHE-RENNEN -->
   <div id="view-mathrace" class="view game-view">
-    <div class="game-header"><button class="back-btn" data-view="dashboard">←</button><div class="gv-title">Mathe-Rennen</div><div class="conn-dot" id="raceConnDot"></div></div>
-    <div class="game-body">
-      <div class="arena">
-        <div class="game-title">🏁 Mathe-Rennen</div>
-        <div class="game-desc">Wer zuerst 10 Aufgaben richtig hat, gewinnt!</div>
-
-        <div style="display:flex;justify-content:space-around;margin-bottom:20px;">
-          <div>
-            <div style="font-size:12px;color:#94a3b8;font-weight:600;">ICH</div>
-            <div class="race-score" id="raceMyScore">0/10</div>
-            <div class="race-progress-bar" style="width:120px;"><div class="race-progress-fill" id="raceMyBar" style="width:0%"></div></div>
-          </div>
-          <div>
-            <div style="font-size:12px;color:#94a3b8;font-weight:600;">GEGNER</div>
-            <div class="race-score" id="raceOppScore">0/10</div>
-            <div class="race-progress-bar" style="width:120px;"><div class="race-progress-fill" id="raceOppBar" style="width:0%;background:linear-gradient(90deg,#3b82f6,#2563eb);"></div></div>
-          </div>
-        </div>
-
-        <div id="raceQuestionArea">
-          <div class="quiz-display" id="raceQuestion">Bereit?</div>
-          <div style="display:flex;gap:8px;justify-content:center;margin:20px 0;">
-            <input type="number" id="raceAnswer" class="quiz-input" placeholder="Antwort" style="display:none;">
-            <button class="btn btn-lg btn-primary" id="btnRaceStart">Rennen starten</button>
-            <button class="btn btn-lg btn-success" id="btnRaceAnswer" style="display:none;">Prüfen</button>
-          </div>
-        </div>
-
-        <div class="feedback-msg" id="raceFeedback"></div>
-        <div id="raceWinnerMsg" style="font-size:24px;font-weight:800;margin-top:16px;display:none;"></div>
+    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Mathe-Rennen</div><div class="conn-dot" id="raceConnDot"></div></div>
+    <div class="game-body"><div class="arena">
+      <div class="game-title">Mathe-Rennen</div>
+      <div class="game-desc">Wer zuerst 10 Aufgaben richtig hat, gewinnt!</div>
+      <div style="display:flex;justify-content:space-around;margin-bottom:20px;">
+        <div><div style="font-size:12px;color:#94a3b8;font-weight:600;">ICH</div><div class="race-score" id="raceMyScore">0/10</div><div class="race-progress-bar" style="width:120px;"><div class="race-progress-fill" id="raceMyBar" style="width:0%"></div></div></div>
+        <div><div style="font-size:12px;color:#94a3b8;font-weight:600;">GEGNER</div><div class="race-score" id="raceOppScore">0/10</div><div class="race-progress-bar" style="width:120px;"><div class="race-progress-fill" id="raceOppBar" style="width:0%;background:linear-gradient(90deg,#3b82f6,#2563eb);"></div></div></div>
       </div>
-    </div>
+      <div id="raceQuestionArea">
+        <div class="quiz-display" id="raceQuestion">Bereit?</div>
+        <div style="display:flex;gap:8px;justify-content:center;margin:20px 0;">
+          <input type="number" id="raceAnswer" class="quiz-input" placeholder="Antwort" style="display:none;">
+          <button class="btn btn-lg btn-primary" id="btnRaceStart">Rennen starten</button>
+          <button class="btn btn-lg btn-success" id="btnRaceAnswer" style="display:none;">Pruefen</button>
+        </div>
+      </div>
+      <div class="feedback-msg" id="raceFeedback"></div>
+      <div id="raceWinnerMsg" style="font-size:24px;font-weight:800;margin-top:16px;display:none;"></div>
+    </div></div>
   </div>
 
   <!-- FARBEN-QUIZ -->
   <div id="view-colorquiz" class="view game-view">
-    <div class="game-header"><button class="back-btn" data-view="dashboard">←</button><div class="gv-title">Farben-Quiz</div><div class="conn-dot" id="cqConnDot"></div></div>
-    <div class="game-body">
-      <div class="arena">
-        <div class="game-title">🎨 Farben-Quiz</div>
-        <div class="game-desc">Löse 10 Aufgaben. Lege Farbplättchen in einer Reihe auf den Boden.<br>Am Ende fährt der Roboter darüber und prüft!</div>
-
-        <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;">Aufgabe <span id="cqNumber">1</span> / 10</div>
-        <div class="quiz-display" id="cqQuestion">Bereit?</div>
-
-        <div id="cqChoices" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0;display:none;">
-          <button class="color-choice" data-color="ROT" style="background:#ef4444;">ROT</button>
-          <button class="color-choice" data-color="GRUEN" style="background:#10b981;">GRÜN</button>
-          <button class="color-choice" data-color="BLAU" style="background:#3b82f6;">BLAU</button>
-          <button class="color-choice" data-color="GELB" style="background:#f59e0b;">GELB</button>
-        </div>
-
-        <div style="display:flex;gap:8px;justify-content:center;margin:20px 0;">
-          <button class="btn btn-lg btn-primary" id="btnCqStart">Quiz starten</button>
-          <button class="btn btn-lg btn-success" id="btnCqNext" style="display:none;">Nächste Aufgabe</button>
-          <button class="btn btn-lg btn-danger" id="btnCqCheck" style="display:none;">Korrektur starten</button>
-        </div>
-
-        <div style="margin-top:16px;">
-          <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;">Deine Antworten (Plättchen-Reihenfolge):</div>
-          <div id="cqAnswerList" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;min-height:40px;"></div>
-        </div>
-
-        <div class="feedback-msg" id="cqFeedback"></div>
+    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Farben-Quiz</div><div class="conn-dot" id="cqConnDot"></div></div>
+    <div class="game-body"><div class="arena">
+      <div class="game-title">Farben-Quiz</div>
+      <div class="game-desc">Loese 10 Aufgaben. Lege Farbplaettchen in einer Reihe auf den Boden. Am Ende faehrt der Roboter drueber und prueft!</div>
+      <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;">Aufgabe <span id="cqNumber">1</span> / 10</div>
+      <div class="quiz-display" id="cqQuestion">Bereit?</div>
+      <div id="cqChoices" style="display:none;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0;">
+        <button class="color-choice" data-color="ROT" style="background:#ef4444;">ROT</button>
+        <button class="color-choice" data-color="GRUEN" style="background:#10b981;">GRUEN</button>
+        <button class="color-choice" data-color="BLAU" style="background:#3b82f6;">BLAU</button>
+        <button class="color-choice" data-color="GELB" style="background:#f59e0b;">GELB</button>
       </div>
-    </div>
+      <div style="display:flex;gap:8px;justify-content:center;margin:20px 0;">
+        <button class="btn btn-lg btn-primary" id="btnCqStart">Quiz starten</button>
+        <button class="btn btn-lg btn-success" id="btnCqNext" style="display:none;">Naechste Aufgabe</button>
+        <button class="btn btn-lg btn-danger" id="btnCqCheck" style="display:none;">Korrektur starten</button>
+      </div>
+      <div style="margin-top:16px;">
+        <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;">Deine Antworten:</div>
+        <div id="cqAnswerList" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;min-height:40px;"></div>
+      </div>
+      <div class="feedback-msg" id="cqFeedback"></div>
+    </div></div>
   </div>
 
   <!-- ROBO-MEMORY -->
   <div id="view-memory" class="view game-view">
-    <div class="game-header"><button class="back-btn" data-view="dashboard">←</button><div class="gv-title">Robo-Memory</div><div class="conn-dot" id="memConnDot"></div></div>
-    <div class="game-body">
-      <div class="arena">
-        <div class="game-title">🧠 Robo-Memory</div>
-        <div class="game-desc">Merke dir die Pfeil-Folge und gib sie wieder!</div>
-        <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;">Level <span id="memLevel">1</span></div>
-        <div style="display:flex;justify-content:center;align-items:center;min-height:80px;margin:20px 0;">
-          <span class="mem-arrow" id="memArrow0">⬅</span>
-          <span class="mem-arrow" id="memArrow1">⬆</span>
-          <span class="mem-arrow" id="memArrow2">➡</span>
-          <span class="mem-arrow" id="memArrow3">⬇</span>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:center;">
-          <button class="btn btn-primary btn-lg" id="btnMemStart">Start</button>
-          <button class="btn btn-grey btn-lg" id="btnMemCheck" disabled="">Prüfen</button>
-        </div>
-        <div class="feedback-msg" id="memFeedback"></div>
+    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Robo-Memory</div><div class="conn-dot" id="memConnDot"></div></div>
+    <div class="game-body"><div class="arena">
+      <div class="game-title">Robo-Memory</div>
+      <div class="game-desc">Merke dir die Pfeil-Folge und gib sie wieder!</div>
+      <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;">Level <span id="memLevel">1</span></div>
+      <div style="display:flex;justify-content:center;align-items:center;min-height:80px;margin:20px 0;">
+        <span class="mem-arrow" id="memArrow0">&larr;</span>
+        <span class="mem-arrow" id="memArrow1">&uarr;</span>
+        <span class="mem-arrow" id="memArrow2">&rarr;</span>
+        <span class="mem-arrow" id="memArrow3">&darr;</span>
       </div>
-    </div>
+      <div style="display:flex;gap:8px;justify-content:center;">
+        <button class="btn btn-primary btn-lg" id="btnMemStart">Start</button>
+        <button class="btn btn-grey btn-lg" id="btnMemCheck" disabled>Pruefen</button>
+      </div>
+      <div class="feedback-msg" id="memFeedback"></div>
+    </div></div>
   </div>
 
   <!-- FARB-FOLGE -->
   <div id="view-colorseq" class="view game-view">
-    <div class="game-header"><button class="back-btn" data-view="dashboard">←</button><div class="gv-title">Farb-Folge</div><div class="conn-dot" id="csConnDot"></div></div>
-    <div class="game-body">
-      <div class="arena">
-        <div class="game-title">🎲 Farb-Folge</div>
-        <div class="game-desc">Fahre die geforderten Farben der Reihe nach ab!</div>
-        <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:20px 0;" id="csStrip"></div>
-        <button class="btn btn-primary btn-lg" id="btnCsStart">Neue Folge</button>
-        <div class="feedback-msg" id="csFeedback"></div>
-      </div>
-    </div>
+    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Farb-Folge</div><div class="conn-dot" id="csConnDot"></div></div>
+    <div class="game-body"><div class="arena">
+      <div class="game-title">Farb-Folge</div>
+      <div class="game-desc">Fahre die geforderten Farben der Reihe nach ab!</div>
+      <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:20px 0;" id="csStrip"></div>
+      <button class="btn btn-primary btn-lg" id="btnCsStart">Neue Folge</button>
+      <div class="feedback-msg" id="csFeedback"></div>
+    </div></div>
   </div>
 
   <script>
@@ -431,13 +231,14 @@
     // BLUETOOTH CORE
     // ==========================================
     const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
-    const CMD_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
-    const STATUS_UUID = 'a9b1c2d3-1111-2222-3333-abcdefabcdef';
+    const CMD_UUID     = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+    const STATUS_UUID  = 'a9b1c2d3-1111-2222-3333-abcdefabcdef';
 
     let device = null, cmdChar = null, statusChar = null;
     let connected = false, writing = false, queuedCommand = null;
     let keys = { w: 0, a: 0, s: 0, d: 0 };
     let heartbeatInterval = null, lastSent = '';
+    let reconnecting = false;
 
     function updateConnectionUI(isConn, text) {
       connected = isConn;
@@ -445,6 +246,11 @@
       document.getElementById('statusDot').classList.toggle('connected', isConn);
       document.getElementById('btnConnect').style.display = isConn ? 'none' : 'inline-flex';
       document.querySelectorAll('.conn-dot').forEach(d => d.classList.toggle('connected', isConn));
+    }
+
+    function resetKeys() {
+      keys = { w: 0, a: 0, s: 0, d: 0 };
+      document.querySelectorAll('.key-btn').forEach(b => b.classList.remove('active'));
     }
 
     function handleStatusMessage(msg) {
@@ -455,11 +261,7 @@
           if (el) el.style.background = 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
           const nm = document.getElementById('driveColorName');
           if (nm) nm.textContent = d[3];
-          const cs = document.getElementById('csCurrent');
-          if (cs) cs.textContent = d[3];
         }
-      } else if (msg.startsWith('MESH_MSG:') || msg.startsWith('PEER:') || msg.startsWith('MESHPEERS')) {
-        handleMultiplayerMessage(msg);
       } else if (msg.startsWith('RACE:')) {
         handleRaceMessage(msg);
       } else if (msg.startsWith('QUIZ:')) {
@@ -467,19 +269,9 @@
       }
     }
 
-    async function connectBLE() {
-      try {
-        if (!navigator.bluetooth) { alert('Browser unterstuetzt kein Web Bluetooth!'); return; }
-        updateConnectionUI(false, 'Suche...');
-        device = await navigator.bluetooth.requestDevice({
-          filters: [{ services: [SERVICE_UUID] }],
-          optionalServices: [SERVICE_UUID]
-        });
-        device.addEventListener('gattserverdisconnected', () => { 
-          updateConnectionUI(false, 'Getrennt'); 
-          connected = false;
-          stopSending();
-        });
+    // Verbindung mit dem GATT Server aufbauen
+    async function connectGatt() {
+      if (!device || !device.gatt.connected) {
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService(SERVICE_UUID);
         cmdChar = await service.getCharacteristic(CMD_UUID);
@@ -488,23 +280,77 @@
         statusChar.addEventListener('characteristicvaluechanged', e => {
           handleStatusMessage(new TextDecoder().decode(e.target.value));
         });
-        connected = true;
-        updateConnectionUI(true, 'Verbunden');
-        startSending();
+      }
+      connected = true;
+      updateConnectionUI(true, 'Verbunden');
+      startSending();
+      sendCommand('EduBot V1.3 bereit');
+    }
+
+    async function connectBLE() {
+      try {
+        if (!navigator.bluetooth) {
+          alert('Browser unterstuetzt kein Web Bluetooth!');
+          return;
+        }
+        updateConnectionUI(false, 'Suche...');
+
+        // Bereits verbundenes Geraet? Direkt verbinden
+        if (device && device.gatt.connected) {
+          await connectGatt();
+          return;
+        }
+
+        // Geraet per Filter suchen
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [SERVICE_UUID] }],
+          optionalServices: [SERVICE_UUID]
+        });
+
+        device.addEventListener('gattserverdisconnected', onDisconnected);
+
+        updateConnectionUI(false, 'Verbinde...');
+        await connectGatt();
       } catch (e) {
-        console.error(e);
+        console.error('[BLE]', e);
         updateConnectionUI(false, 'Getrennt');
       }
+    }
+
+    // Bei Trennung: automatisch neu verbinden
+    async function onDisconnected() {
+      connected = false;
+      resetKeys();
+      stopSending();
+      updateConnectionUI(false, 'Getrennt');
+
+      if (!device) return;
+      // Max 5 mal versuchen
+      for (let i = 0; i < 5; i++) {
+        reconnecting = true;
+        updateConnectionUI(false, 'Reconnect ' + (i + 1) + '...');
+        await new Promise(r => setTimeout(r, 1000));
+        try {
+          await connectGatt();
+          reconnecting = false;
+          return;
+        } catch (e) {
+          console.warn('[BLE] Reconnect fehlgeschlagen:', e);
+        }
+      }
+      reconnecting = false;
+      updateConnectionUI(false, 'Getrennt');
     }
 
     async function sendCommand(cmd) {
       if (!connected || !cmdChar) return;
       if (writing) { queuedCommand = cmd; return; }
       writing = true;
-      try { 
-        const encoder = new TextEncoder();
-        await cmdChar.writeValueWithoutResponse(encoder.encode(cmd)); 
-      } catch (e) { connected = false; }
+      try {
+        await cmdChar.writeValueWithoutResponse(new TextEncoder().encode(cmd));
+      } catch (e) {
+        console.warn('[BLE] send error', e);
+      }
       writing = false;
       if (queuedCommand) { const n = queuedCommand; queuedCommand = null; sendCommand(n); }
     }
@@ -514,15 +360,21 @@
       const msg = 'KEYS:' + keys.w + keys.a + keys.s + keys.d;
       if (!force && msg === lastSent) return;
       lastSent = msg;
-      try { 
-        const encoder = new TextEncoder();
-        await cmdChar.writeValueWithoutResponse(encoder.encode(msg)); 
-      } catch (e) { connected = false; }
+      try {
+        await cmdChar.writeValueWithoutResponse(new TextEncoder().encode(msg));
+      } catch (e) {
+        console.warn('[BLE] sendKeys error', e);
+      }
     }
 
-    function startSending() { stopSending(); heartbeatInterval = setInterval(() => sendKeys(true), 50); }
-    function stopSending() { if (heartbeatInterval) clearInterval(heartbeatInterval); heartbeatInterval = null; }
-    function emergencyStop() { keys = { w:0,a:0,s:0,d:0 }; sendKeys(true); }
+    function startSending() {
+      stopSending();
+      heartbeatInterval = setInterval(() => sendKeys(true), 50);
+    }
+    function stopSending() {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
 
     // ==========================================
     // NAVIGATION
@@ -534,7 +386,6 @@
       if (viewId === 'memory') initMemoryGame();
       if (viewId === 'colorseq') initColorseqGame();
     }
-
     document.querySelectorAll('.tile[data-view]').forEach(t => t.addEventListener('click', () => nav(t.dataset.view)));
     document.querySelectorAll('[data-view]').forEach(b => {
       if (b.classList.contains('back-btn')) b.addEventListener('click', () => nav(b.dataset.view));
@@ -553,7 +404,6 @@
       btn.addEventListener('touchstart', e => { e.preventDefault(); press(); });
       btn.addEventListener('touchend', e => { e.preventDefault(); release(); });
     });
-
     window.addEventListener('keydown', e => {
       const k = e.key.toLowerCase();
       if (k in keys && connected) { keys[k] = 1; const b = document.querySelector('[data-key="'+k+'"]'); if (b) b.classList.add('active'); }
@@ -562,65 +412,18 @@
       const k = e.key.toLowerCase();
       if (k in keys) { keys[k] = 0; const b = document.querySelector('[data-key="'+k+'"]'); if (b) b.classList.remove('active'); }
     });
-
-    document.getElementById('speedSlider').addEventListener('change', e => sendCommand('MAX:' + e.target.value));
-    document.getElementById('btnStop').addEventListener('click', () => { emergencyStop(); sendCommand('STOP'); });
-    document.getElementById('btnEmergencyStop').addEventListener('click', () => { emergencyStop(); sendCommand('STOP'); });
+    document.getElementById('speedSlider').addEventListener('change', e => {
+      document.getElementById('speedDisplay').textContent = e.target.value;
+      sendCommand('MAX:' + e.target.value);
+    });
+    document.getElementById('btnStop').addEventListener('click', () => { resetKeys(); sendCommand('STOP'); });
+    document.getElementById('btnEmergencyStop').addEventListener('click', () => { resetKeys(); sendCommand('STOP'); });
     document.getElementById('btnConnect').addEventListener('click', connectBLE);
-
-    // ==========================================
-    // MULTIPLAYER / MESH
-    // ==========================================
-    function initMultiplayerGame() { sendCommand('MESHPEERS'); }
-
-    document.getElementById('btnSaveMeshName').addEventListener('click', () => {
-      const n = document.getElementById('meshRobotNameInput').value;
-      if (n) sendCommand('MESH:NAME:' + n);
-    });
-    document.getElementById('btnSendMeshMsg').addEventListener('click', () => {
-      const t = document.getElementById('meshTargetSelect').value;
-      const m = document.getElementById('meshMsgInput').value;
-      if (!m) return;
-      if (t === 'ALL') sendCommand('MESHMSG:' + m); else sendCommand('MESHSEND:' + t + ',' + m);
-      const log = document.getElementById('meshChatLog');
-      log.innerHTML += '<div style="color:#0d9488;font-weight:bold;">Gesendet: ' + m + '</div>';
-      log.scrollTop = log.scrollHeight;
-      document.getElementById('meshMsgInput').value = '';
-    });
-    document.getElementById('btnMeshPing').addEventListener('click', () => sendCommand('MESHPING'));
-    document.getElementById('btnMeshClear').addEventListener('click', () => {
-      document.getElementById('meshChatLog').innerHTML = '<div style="color:#94a3b8;text-align:center;font-style:italic;">Log geleert</div>';
-    });
-
-    document.getElementById('btnLeader').addEventListener('click', () => sendCommand('MODE:LEADER'));
-    document.getElementById('btnFollower').addEventListener('click', () => sendCommand('MODE:FOLLOWER'));
-    document.getElementById('btnModeNormal').addEventListener('click', () => sendCommand('MODE:NORMAL'));
-
-    function handleMultiplayerMessage(msg) {
-      const log = document.getElementById('meshChatLog');
-      if (msg.startsWith('MESH_MSG:')) {
-        const d = msg.substring(9).split(',');
-        log.innerHTML += '<div><b>' + d[0] + ':</b> ' + d[1] + '</div>';
-      } else if (msg.startsWith('MESHPEERS:')) {
-        document.getElementById('meshPeerList').innerHTML = '';
-      } else if (msg.startsWith('PEER:')) {
-        const p = msg.substring(5).split(',');
-        const pl = document.getElementById('meshPeerList');
-        if (pl.textContent.includes('Suche')) pl.innerHTML = '';
-        pl.innerHTML += '<div>' + p[1] + ' (' + p[0] + ') - ' + p[2] + '</div>';
-        const sel = document.getElementById('meshTargetSelect');
-        if (!sel.querySelector('option[value="'+p[0]+'"]')) {
-          sel.innerHTML += '<option value="'+p[0]+'">' + p[1] + '</option>';
-        }
-      }
-      log.scrollTop = log.scrollHeight;
-    }
 
     // ==========================================
     // MATHE-RENNEN
     // ==========================================
     let raceActive = false, raceMyScore = 0, raceOppScore = 0, raceCurrentAnswer = 0;
-
     document.getElementById('btnRaceStart').addEventListener('click', () => {
       raceActive = true; raceMyScore = 0; raceOppScore = 0;
       updateRaceUI();
@@ -630,7 +433,6 @@
       document.getElementById('raceWinnerMsg').style.display = 'none';
       nextRaceQuestion();
     });
-
     document.getElementById('btnRaceAnswer').addEventListener('click', () => {
       const ans = parseInt(document.getElementById('raceAnswer').value);
       if (isNaN(ans)) return;
@@ -638,53 +440,50 @@
         raceMyScore++;
         showFeedback('raceFeedback', 'success', 'Richtig!');
         sendCommand('RACE:PROGRESS:' + raceMyScore);
-        if (raceMyScore >= 10) { raceActive = false; document.getElementById('raceWinnerMsg').textContent = 'Du hast gewonnen!'; document.getElementById('raceWinnerMsg').style.color = '#10b981'; document.getElementById('raceWinnerMsg').style.display = 'block'; sendCommand('RACE:WIN'); resetRaceBtn(); }
-        else nextRaceQuestion();
+        if (raceMyScore >= 10) {
+          raceActive = false;
+          const w = document.getElementById('raceWinnerMsg');
+          w.textContent = 'Du hast gewonnen!'; w.style.color = '#10b981'; w.style.display = 'block';
+          sendCommand('RACE:WIN'); resetRaceBtn();
+        } else nextRaceQuestion();
       } else {
         showFeedback('raceFeedback', 'error', 'Falsch! Versuche es nochmal.');
       }
       document.getElementById('raceAnswer').value = '';
       updateRaceUI();
     });
-
     document.getElementById('raceAnswer').addEventListener('keydown', e => {
       if (e.key === 'Enter') document.getElementById('btnRaceAnswer').click();
     });
-
     function nextRaceQuestion() {
       const a = Math.floor(Math.random() * 20) + 1;
       const b = Math.floor(Math.random() * 20) + 1;
       raceCurrentAnswer = a + b;
       document.getElementById('raceQuestion').textContent = a + ' + ' + b + ' = ?';
     }
-
     function updateRaceUI() {
       document.getElementById('raceMyScore').textContent = raceMyScore + '/10';
       document.getElementById('raceOppScore').textContent = raceOppScore + '/10';
       document.getElementById('raceMyBar').style.width = (raceMyScore * 10) + '%';
       document.getElementById('raceOppBar').style.width = (raceOppScore * 10) + '%';
     }
-
     function handleRaceMessage(msg) {
       if (msg.startsWith('RACE:PROGRESS:')) {
         raceOppScore = parseInt(msg.substring(14)) || 0;
         updateRaceUI();
         if (raceOppScore >= 10) {
           raceActive = false;
-          document.getElementById('raceWinnerMsg').textContent = 'Gegner hat gewonnen!';
-          document.getElementById('raceWinnerMsg').style.color = '#ef4444';
-          document.getElementById('raceWinnerMsg').style.display = 'block';
+          const w = document.getElementById('raceWinnerMsg');
+          w.textContent = 'Gegner hat gewonnen!'; w.style.color = '#ef4444'; w.style.display = 'block';
           resetRaceBtn();
         }
       } else if (msg === 'RACE:WIN') {
         raceOppScore = 10; updateRaceUI();
-        document.getElementById('raceWinnerMsg').textContent = 'Gegner hat gewonnen!';
-        document.getElementById('raceWinnerMsg').style.color = '#ef4444';
-        document.getElementById('raceWinnerMsg').style.display = 'block';
+        const w = document.getElementById('raceWinnerMsg');
+        w.textContent = 'Gegner hat gewonnen!'; w.style.color = '#ef4444'; w.style.display = 'block';
         raceActive = false; resetRaceBtn();
       }
     }
-
     function resetRaceBtn() {
       document.getElementById('btnRaceStart').style.display = 'inline-flex';
       document.getElementById('btnRaceStart').textContent = 'Neues Rennen';
@@ -695,76 +494,59 @@
     // ==========================================
     // FARBEN-QUIZ
     // ==========================================
-    let cqActive = false, cqIndex = 0, cqAnswers = [];
-
+    let cqIndex = 0, cqAnswers = [];
     document.getElementById('btnCqStart').addEventListener('click', () => {
-      cqActive = true; cqIndex = 0; cqAnswers = [];
+      cqIndex = 0; cqAnswers = [];
       document.getElementById('btnCqStart').style.display = 'none';
       document.getElementById('cqChoices').style.display = 'grid';
       document.getElementById('btnCqNext').style.display = 'inline-flex';
       document.getElementById('cqAnswerList').innerHTML = '';
       nextCqQuestion();
     });
-
     document.querySelectorAll('.color-choice').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.color-choice').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
       });
     });
-
     document.getElementById('btnCqNext').addEventListener('click', () => {
       const sel = document.querySelector('.color-choice.selected');
-      if (!sel) { showFeedback('cqFeedback', 'error', 'Bitte eine Farbe w\u00e4hlen!'); return; }
+      if (!sel) { showFeedback('cqFeedback', 'error', 'Bitte eine Farbe waehlen!'); return; }
       const color = sel.dataset.color;
       cqAnswers.push(color);
       const list = document.getElementById('cqAnswerList');
-      list.innerHTML += '<div style="width:30px;height:30px;border-radius:6px;background:' + getColorBg(color) + ';display:flex;align-items:center;justify-content:center;font-size:11px;color:white;font-weight:bold;">' + (cqIndex) + '</div>';
+      list.innerHTML += '<div style="width:30px;height:30px;border-radius:6px;background:' + getColorBg(color) + ';display:flex;align-items:center;justify-content:center;font-size:11px;color:white;font-weight:bold;">' + (cqIndex + 1) + '</div>';
       cqIndex++;
       if (cqIndex >= 10) {
         document.getElementById('cqNumber').textContent = '10';
         document.getElementById('btnCqNext').style.display = 'none';
         document.getElementById('btnCqCheck').style.display = 'inline-flex';
-        document.getElementById('cqQuestion').textContent = 'Fertig! Lege die Pl\u00e4ttchen auf und starte die Korrektur.';
+        document.getElementById('cqQuestion').textContent = 'Fertig! Lege die Plattchen auf und starte die Korrektur.';
         document.getElementById('cqChoices').style.display = 'none';
-      } else {
-        nextCqQuestion();
-      }
+      } else nextCqQuestion();
     });
-
     document.getElementById('btnCqCheck').addEventListener('click', () => {
-      const seq = cqAnswers.join(',');
-      sendCommand('QUIZ:CHECK:' + seq);
+      sendCommand('QUIZ:CHECK:' + cqAnswers.join(','));
       showFeedback('cqFeedback', 'success', 'Roboter startet die Korrektur!');
       document.getElementById('btnCqCheck').style.display = 'none';
     });
-
     function nextCqQuestion() {
       const a = Math.floor(Math.random() * 10) + 1;
       const b = Math.floor(Math.random() * 10) + 1;
-      const res = a + b;
       document.getElementById('cqNumber').textContent = (cqIndex + 1);
       document.getElementById('cqQuestion').textContent = a + ' + ' + b + ' = ?';
       document.querySelectorAll('.color-choice').forEach(b => b.classList.remove('selected'));
     }
-
     function getColorBg(c) {
-      const map = { 'ROT':'#ef4444', 'GRUEN':'#10b981', 'BLAU':'#3b82f6', 'GELB':'#f59e0b' };
-      return map[c] || '#ccc';
+      return { 'ROT':'#ef4444', 'GRUEN':'#10b981', 'BLAU':'#3b82f6', 'GELB':'#f59e0b' }[c] || '#ccc';
     }
-
     function handleQuizMessage(msg) {
       if (msg.startsWith('QUIZ:RESULT:')) {
         const d = msg.substring(12).split(',');
-        const status = d[0];
-        if (status === 'OK') {
-          showFeedback('cqFeedback', 'success', 'Alles richtig! (' + d[1] + '/' + d[2] + ')');
-        } else if (status === 'WRONG') {
-          showFeedback('cqFeedback', 'error', 'Fehler bei ' + d[1] + ' (gefunden: ' + d[2] + ') - ' + d[3] + '/' + d[4]);
-        }
+        if (d[0] === 'OK') showFeedback('cqFeedback', 'success', 'Alles richtig! (' + d[1] + '/' + d[2] + ')');
+        else if (d[0] === 'WRONG') showFeedback('cqFeedback', 'error', 'Fehler bei ' + d[1] + ' (gefunden: ' + d[2] + ') - ' + d[3] + '/' + d[4]);
         document.getElementById('btnCqStart').style.display = 'inline-flex';
         document.getElementById('btnCqStart').textContent = 'Nochmal';
-        cqActive = false;
       }
     }
 
@@ -772,38 +554,22 @@
     // ROBO-MEMORY
     // ==========================================
     let memLevel = 1, memSequence = [], memUserInput = [];
-    const memArrows = ['&#x2B05;', '&#x2B06;', '&#x27A1;', '&#x2B07;'];
-
-    function initMemoryGame() {
-      document.getElementById('memLevel').textContent = memLevel;
-    }
-
-    function genMemSequence(len) {
-      const s = [];
-      for (let i = 0; i < len; i++) s.push(Math.floor(Math.random() * 4));
-      return s;
-    }
-
+    function initMemoryGame() { document.getElementById('memLevel').textContent = memLevel; }
+    function genMemSequence(len) { const s = []; for (let i = 0; i < len; i++) s.push(Math.floor(Math.random() * 4)); return s; }
     function flashMemSequence(seq) {
       let i = 0;
-      const interval = setInterval(() => {
-        if (i >= seq.length) { clearInterval(interval); enableMemInput(); return; }
+      const iv = setInterval(() => {
+        if (i >= seq.length) { clearInterval(iv); enableMemInput(); return; }
         const arrow = document.getElementById('memArrow' + seq[i]);
         if (arrow) { arrow.classList.add('flash'); setTimeout(() => arrow.classList.remove('flash'), 400); }
         i++;
       }, 600);
     }
-
     function enableMemInput() { document.getElementById('btnMemCheck').disabled = false; }
     function disableMemInput() { document.getElementById('btnMemCheck').disabled = true; }
-
     document.getElementById('btnMemStart').addEventListener('click', () => {
-      memSequence = genMemSequence(memLevel + 2);
-      memUserInput = [];
-      disableMemInput();
-      flashMemSequence(memSequence);
+      memSequence = genMemSequence(memLevel + 2); memUserInput = []; disableMemInput(); flashMemSequence(memSequence);
     });
-
     document.querySelectorAll('.mem-arrow').forEach((arrow, idx) => {
       arrow.addEventListener('click', () => {
         if (document.getElementById('btnMemCheck').disabled) return;
@@ -811,11 +577,10 @@
         memUserInput.push(idx);
       });
     });
-
     document.getElementById('btnMemCheck').addEventListener('click', () => {
       const correct = memSequence.length === memUserInput.length && memSequence.every((v, i) => v === memUserInput[i]);
       if (correct) { showFeedback('memFeedback', 'success', 'Richtig!'); memLevel++; document.getElementById('memLevel').textContent = memLevel; }
-      else { showFeedback('memFeedback', 'error', 'Falsch! Nochmal.'); }
+      else showFeedback('memFeedback', 'error', 'Falsch! Nochmal.');
       disableMemInput();
     });
 
@@ -824,16 +589,13 @@
     // ==========================================
     let csSequence = [], csIndex = 0;
     const csColors = ['ROT', 'GRUEN', 'BLAU', 'GELB'];
-
     function initColorseqGame() {
       const strip = document.getElementById('csStrip');
       if (strip.children.length === 0) {
-        for (let i = 1; i <= 5; i++) {
+        for (let i = 1; i <= 5; i++)
           strip.innerHTML += '<div class="colorseq-item" data-idx="'+i+'" style="padding:8px 16px;border-radius:9999px;border:2px solid #ddd;font-weight:bold;">Farbe '+i+': ?</div>';
-        }
       }
     }
-
     document.getElementById('btnCsStart').addEventListener('click', () => {
       csSequence = []; csIndex = 0;
       for (let i = 0; i < 5; i++) csSequence.push(csColors[Math.floor(Math.random() * 4)]);
@@ -841,8 +603,7 @@
       Array.from(strip.children).forEach((el, i) => {
         el.textContent = 'Farbe ' + (i+1) + ': ' + csSequence[i];
         el.style.background = getColorBg(csSequence[i]);
-        el.style.color = 'white';
-        el.style.borderColor = 'transparent';
+        el.style.color = 'white'; el.style.borderColor = 'transparent';
       });
     });
 
@@ -854,7 +615,7 @@
       if (!el) return;
       el.className = 'feedback-msg show feedback-' + type;
       el.textContent = text;
-      setTimeout(() => { el.classList.remove('show'); }, 3000);
+      setTimeout(() => el.classList.remove('show'), 3000);
     }
   </script>
 </body></html>

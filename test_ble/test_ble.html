@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLE Verbindungstest</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; color: #1e293b; padding: 20px; max-width: 600px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #64748b; font-size: 14px; margin-bottom: 20px; }
+  .status-box { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #e2e8f0; }
+  .status-row { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: #ef4444; transition: 0.3s; }
+  .dot.on { background: #10b981; box-shadow: 0 0 10px rgba(16,185,129,0.6); }
+  button { padding: 12px 24px; border-radius: 8px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; color: #fff; background: #4f46e5; transition: 0.15s; }
+  button:hover { background: #4338ca; }
+  button:active { transform: scale(0.97); }
+  button:disabled { background: #94a3b8; cursor: not-allowed; }
+  button.danger { background: #ef4444; }
+  button.danger:hover { background: #dc2626; }
+  .log-area { background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 10px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; height: 340px; overflow-y: auto; margin-top: 12px; }
+  .log-line { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .log-recv { color: #34d399; }
+  .log-send { color: #60a5fa; }
+  .log-info { color: #94a3b8; }
+  .log-err  { color: #f87171; }
+  .stat { display: flex; gap: 20px; margin-top: 10px; font-size: 13px; color: #64748b; }
+  .stat span { font-weight: 700; color: #1e293b; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+  <h1>BLE Verbindungstest</h1>
+  <div class="sub">Minimal-Test fuer ESP32 <-> Chrome. Nur Verbinden, Trennen, Echo.</div>
+
+  <div class="status-box">
+    <div class="status-row">
+      <div class="dot" id="dot"></div>
+      <div id="statusText">Getrennt</div>
+    </div>
+    <div class="stat">
+      <div>Empfangen: <span id="recvCount">0</span></div>
+      <div>Gesendet: <span id="sendCount">0</span></div>
+      <div>Uptime: <span id="uptime">--</span>s</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="btnConnect" onclick="connect()">Verbinden</button>
+    <button id="btnDisconnect" class="danger" onclick="disconnect()" disabled>Trennen</button>
+    <button id="btnSend" onclick="sendPing()" disabled>PING senden</button>
+    <button id="btnClear" onclick="clearLog()">Log loeschen</button>
+  </div>
+
+  <div class="log-area" id="log"></div>
+
+<script>
+const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+const CMD_UUID     = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+const STATUS_UUID  = 'a9b1c2d3-1111-2222-3333-abcdefabcdef';
+
+let device = null, cmdChar = null, statusChar = null;
+let connected = false, recvCount = 0, sendCount = 0, connectTime = 0;
+
+const logEl = document.getElementById('log');
+const dot = document.getElementById('dot');
+const statusText = document.getElementById('statusText');
+const recvEl = document.getElementById('recvCount');
+const sendEl = document.getElementById('sendCount');
+const upEl  = document.getElementById('uptime');
+const btnConnect = document.getElementById('btnConnect');
+const btnDisconnect = document.getElementById('btnDisconnect');
+const btnSend = document.getElementById('btnSend');
+
+function log(msg, cls) {
+  cls = cls || 'info';
+  const time = new Date().toLocaleTimeString('de-DE', {hour12:false}) + '.' + String(Date.now()%1000).padStart(3,'0');
+  const line = document.createElement('div');
+  line.className = 'log-line log-' + cls;
+  line.textContent = '[' + time + '] ' + msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+  while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
+}
+function clearLog() { logEl.innerHTML = ''; log('Log geloescht'); }
+
+function setUI(isConn, text) {
+  connected = isConn;
+  dot.classList.toggle('on', isConn);
+  statusText.textContent = text;
+  btnConnect.disabled = isConn;
+  btnDisconnect.disabled = !isConn;
+  btnSend.disabled = !isConn;
+}
+
+function handleMsg(msg) {
+  recvCount++; recvEl.textContent = recvCount;
+  log('<= RECV: "' + msg + '"', 'recv');
+  if (msg.startsWith('PING:')) {
+    upEl.textContent = msg.substring(5);
+  }
+}
+
+async function connect() {
+  try {
+    if (!navigator.bluetooth) { alert('Kein Web Bluetooth! Chrome/Edge nutzen.'); return; }
+    log('Suche Geraet mit Service ' + SERVICE_UUID + '...');
+    setUI(false, 'Suche...');
+
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SERVICE_UUID] }],
+      optionalServices: [SERVICE_UUID]
+    });
+    log('Geraet ausgewaehlt: ' + (device.name || device.id));
+
+    device.addEventListener('gattserverdisconnected', onDisconnect);
+
+    log('Verbinde GATT...');
+    const server = await device.gatt.connect();
+    log('GATT verbunden. Suche Service...');
+
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    log('Service gefunden. Lade Characteristics...');
+
+    cmdChar = await service.getCharacteristic(CMD_UUID);
+    statusChar = await service.getCharacteristic(STATUS_UUID);
+    log('Characteristics geladen.');
+
+    await statusChar.startNotifications();
+    statusChar.addEventListener('characteristicvaluechanged', function(e) {
+      const msg = new TextDecoder().decode(e.target.value);
+      handleMsg(msg);
+    });
+    log('Notifications aktiviert.', 'info');
+
+    connectTime = Date.now();
+    setUI(true, 'Verbunden');
+    log('=== VERBUNDEN ===', 'info');
+    recvCount = 0; sendCount = 0; recvEl.textContent = 0; sendEl.textContent = 0;
+  } catch (e) {
+    log('FEHLER: ' + (e.message || e), 'err');
+    setUI(false, 'Getrennt');
+  }
+}
+
+function onDisconnect() {
+  log('=== GETRENNT (gattserverdisconnected Event) ===', 'err');
+  setUI(false, 'Getrennt');
+  cmdChar = null; statusChar = null;
+}
+
+function disconnect() {
+  if (device && device.gatt.connected) {
+    log('Trenne manuell...');
+    device.gatt.disconnect();
+  }
+}
+
+async function sendPing() {
+  if (!connected || !cmdChar) return;
+  try {
+    const msg = 'PING';
+    await cmdChar.writeValueWithoutResponse(new TextEncoder().encode(msg));
+    sendCount++; sendEl.textContent = sendCount;
+    log('=> SEND: "' + msg + '"', 'send');
+  } catch (e) {
+    log('Senden fehlgeschlagen: ' + (e.message || e), 'err');
+  }
+}
+
+log('Bereit. "Verbinden" klicken um zu starten.', 'info');
+</script>
+</body>
+</html>
