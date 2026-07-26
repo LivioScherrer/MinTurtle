@@ -51,6 +51,8 @@ void driveUpdate() {
   const bool moving   = (forward || backward);
   const bool steering = (left || right) && moving;
   const float driveAccel = steering ? 20000.0f : config.accelRate;
+  stepperL.setMaxSpeed(config.maxSpeed);
+  stepperR.setMaxSpeed(config.maxSpeed);
   stepperL.setAcceleration(driveAccel);
   stepperR.setAcceleration(driveAccel);
 

@@ -11,6 +11,8 @@ void configLoad() {
   config.turnFactor    = prefs.getFloat("turnFactor", TURN_DEFAULT);
   config.turnOnlySpeed = prefs.getFloat("turnOnlySpeed", 320.0f);
   config.accelRate     = prefs.getFloat("accelRate", ACCEL_DEFAULT);
+  config.quizForwardSteps = prefs.getInt("quizSteps", 42);
+  config.quizTurnSteps    = prefs.getInt("quizTurnSteps", 88);
   config.blackR        = prefs.getUShort("blackR", 152);
   config.blackG        = prefs.getUShort("blackG", 137);
   config.blackB        = prefs.getUShort("blackB", 98);
@@ -40,6 +42,12 @@ void configValidate() {
   if (config.turnFactor == 0.25f) {
     config.turnFactor = TURN_DEFAULT; changed = true;
   }
+  if (config.quizForwardSteps < 1 || config.quizForwardSteps > 2000) {
+    config.quizForwardSteps = 42; changed = true;
+  }
+  if (config.quizTurnSteps < 1 || config.quizTurnSteps > 5000) {
+    config.quizTurnSteps = 88; changed = true;
+  }
   if (config.accelRate < ACCEL_MIN || config.accelRate > ACCEL_MAX) {
     config.accelRate = ACCEL_DEFAULT; changed = true;
   }
@@ -67,6 +75,12 @@ void configValidate() {
 void configSaveField(const char* key, float value) {
   prefs.begin("edubot", false);
   prefs.putFloat(key, value);
+  prefs.end();
+}
+
+void configSaveInt(const char* key, int32_t value) {
+  prefs.begin("edubot", false);
+  prefs.putInt(key, value);
   prefs.end();
 }
 

@@ -35,7 +35,9 @@ const char* detectColorName(int r, int g, int b) {
   }
   int maxC = r > g ? (r > b ? r : b) : (g > b ? g : b);
   if (maxC < 50) return "UNBEKANNT";
-  if (r > 100 && g > 100 && b < 80 && r > b * 1.4f && g > b * 1.4f) return "GELB";
+  // Gelb: R und G beide deutlich hoeher als B, R und G aehnlich hoch.
+  // Schwellen bewusst locker, damit auch dunklere / blaustichige Gelbtoene erkannt werden.
+  if (r > 70 && g > 70 && b < 100 && r > b * 1.3f && g > b * 1.3f && abs(r - g) < 110) return "GELB";
   if (r > g * RATIO_RED && r > b * RATIO_RED) return "ROT";
   if (g > r * RATIO_GB && g > b * RATIO_GB) return "GRUEN";
   if (b > r * RATIO_GB && b > g * RATIO_GB) return "BLAU";

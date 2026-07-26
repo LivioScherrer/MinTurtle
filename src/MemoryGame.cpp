@@ -26,8 +26,8 @@ void memoryExecuteMove(uint8_t move) {
   switch (move) {
     case MEM_FWD:   gameDriveForward(GAME_MOVE_MS); break;
     case MEM_BACK:  gameDriveBackward(GAME_MOVE_MS); break;
-    case MEM_LEFT:  gameTurnLeft(GAME_TURN_MS); break;
-    case MEM_RIGHT: gameTurnRight(GAME_TURN_MS); break;
+    case MEM_LEFT:  gameTurnLeftSteps(config.quizTurnSteps); break;
+    case MEM_RIGHT: gameTurnRightSteps(config.quizTurnSteps); break;
   }
 }
 

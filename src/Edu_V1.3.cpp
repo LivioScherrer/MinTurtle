@@ -44,8 +44,8 @@ bool driveLockedByGame() { return currentGame != GAME_NONE; }
 const float     GAME_DRIVE_GAIN   = 1.0f;
 constexpr uint32_t GAME_TICK_MS    = 5;    // Polling-Intervall fuer motorRun() waehrend blockierender Moves
 const uint32_t GAME_MOVE_MS       = 360;  // Vor/Zurueck-Fahrt in ALLEN Spielen
-const uint32_t GAME_TURN_MS       = 320;  // 90-Grad-Drehung in ALLEN Spielen
 const uint32_t GAME_COLOR_READ_MS = 250;  // Pause waehrend Farbsensor liest
+constexpr uint8_t QUIZ_MAX_COLOR_USE = 4;  // jede Farbe max. so oft im Quiz verwendbar
 
 bool gameMoveBusy = false;
 
@@ -99,42 +99,6 @@ void gameDriveBackward(uint32_t ms) {
   gameMoveBusy = false;
 }
 
-void gameTurnLeft(uint32_t ms) {
-  gameMoveBusy = true;
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  setMotorSpeed(0, -config.turnOnlySpeed);
-  setMotorSpeed(1,  config.turnOnlySpeed);
-  uint32_t start = millis();
-  while (millis() - start < ms) {
-    motorRun();
-    if (currentGame == GAME_NONE) { stopMotors(); gameMoveBusy = false; return; }
-    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
-  }
-  setMotorSpeed(0, 0);
-  setMotorSpeed(1, 0);
-  waitForStop(start);
-  gameMoveBusy = false;
-}
-
-void gameTurnRight(uint32_t ms) {
-  gameMoveBusy = true;
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  setMotorSpeed(0,  config.turnOnlySpeed);
-  setMotorSpeed(1, -config.turnOnlySpeed);
-  uint32_t start = millis();
-  while (millis() - start < ms) {
-    motorRun();
-    if (currentGame == GAME_NONE) { stopMotors(); gameMoveBusy = false; return; }
-    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
-  }
-  setMotorSpeed(0, 0);
-  setMotorSpeed(1, 0);
-  waitForStop(start);
-  gameMoveBusy = false;
-}
-
 void gameStop(uint32_t ms) {
   gameMoveBusy = true;
   setMotorSpeed(0, 0);
@@ -145,6 +109,108 @@ void gameStop(uint32_t ms) {
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
   gameMoveBusy = false;
+}
+
+// Positionsbasiert: exakte Strecke fahren (z.B. 3cm pro Farbe im Quiz).
+// Beruecksichtigt config.leftSign/rightSign fuer die Verkabelung.
+void gameDriveForwardSteps(int32_t steps) {
+  gameMoveBusy = true;
+  // Maximalgeschwindigkeit fuer diesen Move (benutzerkonfigurierbar)
+  stepperL.setMaxSpeed(config.maxSpeed);
+  stepperR.setMaxSpeed(config.maxSpeed);
+  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
+  // Relative Position: Roboter bewegt sich um 'steps' vorwaerts.
+  // Durch config.leftSign/rightSign wird die Richtung korrigiert.
+  stepperL.move(steps * static_cast<int32_t>(config.leftSign));
+  stepperR.move(steps * static_cast<int32_t>(config.rightSign));
+  while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+    if (currentGame == GAME_NONE) {
+      stepperL.stop();
+      stepperR.stop();
+      gameMoveBusy = false;
+      return;
+    }
+    stepperL.run();
+    stepperR.run();
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
+  }
+  gameMoveBusy = false;
+}
+
+// Test-Helper: fahre n Schritte ohne currentGame-Abhaengigkeit, mit Timeout.
+// Wird vom STEPS:-Befehl genutzt, um den richtigen Wert fuer 3cm zu finden.
+void testDriveSteps(int32_t steps) {
+  stepperL.setMaxSpeed(config.maxSpeed);
+  stepperR.setMaxSpeed(config.maxSpeed);
+  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperL.move(steps * static_cast<int32_t>(config.leftSign));
+  stepperR.move(steps * static_cast<int32_t>(config.rightSign));
+  uint32_t start = millis();
+  while ((stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) && millis() - start < 5000) {
+    stepperL.run();
+    stepperR.run();
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
+  }
+  if (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+    stepperL.stop();
+    stepperR.stop();
+  }
+}
+
+// Positionsbasierte Drehung: jeder Motor 'steps' in entgegengesetzte Richtung.
+void gameTurnLeftSteps(int32_t steps) {
+  gameMoveBusy = true;
+  stepperL.setMaxSpeed(config.turnOnlySpeed);
+  stepperR.setMaxSpeed(config.turnOnlySpeed);
+  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperL.move(-steps * static_cast<int32_t>(config.leftSign));
+  stepperR.move( steps * static_cast<int32_t>(config.rightSign));
+  while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+    if (currentGame == GAME_NONE) {
+      stepperL.stop(); stepperR.stop(); gameMoveBusy = false; return;
+    }
+    stepperL.run(); stepperR.run();
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
+  }
+  gameMoveBusy = false;
+}
+void gameTurnRightSteps(int32_t steps) {
+  gameMoveBusy = true;
+  stepperL.setMaxSpeed(config.turnOnlySpeed);
+  stepperR.setMaxSpeed(config.turnOnlySpeed);
+  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperL.move( steps * static_cast<int32_t>(config.leftSign));
+  stepperR.move(-steps * static_cast<int32_t>(config.rightSign));
+  while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+    if (currentGame == GAME_NONE) {
+      stepperL.stop(); stepperR.stop(); gameMoveBusy = false; return;
+    }
+    stepperL.run(); stepperR.run();
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
+  }
+  gameMoveBusy = false;
+}
+
+// Test-Helper: drehe auf der Stelle (rechts) um 'steps' Schritte pro Rad.
+void testTurnSteps(int32_t steps) {
+  stepperL.setMaxSpeed(config.turnOnlySpeed);
+  stepperR.setMaxSpeed(config.turnOnlySpeed);
+  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperL.move( steps * static_cast<int32_t>(config.leftSign));
+  stepperR.move(-steps * static_cast<int32_t>(config.rightSign));
+  uint32_t start = millis();
+  while ((stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) && millis() - start < 5000) {
+    stepperL.run(); stepperR.run();
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
+  }
+  if (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+    stepperL.stop(); stepperR.stop();
+  }
 }
 
 // =====================================================
@@ -162,9 +228,9 @@ void knobelnExecute() {
     if (currentGame != GAME_KNOBELN) { sendStatus("KNOBELN:ABORT"); return; }
     switch (knobelnSeq[i]) {
       case 0: gameDriveForward(GAME_MOVE_MS); break;
-      case 1: gameTurnRight(GAME_TURN_MS); break;
+      case 1: gameTurnRightSteps(config.quizTurnSteps); break;
       case 2: gameDriveBackward(GAME_MOVE_MS); break;
-      case 3: gameTurnLeft(GAME_TURN_MS); break;
+      case 3: gameTurnLeftSteps(config.quizTurnSteps); break;
     }
     vTaskDelay(pdMS_TO_TICKS(80));
   }
@@ -189,7 +255,7 @@ void korrigierenExecute() {
   uint8_t okCount = 0;
   for (uint8_t i = 0; i < korrigierenLen; i++) {
     if (currentGame != GAME_KORRIGIEREN) { sendStatus("QUIZ:RESULT:ABORT"); return; }
-    gameDriveForward(GAME_MOVE_MS);
+    gameDriveForwardSteps(config.quizForwardSteps);
     gameStop(GAME_COLOR_READ_MS);
     char found[16] = "UNBEKANNT";
     getCurrentColorName(found, sizeof(found));
@@ -349,6 +415,48 @@ void handleCommand(const char* cmdStr) {
     return;
   }
 
+  if (cmd == "STEPS?") {
+    snprintf(buf, sizeof(buf), "STEPS=%ld", (long)config.quizForwardSteps);
+    sendStatus(buf);
+    return;
+  }
+  if (cmd.startsWith("STEPS:")) {
+    int32_t n = (int32_t)cmd.substring(6).toInt();
+    if (n < 1 || n > 2000) {
+      sendStatus("STEPS:BAD");
+      return;
+    }
+    config.quizForwardSteps = n;
+    configSaveInt("quizSteps", n);
+    // Sofort testen
+    testDriveSteps(n);
+    snprintf(buf, sizeof(buf), "STEPS=%ld", (long)n);
+    sendStatus(buf);
+    Serial.printf("[STEPS] Test %ld Schritte gefahren (fuer 3cm-Quiz gespeichert)\n", (long)n);
+    return;
+  }
+
+  if (cmd == "ANG?") {
+    snprintf(buf, sizeof(buf), "ANG=%ld", (long)config.quizTurnSteps);
+    sendStatus(buf);
+    return;
+  }
+  if (cmd.startsWith("ANG:")) {
+    int32_t n = (int32_t)cmd.substring(4).toInt();
+    if (n < 1 || n > 5000) {
+      sendStatus("ANG:BAD");
+      return;
+    }
+    config.quizTurnSteps = n;
+    configSaveInt("quizTurnSteps", n);
+    // Sofort testen (Drehung rechts auf der Stelle)
+    testTurnSteps(n);
+    snprintf(buf, sizeof(buf), "ANG=%ld", (long)n);
+    sendStatus(buf);
+    Serial.printf("[ANG] Test %ld Schritte/Rad gedreht (fuer 90-Grad-Spiel gespeichert)\n", (long)n);
+    return;
+  }
+
   if (cmd == "CAL:BLACK") {
     config.blackR = rawSensorR; config.blackG = rawSensorG; config.blackB = rawSensorB;
     configSaveUShort("blackR", config.blackR);
@@ -415,6 +523,20 @@ void handleCommand(const char* cmdStr) {
         korrigierenLen++;
         if (comma < 0) break;
         start = comma + 1;
+      }
+      // Jede Farbe max. QUIZ_MAX_COLOR_USE mal
+      for (uint8_t i = 0; i < korrigierenLen; i++) {
+        uint8_t count = 0;
+        for (uint8_t j = 0; j < korrigierenLen; j++) {
+          if (strcasecmp(korrigierenExpected[i], korrigierenExpected[j]) == 0) count++;
+        }
+        if (count > QUIZ_MAX_COLOR_USE) {
+          char err[48];
+          snprintf(err, sizeof(err), "QUIZ:TOO_MANY:%s,%u", korrigierenExpected[i], count);
+          sendStatus(err);
+          korrigierenLen = 0;
+          return;
+        }
       }
       korrigierenExecute();
     } else if (sub == "STOP") {

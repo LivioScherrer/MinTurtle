@@ -494,6 +494,67 @@
     }
 
     /* =========================================================
+       QUIZ-RESULT MODAL (eigener Screen nach Abschluss)
+       ========================================================= */
+    .result-modal{
+      position:fixed;inset:0;z-index:300;
+      background:rgba(31,26,20,.55);
+      display:none;align-items:center;justify-content:center;
+      padding:20px;
+      animation:helpFadeIn .25s var(--ease-snap);
+    }
+    .result-modal.open{display:flex}
+    .result-card{
+      background:#fffdf4;
+      border:var(--ink-line) solid var(--ink);
+      border-radius:22px 26px 22px 26px;
+      box-shadow:var(--shadow-sketch-lg);
+      max-width:480px;width:100%;
+      padding:28px 26px 24px 26px;
+      transform:rotate(-.4deg);
+      animation:resultPopIn .4s var(--ease-bounce);
+      text-align:center;
+    }
+    @keyframes resultPopIn{
+      from{transform:scale(.7) rotate(-6deg);opacity:0}
+      to{transform:scale(1) rotate(-.4deg);opacity:1}
+    }
+    .result-emoji{
+      font-size:64px;line-height:1;margin-bottom:8px;
+      filter:drop-shadow(2px 2px 0 var(--ink));
+    }
+    .result-title{
+      font-family:'Caveat','Marker Felt',cursive;
+      font-size:38px;font-weight:700;color:var(--ink);
+      line-height:1;margin-bottom:14px;
+    }
+    .result-title.ok{color:var(--good,#1ea36b)}
+    .result-title.bad{color:var(--bad,#c93838)}
+    .result-score{
+      font-family:'Caveat',cursive;
+      font-size:72px;font-weight:700;color:var(--ink);
+      line-height:1;margin:6px 0 4px 0;
+    }
+    .result-score .total{color:var(--ink-mute);font-size:42px}
+    .result-list{
+      margin:14px auto 18px auto;max-width:360px;
+      text-align:left;
+      background:#fff8e1;border:2px dashed var(--ink-soft);
+      border-radius:12px;padding:10px 14px;
+      font-size:14px;color:var(--ink);
+    }
+    .result-list-item{
+      padding:4px 0;display:flex;justify-content:space-between;gap:10px;
+    }
+    .result-list-item .idx{font-weight:700;color:var(--ink-mute);min-width:80px}
+    .result-list-item .exp{color:var(--ink);font-weight:600}
+    .result-list-item .found{color:var(--bad,#c93838);font-weight:600}
+    .result-list-item.ok .found{color:var(--good,#1ea36b)}
+    .result-buttons{
+      display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:10px;
+    }
+
+    /* =========================================================
        KORRIGIEREN
        ========================================================= */
     .cq-meta{font-family:'Caveat',cursive;font-size:20px;font-weight:700;color:var(--ink-mute);margin-bottom:8px}
@@ -807,6 +868,20 @@
       <div class="feedback-msg" id="cqFeedback"></div>
     </div></div>
     <button type="button" class="help-fab" onclick="openHelp('cqSteps')" title="Anleitung">?</button>
+  </div>
+
+  <!-- QUIZ-RESULT MODAL (eigener Screen nach Abschluss) -->
+  <div class="result-modal" id="cqResultModal" onclick="if(event.target===this)closeCqResult()">
+    <div class="result-card">
+      <div class="result-emoji" id="cqResultEmoji">🎉</div>
+      <div class="result-title" id="cqResultTitle">Alles richtig!</div>
+      <div class="result-score"><span id="cqResultOk">0</span><span class="total"> / <span id="cqResultTotal">0</span></span></div>
+      <div class="result-list" id="cqResultList" style="display:none;"></div>
+      <div class="result-buttons">
+        <button class="btn btn-lg btn-primary" id="cqResultRetry">Nochmal</button>
+        <button class="btn btn-lg" id="cqResultClose" style="background:#fff;">Zurück</button>
+      </div>
+    </div>
   </div>
 
   <!-- KNOBELN (Pfeil-Sequenz) -->
@@ -1723,6 +1798,14 @@
       document.getElementById('btnCqCheck').style.display = 'none';
       setStep('cqSteps', 2);
     });
+    document.getElementById('cqResultRetry').addEventListener('click', () => {
+      closeCqResult();
+      document.getElementById('btnCqStart').click();
+    });
+    document.getElementById('cqResultClose').addEventListener('click', () => {
+      closeCqResult();
+      document.querySelector('[data-view="dashboard"]').click();
+    });
     // Sammelt die einzelnen Pruefschritte fuer eine abschliessende Anzeige
     let cqCheckSteps = [];
     function showCqResultSummary() {
@@ -1734,6 +1817,48 @@
         if (i < wrong.length - 1) detail += '; ';
       });
       showFeedback('cqFeedback', 'error', detail);
+    }
+
+    function showCqResultModal(ok, total, wrong, aborted) {
+      const emoji = document.getElementById('cqResultEmoji');
+      const title = document.getElementById('cqResultTitle');
+      const list  = document.getElementById('cqResultList');
+      document.getElementById('cqResultOk').textContent = ok;
+      document.getElementById('cqResultTotal').textContent = total;
+      if (aborted) {
+        emoji.textContent = '⏸';
+        title.textContent = 'Abgebrochen';
+        title.className = 'result-title bad';
+      } else if (ok === total && total > 0) {
+        emoji.textContent = '🎉';
+        title.textContent = 'Alles richtig!';
+        title.className = 'result-title ok';
+      } else if (ok === 0) {
+        emoji.textContent = '😕';
+        title.textContent = 'Keins richtig';
+        title.className = 'result-title bad';
+      } else {
+        emoji.textContent = '🤔';
+        title.textContent = 'Fast!';
+        title.className = 'result-title bad';
+      }
+      if (wrong && wrong.length > 0) {
+        list.style.display = 'block';
+        list.innerHTML = wrong.map(s =>
+          '<div class="result-list-item">' +
+            '<span class="idx">Plättchen ' + (s.idx + 1) + '</span>' +
+            '<span class="exp">' + s.expected + '</span>' +
+            '<span>→</span>' +
+            '<span class="found">' + s.found + '</span>' +
+          '</div>'
+        ).join('');
+      } else {
+        list.style.display = 'none';
+      }
+      document.getElementById('cqResultModal').classList.add('open');
+    }
+    function closeCqResult() {
+      document.getElementById('cqResultModal').classList.remove('open');
     }
     function handleQuizMessage(msg) {
       if (msg.startsWith('QUIZ:CHECKING')) {
@@ -1754,17 +1879,18 @@
       } else if (msg.startsWith('QUIZ:RESULT:')) {
         const d = msg.substring(12).split(',');
         if (d[0] === 'OK') {
-          showFeedback('cqFeedback', 'success', 'Alles richtig! (' + (d[1] || 0) + '/' + (d[2] || 0) + ')');
+          showCqResultModal(parseInt(d[1]) || 0, parseInt(d[2]) || 0, []);
         } else if (d[0] === 'WRONG') {
-          showCqResultSummary();
+          const ok = parseInt(d[1]) || 0, total = parseInt(d[2]) || 0;
+          const wrong = cqCheckSteps.filter(s => !s.ok);
+          showCqResultModal(ok, total, wrong);
         } else if (d[0] === 'ABORT') {
-          showFeedback('cqFeedback', 'error', 'Abgebrochen!');
+          showCqResultModal(0, cqCheckSteps.length, [], true);
         }
         document.getElementById('btnCqStart').style.display = 'inline-flex';
         document.getElementById('btnCqStart').textContent = 'Nochmal';
         document.getElementById('btnCqCheck').style.display = 'none';
         setStep('cqSteps', 3);
-        // Ergebnis-Phase: Anleitung wieder sichtbar mit Schritt 4
         setStepsVisible('cqSteps', true);
       }
     }

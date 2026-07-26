@@ -18,12 +18,12 @@ extern GameMode currentGame;
 // Bewegungs-Timings (in Edu_V1.3.cpp definiert).
 // Einheitlich fuer alle Spiele (Knobeln, Memory, Quiz, Rennen).
 extern const uint32_t GAME_MOVE_MS;     // Vor/Rueck-Fahrt Dauer
-extern const uint32_t GAME_TURN_MS;     // 90-Grad-Drehung Dauer
 extern const float    GAME_DRIVE_GAIN;  // Geschwindigkeits-Faktor
 
 // Blockierende Bewegungsfunktionen (mit Rampe / Smooth)
 void gameDriveForward(uint32_t ms);
 void gameDriveBackward(uint32_t ms);
-void gameTurnLeft(uint32_t ms);
-void gameTurnRight(uint32_t ms);
+void gameTurnLeftSteps(int32_t steps);
+void gameTurnRightSteps(int32_t steps);
+void gameDriveForwardSteps(int32_t steps);
 void gameStop(uint32_t ms);
