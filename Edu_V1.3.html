@@ -664,6 +664,11 @@
         <div class="tile-ic" style="background:#fdf3df;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1f1a14" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></div>
         <div><div class="tile-ttl">Frei Fahren</div><div class="tile-desc">Steuern mit WASD oder Touch</div></div>
       </div>
+      <div class="cat-header"><span>Autonom</span></div>
+      <div class="tile" data-view="line">
+        <div class="tile-ic" style="background:#eafbe9;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1f7a2f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4c0 8 8 8 8 16M20 4c-4 4-12 4-12 0" stroke-linecap="round"/><circle cx="4" cy="4" r="1.6" fill="#1f7a2f"/><circle cx="20" cy="20" r="1.6" fill="#1f7a2f"/></svg></div>
+        <div><div class="tile-ttl">Linie Folgen</div><div class="tile-desc">Folgt einer schwarzen Linie automatisch</div></div>
+      </div>
       <div class="cat-header"><span>Multiplayer</span></div>
       <div class="tile" data-view="mathrace">
         <div class="tile-ic" style="background:#e6f0fb;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1f4d99" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg></div>
@@ -711,6 +716,25 @@
       <div class="feedback-msg" id="driveFeedback"></div>
     </div></div>
     <button type="button" class="help-fab" onclick="openHelp('driveSteps')" title="Anleitung">?</button>
+  </div>
+
+  <!-- LINIE FOLGEN -->
+  <div id="view-line" class="view game-view">
+    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Linie Folgen</div><div class="conn-dot" id="lineConnDot"></div></div>
+    <div class="game-body"><div class="arena">
+      <div class="game-title">Linie Folgen</div>
+      <div class="color-preview-wrap">
+        <div id="lineColorPreview"></div>
+        <div><div class="color-preview-label">Farb-Sensor</div><div id="lineColorName">--</div></div>
+      </div>
+      <div class="mem-status" id="lineStatus">Bereit - Roboter auf die Linie setzen.</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0;">
+        <button class="btn btn-lg btn-primary" id="btnLineStart">Start</button>
+        <button class="btn btn-lg btn-danger" id="btnLineStop">STOP</button>
+      </div>
+      <div class="feedback-msg" id="lineFeedback"></div>
+    </div></div>
+    <button type="button" class="help-fab" onclick="openHelp('lineSteps')" title="Anleitung">?</button>
   </div>
 
   <!-- MATHE-RENNEN -->
@@ -870,6 +894,11 @@
           if (el) el.style.background = 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
           const nm = document.getElementById('driveColorName');
           if (nm) nm.textContent = d[3];
+          // Auch die Linien-Anzeige aktualisieren, falls aktiv
+          const lineEl = document.getElementById('lineColorPreview');
+          if (lineEl) lineEl.style.background = 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
+          const lineNm = document.getElementById('lineColorName');
+          if (lineNm) lineNm.textContent = d[3];
         }
       } else if (msg.startsWith('RACE:')) {
         handleRaceMessage(msg);
@@ -879,6 +908,8 @@
         handleKnobelnMessage(msg);
       } else if (msg.startsWith('MEMORY:')) {
         handleMemoryMessage(msg);
+      } else if (msg.startsWith('LINE:')) {
+        handleLineMessage(msg);
       }
     }
 
@@ -1156,9 +1187,16 @@
       const el = document.getElementById('view-' + viewId);
       if (el) el.classList.add('active');
       // Step-State auf 0 zuruecksetzen, falls die View eine Anleitung hat
-      const viewToSteps = { drive:'driveSteps', mathrace:'raceSteps', colorquiz:'cqSteps', knobeln:'knSteps', memory:'memorySteps' };
+      const viewToSteps = { drive:'driveSteps', mathrace:'raceSteps', colorquiz:'cqSteps', knobeln:'knSteps', memory:'memorySteps', line:'lineSteps' };
       if (viewToSteps[viewId]) STEP_STATE[viewToSteps[viewId]] = 0;
       if (viewId === 'memory') memReset();
+      if (viewId === 'line') {
+        // Beim Verlassen des Linie-Views: aktiven Lauf stoppen
+        if (lineRunning) { sendCommand('LINE:STOP'); }
+        document.getElementById('btnLineStart').style.display = 'inline-flex';
+        document.getElementById('lineStatus').textContent = 'Bereit - Roboter auf die Linie setzen.';
+        lineRunning = false;
+      }
     }
     document.querySelectorAll('.tile[data-view]').forEach(t => t.addEventListener('click', () => nav(t.dataset.view)));
     document.querySelectorAll('[data-view]').forEach(b => {
@@ -1169,14 +1207,15 @@
     // HELP-ICON (FAB) + ANLEITUNGS-MODAL
     // ==========================================
     const STEP_STATE = {
-      driveSteps: 0, raceSteps: 0, cqSteps: 0, knSteps: 0, memorySteps: 0
+      driveSteps: 0, raceSteps: 0, cqSteps: 0, knSteps: 0, memorySteps: 0, lineSteps: 0
     };
     const STEP_TITLES = {
       driveSteps: 'Frei Fahren',
       raceSteps: 'Mathe-Rennen',
       cqSteps: 'Korrigieren',
       knSteps: 'Pfeil-Knobeln',
-      memorySteps: 'Memory'
+      memorySteps: 'Memory',
+      lineSteps: 'Linie Folgen'
     };
 
     function escapeHtml(s) {
@@ -1265,6 +1304,12 @@
         { title: 'Start drücken' },
         { title: 'Roboter fährt vor' },
         { title: 'Du fährst nach' }
+      ],
+      lineSteps: [
+        { title: 'Linie vorbereiten', detailHtml: 'Schwarze Linie auf heller Fläche' },
+        { title: 'Roboter auf Linie', detailHtml: 'Sensor im Lauf über der Linie' },
+        { title: 'Start drücken', detailHtml: 'Folgt selbstständig der Linie' },
+        { title: 'STOP zum Anhalten' }
       ]
     };
 
@@ -1779,6 +1824,39 @@
       setTimeout(() => sendCommand('KNOBELN:RUN'), 400);
       // Anleitung ausblenden, sobald der Roboter faehrt
       setTimeout(() => setStepsVisible('knSteps', false), 1200);
+    });
+
+    // ==========================================
+    // LINIE FOLGEN
+    // ==========================================
+    let lineRunning = false;
+    function handleLineMessage(msg) {
+      if (msg === 'LINE:RUNNING') {
+        lineRunning = true;
+        document.getElementById('lineStatus').textContent = 'Folgt der Linie...';
+        document.getElementById('btnLineStart').style.display = 'none';
+        showFeedback('lineFeedback', 'success', 'Roboter folgt der Linie.');
+        setStep('lineSteps', 2);
+      } else if (msg === 'LINE:STOPPED') {
+        lineRunning = false;
+        document.getElementById('lineStatus').textContent = 'Gestoppt.';
+        document.getElementById('btnLineStart').style.display = 'inline-flex';
+        showFeedback('lineFeedback', 'error', 'Gestoppt!');
+        setStep('lineSteps', 3);
+      } else if (msg === 'LINE:LOST') {
+        lineRunning = false;
+        document.getElementById('lineStatus').textContent = 'Linie verloren.';
+        document.getElementById('btnLineStart').style.display = 'inline-flex';
+        showFeedback('lineFeedback', 'error', 'Linie verloren - gestoppt.');
+        setStep('lineSteps', 3);
+      }
+    }
+    document.getElementById('btnLineStart').addEventListener('click', () => {
+      if (lineRunning) return;
+      sendCommand('LINE:START');
+    });
+    document.getElementById('btnLineStop').addEventListener('click', () => {
+      sendCommand('LINE:STOP');
     });
 
     // ==========================================

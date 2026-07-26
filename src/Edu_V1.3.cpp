@@ -17,6 +17,7 @@
 #include "EspNow.h"
 #include "MemoryGame.h"
 #include "GameEngine.h"
+#include "LineFollower.h"
 
 // =====================================================
 // GLOBALE KONSTANTEN
@@ -37,154 +38,112 @@ bool driveLockedByGame() { return currentGame != GAME_NONE; }
 // =====================================================
 // SPIEL-BEWEGUNGS-ENGINE (blockierend)
 // =====================================================
-const uint32_t GAME_STEP_CM_MS   = 90;   // kuerzer: pro "Schritt" 90ms
-const float     GAME_DRIVE_GAIN  = 0.65f;
-constexpr uint32_t GAME_RAMP_TICK    = 10;
-const uint32_t GAME_TURN_MS      = 320;  // kuerzere Drehung fuer 90 Grad
-const uint32_t GAME_COLOR_READ_MS = 250;
-const uint32_t GAME_SHORT_MS     = 220;
-const uint32_t GAME_DRIVE_MS     = GAME_STEP_CM_MS * 3;  // ~270ms Vor/Rueck
-const uint32_t GAME_KNOBELN_MS   = GAME_STEP_CM_MS * 4;  // ~360ms Pfeil-Knobeln
-const uint32_t GAME_QUIZ_MS      = GAME_STEP_CM_MS * 3;  // ~270ms Korrigieren/Race
+// Einheitliche Zeiten: jedes Spiel (Knobeln, Memory, Quiz, Rennen) nutzt
+// dieselbe Vor/Zurueck- und Drehdauer -> konsistenter Bewegungsablauf.
+// Beschleunigung/Bremsen uebernimmt AccelStepper (kein Wheelie, kein Schraeglauf).
+const float     GAME_DRIVE_GAIN   = 1.0f;
+constexpr uint32_t GAME_TICK_MS    = 5;    // Polling-Intervall fuer motorRun() waehrend blockierender Moves
+const uint32_t GAME_MOVE_MS       = 360;  // Vor/Zurueck-Fahrt in ALLEN Spielen
+const uint32_t GAME_TURN_MS       = 320;  // 90-Grad-Drehung in ALLEN Spielen
+const uint32_t GAME_COLOR_READ_MS = 250;  // Pause waehrend Farbsensor liest
 
 bool gameMoveBusy = false;
 
+// Wartet bis beide Stepper wirklich stehen (max 1s). motorRun() wird
+// weiterhin aufgerufen, damit die Schritte waehrend der Verzoegerung
+// noch ausgefuehrt werden.
+static void waitForStop(uint32_t startMs, uint32_t maxExtraMs = 1000) {
+  uint32_t extra = millis();
+  while ((stepperL.isRunning() || stepperR.isRunning()) && millis() - extra < maxExtraMs) {
+    motorRun();
+    if (currentGame == GAME_NONE) { stopMotors(); return; }
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
+  }
+}
+
 void gameDriveForward(uint32_t ms) {
   gameMoveBusy = true;
+  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
   const float target = config.maxSpeed * GAME_DRIVE_GAIN;
-  const uint32_t rampMs = (ms / 3 > 120) ? 120 : ms / 3;
-  uint32_t elapsed = 0;
-  uint32_t lastMicros = micros();
-  speedL = 0; speedR = 0;
-  while (elapsed < ms) {
-    uint32_t now = micros();
-    float dt = (now - lastMicros) / 1000000.0f;
-    lastMicros = now;
-    if (dt < 0.0001f || dt > 1.0f) dt = 0.001f;
-    float curTarget;
-    if (elapsed < rampMs) {
-      curTarget = target * ((float)elapsed / (float)rampMs);
-    } else if (elapsed < ms - rampMs) {
-      curTarget = target;
-    } else {
-      float left = (float)(ms - elapsed) / (float)rampMs;
-      if (left < 0.0f) left = 0.0f;
-      curTarget = target * left;
-    }
-    speedL = rampSpeed(speedL, curTarget, dt);
-    speedR = rampSpeed(speedR, curTarget, dt);
-    setMotorSpeed(0, speedL);
-    setMotorSpeed(1, speedR);
-    vTaskDelay(pdMS_TO_TICKS(GAME_RAMP_TICK));
-    elapsed += GAME_RAMP_TICK;
-    if (currentGame == GAME_NONE) { stopMotors(); speedL = 0; speedR = 0; gameMoveBusy = false; return; }
+  setMotorSpeed(0, target);
+  setMotorSpeed(1, target);
+  uint32_t start = millis();
+  while (millis() - start < ms) {
+    motorRun();
+    if (currentGame == GAME_NONE) { stopMotors(); gameMoveBusy = false; return; }
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
-  stopMotors(); speedL = 0; speedR = 0; gameMoveBusy = false;
+  setMotorSpeed(0, 0);
+  setMotorSpeed(1, 0);
+  waitForStop(start);
+  gameMoveBusy = false;
 }
 
 void gameDriveBackward(uint32_t ms) {
   gameMoveBusy = true;
+  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
   const float target = -config.maxSpeed * GAME_DRIVE_GAIN;
-  const uint32_t rampMs = (ms / 3 > 120) ? 120 : ms / 3;
-  uint32_t elapsed = 0;
-  uint32_t lastMicros = micros();
-  speedL = 0; speedR = 0;
-  while (elapsed < ms) {
-    uint32_t now = micros();
-    float dt = (now - lastMicros) / 1000000.0f;
-    lastMicros = now;
-    if (dt < 0.0001f || dt > 1.0f) dt = 0.001f;
-    float curTarget;
-    if (elapsed < rampMs) {
-      curTarget = target * ((float)elapsed / (float)rampMs);
-    } else if (elapsed < ms - rampMs) {
-      curTarget = target;
-    } else {
-      float left = (float)(ms - elapsed) / (float)rampMs;
-      if (left < 0.0f) left = 0.0f;
-      curTarget = target * left;
-    }
-    speedL = rampSpeed(speedL, curTarget, dt);
-    speedR = rampSpeed(speedR, curTarget, dt);
-    setMotorSpeed(0, speedL);
-    setMotorSpeed(1, speedR);
-    vTaskDelay(pdMS_TO_TICKS(GAME_RAMP_TICK));
-    elapsed += GAME_RAMP_TICK;
-    if (currentGame == GAME_NONE) { stopMotors(); speedL = 0; speedR = 0; gameMoveBusy = false; return; }
+  setMotorSpeed(0, target);
+  setMotorSpeed(1, target);
+  uint32_t start = millis();
+  while (millis() - start < ms) {
+    motorRun();
+    if (currentGame == GAME_NONE) { stopMotors(); gameMoveBusy = false; return; }
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
-  stopMotors(); speedL = 0; speedR = 0; gameMoveBusy = false;
+  setMotorSpeed(0, 0);
+  setMotorSpeed(1, 0);
+  waitForStop(start);
+  gameMoveBusy = false;
 }
 
 void gameTurnLeft(uint32_t ms) {
   gameMoveBusy = true;
-  const float target = config.turnOnlySpeed;  // positive Geschwindigkeit, Richtung ueber Vorzeichen
-  const uint32_t rampMs = (ms / 3 > 120) ? 120 : ms / 3;
-  uint32_t elapsed = 0;
-  uint32_t lastMicros = micros();
-  speedL = 0; speedR = 0;
-  while (elapsed < ms) {
-    uint32_t now = micros();
-    float dt = (now - lastMicros) / 1000000.0f;
-    lastMicros = now;
-    if (dt < 0.0001f || dt > 1.0f) dt = 0.001f;
-    float curTarget;
-    if (elapsed < rampMs) {
-      curTarget = target * ((float)elapsed / (float)rampMs);
-    } else if (elapsed < ms - rampMs) {
-      curTarget = target;
-    } else {
-      float left = (float)(ms - elapsed) / (float)rampMs;
-      if (left < 0.0f) left = 0.0f;
-      curTarget = target * left;
-    }
-    speedL = rampSpeed(speedL, -curTarget, dt);  // Links rueckwaerts
-    speedR = rampSpeed(speedR,  curTarget, dt);  // Rechts vorwaerts -> Drehung links
-    setMotorSpeed(0, speedL);
-    setMotorSpeed(1, speedR);
-    vTaskDelay(pdMS_TO_TICKS(GAME_RAMP_TICK));
-    elapsed += GAME_RAMP_TICK;
-    if (currentGame == GAME_NONE) { stopMotors(); speedL = 0; speedR = 0; gameMoveBusy = false; return; }
+  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
+  setMotorSpeed(0, -config.turnOnlySpeed);
+  setMotorSpeed(1,  config.turnOnlySpeed);
+  uint32_t start = millis();
+  while (millis() - start < ms) {
+    motorRun();
+    if (currentGame == GAME_NONE) { stopMotors(); gameMoveBusy = false; return; }
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
-  stopMotors(); speedL = 0; speedR = 0; gameMoveBusy = false;
+  setMotorSpeed(0, 0);
+  setMotorSpeed(1, 0);
+  waitForStop(start);
+  gameMoveBusy = false;
 }
 
 void gameTurnRight(uint32_t ms) {
   gameMoveBusy = true;
-  const float target = config.turnOnlySpeed;
-  const uint32_t rampMs = (ms / 3 > 120) ? 120 : ms / 3;
-  uint32_t elapsed = 0;
-  uint32_t lastMicros = micros();
-  speedL = 0; speedR = 0;
-  while (elapsed < ms) {
-    uint32_t now = micros();
-    float dt = (now - lastMicros) / 1000000.0f;
-    lastMicros = now;
-    if (dt < 0.0001f || dt > 1.0f) dt = 0.001f;
-    float curTarget;
-    if (elapsed < rampMs) {
-      curTarget = target * ((float)elapsed / (float)rampMs);
-    } else if (elapsed < ms - rampMs) {
-      curTarget = target;
-    } else {
-      float left = (float)(ms - elapsed) / (float)rampMs;
-      if (left < 0.0f) left = 0.0f;
-      curTarget = target * left;
-    }
-    speedL = rampSpeed(speedL,  curTarget, dt);  // Links vorwaerts
-    speedR = rampSpeed(speedR, -curTarget, dt);  // Rechts rueckwaerts -> Drehung rechts
-    setMotorSpeed(0, speedL);
-    setMotorSpeed(1, speedR);
-    vTaskDelay(pdMS_TO_TICKS(GAME_RAMP_TICK));
-    elapsed += GAME_RAMP_TICK;
-    if (currentGame == GAME_NONE) { stopMotors(); speedL = 0; speedR = 0; gameMoveBusy = false; return; }
+  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
+  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
+  setMotorSpeed(0,  config.turnOnlySpeed);
+  setMotorSpeed(1, -config.turnOnlySpeed);
+  uint32_t start = millis();
+  while (millis() - start < ms) {
+    motorRun();
+    if (currentGame == GAME_NONE) { stopMotors(); gameMoveBusy = false; return; }
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
-  stopMotors(); speedL = 0; speedR = 0; gameMoveBusy = false;
+  setMotorSpeed(0, 0);
+  setMotorSpeed(1, 0);
+  waitForStop(start);
+  gameMoveBusy = false;
 }
 
 void gameStop(uint32_t ms) {
   gameMoveBusy = true;
-  stopMotors(); speedL = 0; speedR = 0;
-  vTaskDelay(pdMS_TO_TICKS(ms));
+  setMotorSpeed(0, 0);
+  setMotorSpeed(1, 0);
+  uint32_t start = millis();
+  while (millis() - start < (uint32_t)ms) {
+    motorRun();
+    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
+  }
   gameMoveBusy = false;
 }
 
@@ -202,9 +161,9 @@ void knobelnExecute() {
   for (uint8_t i = 0; i < knobelnLen; i++) {
     if (currentGame != GAME_KNOBELN) { sendStatus("KNOBELN:ABORT"); return; }
     switch (knobelnSeq[i]) {
-      case 0: gameDriveForward(GAME_KNOBELN_MS); break;
+      case 0: gameDriveForward(GAME_MOVE_MS); break;
       case 1: gameTurnRight(GAME_TURN_MS); break;
-      case 2: gameDriveBackward(GAME_KNOBELN_MS); break;
+      case 2: gameDriveBackward(GAME_MOVE_MS); break;
       case 3: gameTurnLeft(GAME_TURN_MS); break;
     }
     vTaskDelay(pdMS_TO_TICKS(80));
@@ -230,7 +189,7 @@ void korrigierenExecute() {
   uint8_t okCount = 0;
   for (uint8_t i = 0; i < korrigierenLen; i++) {
     if (currentGame != GAME_KORRIGIEREN) { sendStatus("QUIZ:RESULT:ABORT"); return; }
-    gameDriveForward(GAME_QUIZ_MS);
+    gameDriveForward(GAME_MOVE_MS);
     gameStop(GAME_COLOR_READ_MS);
     char found[16] = "UNBEKANNT";
     getCurrentColorName(found, sizeof(found));
@@ -269,7 +228,7 @@ void raceExecuteStart(bool remote = false) {
 
 void raceForwardStep() {
   if (!raceActive) { stopMotors(); speedL = 0; speedR = 0; return; }
-  gameDriveForward(GAME_QUIZ_MS);
+  gameDriveForward(GAME_MOVE_MS);
   if (!raceActive) { stopMotors(); speedL = 0; speedR = 0; }
 }
 
@@ -312,6 +271,7 @@ void onBleDisconnected() {
   korrigierenLen = 0;
   korrigierenRunning = false;
   memoryStop();
+  lineFollowerStop();
   Serial.println("[BLE] Getrennt - Werbung gestartet");
   BLEDevice::startAdvertising();
   espNowEnsureChannel();
@@ -330,6 +290,7 @@ void hardStop() {
   korrigierenRunning = false;
   raceActive = false;
   memoryStop();
+  lineFollowerStop();
   sendStatus("STOP");
 }
 
@@ -528,9 +489,26 @@ void handleCommand(const char* cmdStr) {
     return;
   }
 
+  // LINIE FOLGEN
+  if (cmd.startsWith("LINE:")) {
+    String sub = cmd.substring(5);
+    if (sub == "START") {
+      if (!lineFollowerActive) {
+        currentGame = GAME_LINEFOLLOWER;
+        lineFollowerStart();
+        sendStatus("LINE:RUNNING");
+      }
+    } else if (sub == "STOP") {
+      bool wasActive = lineFollowerActive;
+      lineFollowerStop();
+      currentGame = GAME_NONE;
+      sendStatus(wasActive ? "LINE:STOPPED" : "LINE:STOPPED");
+    }
+    return;
+  }
+
   // MEMORY (A1)
-  if (cmd.startsWith("MEMORY:")) {
-    String sub = cmd.substring(7);
+  if (cmd.startsWith("MEMORY:")) {    String sub = cmd.substring(7);
     if (sub == "START") {
       currentGame = GAME_MEMORY;
       memoryStart(3);
@@ -568,23 +546,11 @@ void setup() {
 
   configLoad();
 
-  pinMode(PIN_DIR_L, OUTPUT);
-  pinMode(PIN_STEP_L, OUTPUT);
-  pinMode(PIN_DIR_R, OUTPUT);
-  pinMode(PIN_STEP_R, OUTPUT);
-  pinMode(PIN_ENABLE, OUTPUT);
-  digitalWrite(PIN_STEP_L, LOW);
-  digitalWrite(PIN_STEP_R, LOW);
-  digitalWrite(PIN_DIR_L, LOW);
-  digitalWrite(PIN_DIR_R, LOW);
-  digitalWrite(PIN_ENABLE, LOW);
-  GPIO.out_w1tc = STEP_BIT_L | STEP_BIT_R;
+  initSteppers();
+  Serial.println("[MOTOR] AccelStepper initialisiert (Beschleunigung aktiv)");
 
   lastCommandTime = millis();
   driveResetDt();
-
-  initStepperTimer();
-  Serial.println("[TIMER] Hardware-Timer gestartet (10 us)");
 
   colorSetup();
   if (colorSensorOk) {
@@ -609,6 +575,15 @@ void loop() {
   esp_task_wdt_reset();
   bleProcessEvents();
   memoryTick();
+  if (currentGame == GAME_LINEFOLLOWER) {
+    bool wasActive = lineFollowerActive;
+    lineFollowerTick();
+    if (wasActive && !lineFollowerActive) {
+      // Linie endgueltig verloren -> Modus beenden, Meldung senden
+      currentGame = GAME_NONE;
+      sendStatus("LINE:LOST");
+    }
+  }
   if (!driveLockedByGame()) driveUpdate();
   if (deviceConnected && millis() - lastColorNotify > COLOR_NOTIFY_MS) {
     lastColorNotify = millis();

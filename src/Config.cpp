@@ -9,7 +9,7 @@ void configLoad() {
   prefs.begin("edubot", false);
   config.maxSpeed      = prefs.getFloat("maxSpeed", static_cast<float>(MAX_SPEED_DEFAULT));
   config.turnFactor    = prefs.getFloat("turnFactor", TURN_DEFAULT);
-  config.turnOnlySpeed = prefs.getFloat("turnOnlySpeed", 550.0f);
+  config.turnOnlySpeed = prefs.getFloat("turnOnlySpeed", 320.0f);
   config.accelRate     = prefs.getFloat("accelRate", ACCEL_DEFAULT);
   config.blackR        = prefs.getUShort("blackR", 152);
   config.blackG        = prefs.getUShort("blackG", 137);
@@ -34,6 +34,10 @@ void configValidate() {
     config.maxSpeed = static_cast<float>(MAX_SPEED_DEFAULT); changed = true;
   }
   if (config.turnFactor < TURN_MIN || config.turnFactor > TURN_MAX) {
+    config.turnFactor = TURN_DEFAULT; changed = true;
+  }
+  // Migration: alter Default 0.25 (car-like, kaum Drehung) -> 0.0 (Innenrad stoppt)
+  if (config.turnFactor == 0.25f) {
     config.turnFactor = TURN_DEFAULT; changed = true;
   }
   if (config.accelRate < ACCEL_MIN || config.accelRate > ACCEL_MAX) {

@@ -24,8 +24,8 @@ uint32_t memoryInputStart = 0;
 
 void memoryExecuteMove(uint8_t move) {
   switch (move) {
-    case MEM_FWD:   gameDriveForward(GAME_KNOBELN_MS); break;
-    case MEM_BACK:  gameDriveBackward(GAME_KNOBELN_MS); break;
+    case MEM_FWD:   gameDriveForward(GAME_MOVE_MS); break;
+    case MEM_BACK:  gameDriveBackward(GAME_MOVE_MS); break;
     case MEM_LEFT:  gameTurnLeft(GAME_TURN_MS); break;
     case MEM_RIGHT: gameTurnRight(GAME_TURN_MS); break;
   }

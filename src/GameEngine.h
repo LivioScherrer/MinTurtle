@@ -10,12 +10,14 @@ enum GameMode : uint8_t {
   GAME_KNOBELN,
   GAME_KORRIGIEREN,
   GAME_RENNEN,
-  GAME_MEMORY
+  GAME_MEMORY,
+  GAME_LINEFOLLOWER
 };
 extern GameMode currentGame;
 
-// Bewegungs-Timings (in Edu_V1.3.cpp definiert)
-extern const uint32_t GAME_KNOBELN_MS;  // Vor/Rueck-Fahrt Dauer
+// Bewegungs-Timings (in Edu_V1.3.cpp definiert).
+// Einheitlich fuer alle Spiele (Knobeln, Memory, Quiz, Rennen).
+extern const uint32_t GAME_MOVE_MS;     // Vor/Rueck-Fahrt Dauer
 extern const uint32_t GAME_TURN_MS;     // 90-Grad-Drehung Dauer
 extern const float    GAME_DRIVE_GAIN;  // Geschwindigkeits-Faktor
 

@@ -1,36 +1,32 @@
-// EduBot V1.3 - Motor-Modul (DRV8834 Stepper, Bresenham-Timer)
+// EduBot V1.3 - Motor-Modul (DRV8834 Stepper, AccelStepper)
 #pragma once
 
 #include <Arduino.h>
-#include <driver/timer.h>
-#include "soc/gpio_struct.h"
+#include <AccelStepper.h>
 
 // Stepper-Pins (Xiao ESP32-S3)
 #define PIN_DIR_L   3
 #define PIN_STEP_L  4
 #define PIN_DIR_R   1
-#define PIN_STEP_R  2
-#define PIN_ENABLE  7
+#define PIN_STEP_R   2
+#define PIN_ENABLE   7
 
-#define STEP_BIT_L  (1UL << PIN_STEP_L)
-#define STEP_BIT_R  (1UL << PIN_STEP_R)
+// Maximale Step-Rate, die der Roboter je fahren soll (steps/s)
+constexpr float MOTOR_MAX_SPEED    = 2500.0f;
+// Feste Beschleunigung (steps/s^2). 1500 -> 0->380 steps/s in ca. 250ms.
+// Wird vom Freifahren via setAcceleration(config.accelRate) ueberschrieben.
+constexpr float GLOBAL_ACCEL_RATE  = 1500.0f;
 
-// Stepper-Timing
-constexpr uint32_t STEP_TIMER_US      = 10;
-constexpr uint32_t MIN_STEP_INTERVAL  = 50;
-constexpr uint32_t MAX_STEP_INTERVAL  = 50000;
-constexpr uint32_t STEP_PERIOD_US     = 1000000UL;
+// Stepper-Instanzen (in Motor.cpp definiert)
+extern AccelStepper stepperL;
+extern AccelStepper stepperR;
 
-extern portMUX_TYPE stepperMux;
-
-// Geschwindigkeiten (fuer Drive/GameLogic lesbar)
-extern volatile uint32_t stepIntervalL, stepIntervalR;
-
-// Motor ansteuern (Geschwindigkeit in "steps/s", Vorzeichen = Richtung)
+// Geschwindigkeit setzen (steps/s, Vorzeichen = Richtung).
+// Ueber AccelStepper intern beschleunigt/abgebremst -> kein Wheelie.
 void setMotorSpeed(int motorIdx, float speed);
-// Beide Motoren sofort stoppen
+// Beide Motoren sanft auf 0 (AccelStepper rampt runter).
 void stopMotors();
-// Hardware-Timer initialisieren
-void initStepperTimer();
-// Rampen-Funktion (sanftes Anfahren/Bremsen) - delta-t in Sekunden
-float rampSpeed(float current, float target, float dt);
+// Jede Loop aufrufen: fuehrt die geplanten Schritte aus.
+void motorRun();
+// Initialisierung (Pins + Stepper-Defaults)
+void initSteppers();

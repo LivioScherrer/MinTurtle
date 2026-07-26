@@ -6,10 +6,10 @@
 #include <Preferences.h>
 
 // Konfigurationsgrenzen (constexpr, hier zentral)
-constexpr uint32_t MAX_SPEED_DEFAULT = 900;
+constexpr uint32_t MAX_SPEED_DEFAULT = 380;
 constexpr uint32_t MAX_SPEED_MIN     = 200;
 constexpr uint32_t MAX_SPEED_MAX     = 2500;
-constexpr float    TURN_DEFAULT      = 0.25f;
+constexpr float    TURN_DEFAULT      = 0.0f;
 constexpr float    TURN_MIN          = 0.0f;
 constexpr float    TURN_MAX          = 0.9f;
 constexpr float    ACCEL_DEFAULT     = 5000.0f;
@@ -17,9 +17,9 @@ constexpr float    ACCEL_MIN         = 100.0f;
 constexpr float    ACCEL_MAX         = 10000.0f;
 
 struct Config {
-  float maxSpeed      = 900.0f;
+  float maxSpeed      = 380.0f;
   float turnFactor    = 0.25f;
-  float turnOnlySpeed = 550.0f;
+  float turnOnlySpeed = 320.0f;
   int8_t leftSign     = -1;
   int8_t rightSign    = -1;
   float accelRate     = 5000.0f;
