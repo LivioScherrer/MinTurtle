@@ -474,6 +474,52 @@ void handleCommand(const char* cmdStr) {
     return;
   }
 
+  if (cmd == "CAL:RED" || cmd == "CAL:YELLOW" || cmd == "CAL:GREEN" || cmd == "CAL:BLUE") {
+    ColorRef* ref = nullptr;
+    const char* name = nullptr;
+    const char* key  = nullptr;
+    if      (cmd == "CAL:RED")    { ref = &config.calRot;   name = "RED";    key = "Rot";    }
+    else if (cmd == "CAL:YELLOW") { ref = &config.calGelb;  name = "YELLOW"; key = "Gelb";   }
+    else if (cmd == "CAL:GREEN")  { ref = &config.calGruen; name = "GREEN";  key = "Gruen";  }
+    else                          { ref = &config.calBlau;  name = "BLUE";   key = "Blau";   }
+    int r, g, b;
+    if (colorSem == nullptr || xSemaphoreTake(colorSem, pdMS_TO_TICKS(100)) != pdTRUE) {
+      sendStatus("CAL:BUSY");
+      return;
+    }
+    r = sensorR; g = sensorG; b = sensorB;
+    xSemaphoreGive(colorSem);
+    ref->r = (uint8_t)constrain(r, 0, 255);
+    ref->g = (uint8_t)constrain(g, 0, 255);
+    ref->b = (uint8_t)constrain(b, 0, 255);
+    ref->calibrated = true;
+    char kR[16], kG[16], kB[16], kS[16];
+    snprintf(kR, sizeof(kR), "cal%sR", key);
+    snprintf(kG, sizeof(kG), "cal%sG", key);
+    snprintf(kB, sizeof(kB), "cal%sB", key);
+    snprintf(kS, sizeof(kS), "cal%sSet", key);
+    configSaveUChar(kR, ref->r);
+    configSaveUChar(kG, ref->g);
+    configSaveUChar(kB, ref->b);
+    configSaveBool(kS, true);
+    char msg[48];
+    snprintf(msg, sizeof(msg), "CAL:%s OK,%d,%d,%d", name, ref->r, ref->g, ref->b);
+    sendStatus(msg);
+    return;
+  }
+
+  if (cmd == "CAL:?") {
+    char msg[96];
+    snprintf(msg, sizeof(msg),
+      "CAL:ROT=%s(%u,%u,%u) GELB=%s(%u,%u,%u) GRUEN=%s(%u,%u,%u) BLAU=%s(%u,%u,%u)",
+      config.calRot.calibrated   ? "*" : "-", config.calRot.r,   config.calRot.g,   config.calRot.b,
+      config.calGelb.calibrated  ? "*" : "-", config.calGelb.r,  config.calGelb.g,  config.calGelb.b,
+      config.calGruen.calibrated ? "*" : "-", config.calGruen.r, config.calGruen.g, config.calGruen.b,
+      config.calBlau.calibrated  ? "*" : "-", config.calBlau.r,  config.calBlau.g,  config.calBlau.b);
+    sendStatus(msg);
+    return;
+  }
+
   // KNOBELN
   if (cmd.startsWith("KNOBELN:")) {
     String sub = cmd.substring(8);
@@ -670,6 +716,7 @@ void setup() {
 
   initSteppers();
   Serial.println("[MOTOR] AccelStepper initialisiert (Beschleunigung aktiv)");
+  playStartupBeep();
 
   lastCommandTime = millis();
   driveResetDt();

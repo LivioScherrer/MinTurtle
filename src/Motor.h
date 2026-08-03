@@ -30,3 +30,5 @@ void stopMotors();
 void motorRun();
 // Initialisierung (Pins + Stepper-Defaults)
 void initSteppers();
+// Kurzer Startton: beide Motoren kurz mit Maximalgeschwindigkeit fahren
+void playStartupBeep();

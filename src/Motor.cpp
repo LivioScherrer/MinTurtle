@@ -44,3 +44,27 @@ void motorRun() {
   stepperL.runSpeed();
   stepperR.runSpeed();
 }
+
+// Kurzer Piepton direkt nach dem Booten: beide Stepper ~200ms auf
+// Maximalgeschwindigkeit -> hoher, kurzer Ton. Danach kurz auslaufen.
+void playStartupBeep() {
+  constexpr uint32_t BEEP_MS = 600;
+  constexpr uint32_t STOP_MS = 0;
+  constexpr float    BEEP_SPEED = 1200.0f;  // etwas unter MOTOR_MAX_SPEED -> angenehmerer Ton
+  stepperL.setMaxSpeed(MOTOR_MAX_SPEED);
+  stepperR.setMaxSpeed(MOTOR_MAX_SPEED);
+  stepperL.setSpeed(BEEP_SPEED);
+  stepperR.setSpeed(BEEP_SPEED);
+  uint32_t start = millis();
+  while (millis() - start < BEEP_MS) {
+    stepperL.runSpeed();
+    stepperR.runSpeed();
+  }
+  stepperL.setSpeed(0.0f);
+  stepperR.setSpeed(0.0f);
+  start = millis();
+  while (millis() - start < STOP_MS) {
+    stepperL.runSpeed();
+    stepperR.runSpeed();
+  }
+}
