@@ -19,6 +19,22 @@ void configLoad() {
   config.whiteR        = prefs.getUShort("whiteR", 4143);
   config.whiteG        = prefs.getUShort("whiteG", 4258);
   config.whiteB        = prefs.getUShort("whiteB", 3036);
+  config.calRot.r      = prefs.getUChar("calRotR", 0);
+  config.calRot.g      = prefs.getUChar("calRotG", 0);
+  config.calRot.b      = prefs.getUChar("calRotB", 0);
+  config.calRot.calibrated    = prefs.getBool("calRotSet", false);
+  config.calGelb.r     = prefs.getUChar("calGelbR", 0);
+  config.calGelb.g     = prefs.getUChar("calGelbG", 0);
+  config.calGelb.b     = prefs.getUChar("calGelbB", 0);
+  config.calGelb.calibrated   = prefs.getBool("calGelbSet", false);
+  config.calGruen.r    = prefs.getUChar("calGruenR", 0);
+  config.calGruen.g    = prefs.getUChar("calGruenG", 0);
+  config.calGruen.b    = prefs.getUChar("calGruenB", 0);
+  config.calGruen.calibrated  = prefs.getBool("calGruenSet", false);
+  config.calBlau.r     = prefs.getUChar("calBlauR", 0);
+  config.calBlau.g     = prefs.getUChar("calBlauG", 0);
+  config.calBlau.b     = prefs.getUChar("calBlauB", 0);
+  config.calBlau.calibrated   = prefs.getBool("calBlauSet", false);
   // Schutz: zu kleine white-Werte -> default Kalibrierung
   if (config.whiteR < 200 || config.whiteG < 200 || config.whiteB < 200) {
     config.blackR = 152; config.blackG = 137; config.blackB = 98;
@@ -87,6 +103,18 @@ void configSaveInt(const char* key, int32_t value) {
 void configSaveUShort(const char* key, uint16_t value) {
   prefs.begin("edubot", false);
   prefs.putUShort(key, value);
+  prefs.end();
+}
+
+void configSaveUChar(const char* key, uint8_t value) {
+  prefs.begin("edubot", false);
+  prefs.putUChar(key, value);
+  prefs.end();
+}
+
+void configSaveBool(const char* key, bool value) {
+  prefs.begin("edubot", false);
+  prefs.putBool(key, value);
   prefs.end();
 }
 

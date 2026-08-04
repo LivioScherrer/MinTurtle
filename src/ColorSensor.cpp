@@ -4,6 +4,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <semphr.h>
+#include <math.h>
 
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(
   TCS34725_INTEGRATIONTIME_50MS,
@@ -29,18 +30,65 @@ int calibrateColor(uint16_t raw, uint16_t blackVal, uint16_t whiteVal) {
 const char* detectColorName(int r, int g, int b) {
   int total = r + g + b;
   if (total < 60) return "SCHWARZ";
-  if (r > COLOR_HIGH && g > COLOR_HIGH && b > COLOR_HIGH &&
-      abs(r - g) < 60 && abs(g - b) < 60 && abs(r - b) < 60) {
-    return "WEISS";
+
+  struct HSV { float h; float s; float v; };
+  auto toHsv = [](int ri, int gi, int bi) -> HSV {
+    float rf = ri / 255.0f, gf = gi / 255.0f, bf = bi / 255.0f;
+    float cmax = rf > gf ? (rf > bf ? rf : bf) : (gf > bf ? gf : bf);
+    float cmin = rf < gf ? (rf < bf ? rf : bf) : (gf < bf ? gf : bf);
+    float delta = cmax - cmin;
+    HSV o;
+    o.v = cmax;
+    o.s = (cmax > 0.0001f) ? (delta / cmax) : 0.0f;
+    if (delta < 0.0001f) { o.h = 0.0f; return o; }
+    if (cmax == rf) {
+      o.h = 60.0f * fmodf((gf - bf) / delta, 6.0f);
+      if (o.h < 0) o.h += 360.0f;
+    } else if (cmax == gf) {
+      o.h = 60.0f * ((bf - rf) / delta + 2.0f);
+    } else {
+      o.h = 60.0f * ((rf - gf) / delta + 4.0f);
+    }
+    return o;
+  };
+  auto hueDist = [](float a, float b) -> float {
+    float d = fabsf(a - b);
+    if (d > 180.0f) d = 360.0f - d;
+    return d;
+  };
+
+  HSV cur = toHsv(r, g, b);
+  if (cur.v < 0.15f) return "SCHWARZ";
+  if (cur.s < 0.15f && cur.v > 0.6f) return "WEISS";
+
+  struct Cand { const char* name; const ColorRef* ref; };
+  const Cand cands[] = {
+    { "ROT",   &config.calRot   },
+    { "GELB",  &config.calGelb  },
+    { "GRUEN", &config.calGruen },
+    { "BLAU",  &config.calBlau  },
+  };
+  const char* bestName = nullptr;
+  float      bestDist  = 1e9f;
+  for (const auto& c : cands) {
+    if (!c.ref->calibrated) continue;
+    HSV ref = toHsv(c.ref->r, c.ref->g, c.ref->b);
+    if (ref.s < 0.10f) continue;
+    float d = hueDist(cur.h, ref.h) + 0.3f * fabsf(cur.s - ref.s) * 50.0f;
+    if (d < bestDist) { bestDist = d; bestName = c.name; }
   }
-  int maxC = r > g ? (r > b ? r : b) : (g > b ? g : b);
-  if (maxC < 50) return "UNBEKANNT";
-  // Gelb: R und G beide deutlich hoeher als B, R und G aehnlich hoch.
-  // Schwellen bewusst locker, damit auch dunklere / blaustichige Gelbtoene erkannt werden.
-  if (r > 70 && g > 70 && b < 100 && r > b * 1.3f && g > b * 1.3f && abs(r - g) < 110) return "GELB";
-  if (r > g * RATIO_RED && r > b * RATIO_RED) return "ROT";
-  if (g > r * RATIO_GB && g > b * RATIO_GB) return "GRUEN";
-  if (b > r * RATIO_GB && b > g * RATIO_GB) return "BLAU";
+
+  if (bestName) {
+    if (bestDist > 35.0f) return "UNBEKANNT";
+    return bestName;
+  }
+
+  // Keine Farbe kalibriert -> Default-Hue-Heuristik als Fallback.
+  float h = cur.h;
+  if (h < 15.0f || h >= 345.0f) return "ROT";
+  if (h < 70.0f)  return "GELB";
+  if (h < 170.0f) return "GRUEN";
+  if (h < 260.0f) return "BLAU";
   return "UNBEKANNT";
 }
 

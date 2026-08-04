@@ -49,10 +49,18 @@ void memoryShowSequence() {
 
 void memoryStart(uint8_t startLen) {
   if (memoryActive) return;
-  memoryLen = startLen;
-  if (memoryLen > MEMORY_MAX_LEN) memoryLen = MEMORY_MAX_LEN;
-  for (uint8_t i = 0; i < memoryLen; i++) {
-    memorySeq[i] = random(0, 4);
+  if (startLen > MEMORY_MAX_LEN) startLen = MEMORY_MAX_LEN;
+  // Simon-Says: Wenn die neue Laenge groesser als die bisherige ist (und es
+  // schon eine Sequenz gibt), nur EINEN neuen Schritt anhaengen. Die
+  // vorherigen N-1 Bewegungen bleiben unveraendert.
+  if (startLen > memoryLen && memoryLen > 0) {
+    memorySeq[memoryLen] = random(0, 4);
+    memoryLen = startLen;
+  } else {
+    memoryLen = startLen;
+    for (uint8_t i = 0; i < memoryLen; i++) {
+      memorySeq[i] = random(0, 4);
+    }
   }
   memoryInputIdx = 0;
   memoryActive = true;

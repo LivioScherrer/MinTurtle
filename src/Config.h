@@ -16,6 +16,11 @@ constexpr float    ACCEL_DEFAULT     = 5000.0f;
 constexpr float    ACCEL_MIN         = 100.0f;
 constexpr float    ACCEL_MAX         = 10000.0f;
 
+struct ColorRef {
+  uint8_t r = 0, g = 0, b = 0;
+  bool    calibrated = false;
+};
+
 struct Config {
   float maxSpeed      = 380.0f;
   float turnFactor    = 0.25f;
@@ -28,6 +33,10 @@ struct Config {
   int32_t quizTurnSteps     = 88;    // Schritte pro 90-Grad-Drehung (354/4 empirisch, je Rad)
   uint16_t blackR = 152, blackG = 137, blackB = 98;
   uint16_t whiteR = 4143, whiteG = 4258, whiteB = 3036;
+  ColorRef calRot;
+  ColorRef calGelb;
+  ColorRef calGruen;
+  ColorRef calBlau;
 };
 
 extern Config config;
@@ -41,5 +50,7 @@ void configValidate();
 void configSaveField(const char* key, float value);
 void configSaveInt(const char* key, int32_t value);
 void configSaveUShort(const char* key, uint16_t value);
+void configSaveUChar(const char* key, uint8_t value);
+void configSaveBool(const char* key, bool value);
 // Sanftes Speichern wenn dirty
 void configSaveIfDirty();
