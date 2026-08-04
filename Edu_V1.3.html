@@ -623,6 +623,194 @@
     .mesh-section-title{font-family:'Caveat',cursive;font-size:22px;font-weight:700;margin-bottom:8px;color:var(--ink)}
 
     /* =========================================================
+       PROGRAMMIEREN (Code-Bausteine, Drag & Drop)
+       ========================================================= */
+    .prog-section-label{
+      font-family:'Caveat',cursive;font-size:22px;font-weight:700;
+      color:var(--ink-soft);margin:20px 0 10px;text-align:left;line-height:1;
+    }
+    .prog-hint{font-size:13px;color:var(--ink-mute);font-weight:500;margin-left:8px;font-family:inherit}
+
+    /* Palette */
+    .prog-palette{
+      display:flex;flex-wrap:wrap;gap:10px;justify-content:center;
+      padding:12px;border:2.5px dashed var(--ink-soft);border-radius:14px;
+      background:rgba(255,255,255,.5);
+      transition:background .2s,outline .2s,border-color .2s;
+    }
+    .prog-palette.trash-over{background:#fbd2d2;border-color:var(--red-400)}
+
+    /* Baustein */
+    .prog-blk{position:relative}
+    .prog-blk-head{
+      display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      padding:11px 14px;border-radius:14px 16px 14px 16px;
+      border:var(--ink-line) solid var(--ink);
+      background:var(--teal-200);color:var(--ink);
+      font-size:15px;font-weight:700;
+      box-shadow:var(--shadow-sketch);
+      cursor:grab;user-select:none;touch-action:none;
+    }
+    .prog-blk-head:active{cursor:grabbing}
+    .prog-blk-loop > .prog-blk-head{background:var(--amber-200)}
+    .prog-blk-value > .prog-blk-head{background:var(--amber-200)}
+    .prog-blk-ic{font-family:'Caveat','Marker Felt',cursive;font-size:26px;line-height:1}
+    .prog-blk-label{font-weight:700}
+
+    /* Wert-Slot (entweder Input oder eingebetteter Block) */
+    .prog-slot{
+      display:inline-flex;align-items:center;gap:4px;
+      min-height:32px;padding:0 2px;
+      border-radius:8px;
+      transition:background .2s,outline .2s;
+    }
+    .prog-slot.drag-over{background:rgba(23,143,118,.12);outline:2px dashed var(--teal-500);outline-offset:1px}
+    .prog-slot-empty{color:var(--ink-mute);font-size:12px;font-style:italic}
+
+    /* Eingebetteter Block im Slot (z.B. "bis ROT") – gelb wie die Wert-Bausteine */
+    .prog-embed{
+      display:inline-flex;align-items:center;gap:4px;
+      padding:1px 4px 1px 6px;
+      background:var(--amber-100);border:2px solid var(--ink);border-radius:8px;
+      font-size:14px;font-weight:700;cursor:grab;touch-action:none;
+      box-shadow:1.5px 1.5px 0 var(--ink);
+      font-family:inherit;line-height:1.2;
+    }
+    .prog-embed:active{cursor:grabbing}
+    .prog-embed-ic{font-family:'Caveat',cursive;font-size:18px;line-height:1;color:var(--ink-soft)}
+    .prog-embed-name{font-family:'Caveat',cursive;font-size:18px;font-weight:700}
+    .prog-embed-chip{width:16px;height:16px;border-width:2px;box-shadow:none;cursor:pointer}
+    .prog-embed-chip:hover{transform:scale(1.1)}
+    .prog-embed-x{
+      display:inline-flex;align-items:center;justify-content:center;
+      width:18px;height:18px;border-radius:50%;
+      background:var(--ink);color:#fff;font-size:12px;font-weight:700;
+      cursor:pointer;line-height:1;margin-left:2px;touch-action:auto;
+    }
+    .prog-embed-x:hover{background:var(--red-500)}
+    .prog-num{
+      width:66px;padding:5px 6px;text-align:center;
+      border:2.5px solid var(--ink);border-radius:10px;background:#fff;
+      font-family:'Caveat',cursive;font-size:22px;font-weight:700;color:var(--ink);
+      outline:none;cursor:text;touch-action:auto;
+      box-shadow:inset 1px 1px 0 rgba(0,0,0,.08);
+      -moz-appearance:textfield;
+    }
+    .prog-num::-webkit-outer-spin-button,.prog-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    .prog-num:focus{background:#fffdf0;box-shadow:0 0 0 3px rgba(23,143,118,.35)}
+    .prog-num-static{
+      min-width:40px;padding:2px 10px;text-align:center;display:inline-block;
+      border:2.5px solid var(--ink);border-radius:10px;background:#fff;
+      font-family:'Caveat',cursive;font-size:21px;font-weight:700;
+    }
+    .prog-unit{font-size:14px;font-weight:700;color:var(--ink-soft)}
+    .prog-chip{
+      width:26px;height:26px;border-radius:50%;flex-shrink:0;
+      border:3px solid var(--ink);cursor:pointer;display:inline-block;
+      box-shadow:2px 2px 0 var(--ink);
+      transition:transform .12s;touch-action:auto;
+    }
+    .prog-chip:hover{transform:scale(1.15)}
+    .prog-chip-static{cursor:default}
+    .prog-chip-static:hover{transform:none}
+    .prog-item-x{
+      width:30px;height:30px;border-radius:8px;flex-shrink:0;margin-left:auto;
+      border:2px solid var(--ink);background:#fff;color:var(--ink-mute);
+      font-family:inherit;font-size:17px;font-weight:700;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;line-height:1;
+      transition:background .15s,transform .12s;touch-action:auto;
+    }
+    .prog-item-x:hover{background:#fbd2d2;transform:scale(1.08)}
+
+    /* Loop-Body: klar erkennbare Drop-Box (Scratch-C-Frame) */
+    .prog-blk-body{
+      margin:6px 0 2px 18px;padding:10px;
+      border:2.5px dashed var(--ink-soft);border-radius:0 0 12px 12px;
+      display:flex;flex-direction:column;gap:8px;min-height:54px;
+      background:rgba(255,253,244,.55);
+      transition:background .2s,border-color .2s,outline .2s;
+    }
+    .prog-blk-body.drag-over{background:rgba(232,156,30,.2);border-color:var(--amber-500)}
+    /* Ganze Loop leuchtet, wenn ein Baustein drueber ist */
+    .prog-blk-loop.target-loop > .prog-blk-head{
+      background:var(--amber-300);
+      box-shadow:var(--shadow-sketch),0 0 0 3px var(--amber-500);
+    }
+    .prog-body-placeholder{
+      display:flex;align-items:center;justify-content:center;gap:10px;
+      padding:8px 6px;color:var(--ink-mute);
+      font-size:14px;font-weight:600;font-style:italic;
+    }
+    .prog-body-plus{
+      width:30px;height:30px;border-radius:50%;flex-shrink:0;
+      border:2.5px dashed var(--ink-soft);
+      display:flex;align-items:center;justify-content:center;
+      font-family:'Caveat',cursive;font-size:24px;font-weight:700;color:var(--ink-mute);
+      line-height:1;
+    }
+
+    /* Programm-Workspace: gross, gepunktet, einladend */
+    .prog-strip{
+      display:flex;flex-direction:column;gap:10px;
+      min-height:170px;padding:14px;margin-bottom:20px;
+      border:3px dashed var(--ink-soft);border-radius:18px;text-align:left;
+      background-color:#fffdf4;
+      background-image:radial-gradient(circle, rgba(60,40,20,.08) 1px, transparent 1.5px);
+      background-size:16px 16px;
+      touch-action:pan-y;
+      transition:border-color .2s,background-color .2s,box-shadow .2s;
+    }
+    .prog-strip.drag-over{
+      border-color:var(--teal-500);
+      background-color:rgba(23,143,118,.06);
+      box-shadow:inset 0 0 0 4px rgba(23,143,118,.15);
+    }
+    .prog-empty-big{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:6px;padding:34px 12px;color:var(--ink-mute);text-align:center;
+    }
+    .prog-empty-arrow{
+      font-family:'Caveat','Marker Felt',cursive;font-size:48px;line-height:1;
+      color:var(--teal-500);animation:bobUp 1.4s ease-in-out infinite;
+      text-shadow:2px 2px 0 var(--ink);
+    }
+    .prog-empty-title{
+      font-family:'Caveat','Marker Felt',cursive;font-size:26px;font-weight:700;
+      color:var(--ink-soft);line-height:1.1;
+    }
+    .prog-empty-sub{font-size:14px;font-weight:600;color:var(--ink-mute)}
+
+    .prog-drop-here{
+      height:8px;border-radius:4px;background:var(--teal-500);
+      box-shadow:0 0 0 3px rgba(23,143,118,.3);
+      animation:bobUp .8s ease-in-out infinite;margin:2px 0;
+    }
+    .prog-ghost{
+      position:fixed;z-index:999;pointer-events:none;opacity:.95;
+      transform:rotate(-3deg) scale(1.04);width:max-content;max-width:80vw;
+      filter:drop-shadow(4px 4px 0 rgba(31,26,20,.35));
+    }
+    .prog-src{opacity:.3}
+
+    /* Lauf-Highlight */
+    .prog-blk.running > .prog-blk-head{background:var(--amber-300);animation:wiggle .5s infinite}
+    .prog-blk.running-sub > .prog-blk-head{background:var(--amber-200)}
+    .prog-blk-body .prog-blk.running > .prog-blk-head{background:var(--amber-300)}
+
+    /* Sperrung waehrend das Programm laeuft */
+    .prog-locked .prog-palette,.prog-locked .prog-strip{opacity:.7}
+    .prog-locked .prog-blk-head{cursor:default}
+    .prog-locked .prog-num,.prog-locked .prog-chip,.prog-locked .prog-item-x{pointer-events:none}
+    .prog-locked .prog-item-x{opacity:.3}
+
+    /* Zwei-Spalten-Layout: Bausteine links, Programm rechts */
+    .prog-cols{display:flex;flex-direction:column;gap:18px}
+    .prog-col{display:flex;flex-direction:column;gap:10px}
+    .prog-col-palette .prog-palette{flex:0 0 auto}
+    .prog-col-prog .prog-strip{flex:1}
+    .prog-buttons{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:auto}
+
+    /* =========================================================
        RESPONSIVE
        ========================================================= */
     @media (min-width:640px){
@@ -631,6 +819,15 @@
       .arena{padding:36px 34px}
       .key-grid{grid-template-columns:repeat(3,82px);gap:14px}
       .key-btn{height:82px}
+    }
+    @media (min-width:880px){
+      #view-prog .game-body{max-width:1000px}
+      .prog-cols{
+        display:grid;grid-template-columns:minmax(200px,240px) 1fr;
+        gap:24px;align-items:stretch;
+      }
+      .prog-col-prog .prog-strip{min-height:340px}
+      .prog-cols .prog-section-label{margin-top:0}
     }
 
     /* =========================================================
@@ -724,6 +921,11 @@
       <div class="tile" data-view="drive">
         <div class="tile-ic" style="background:#fdf3df;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1f1a14" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></div>
         <div><div class="tile-ttl">Frei Fahren</div><div class="tile-desc">Steuern mit WASD oder Touch</div></div>
+      </div>
+      <div class="cat-header"><span>Programmieren</span></div>
+      <div class="tile" data-view="prog">
+        <div class="tile-ic" style="background:#fbe6b3;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a8650a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="8" y="13" width="8" height="8" rx="2"/></svg></div>
+        <div><div class="tile-ttl">Code-Bausteine</div><div class="tile-desc">Roboter mit Blöcken programmieren</div></div>
       </div>
       <div class="cat-header"><span>Autonom</span></div>
       <div class="tile" data-view="line">
@@ -934,6 +1136,36 @@
     <button type="button" class="help-fab" onclick="openHelp('memorySteps')" title="Anleitung">?</button>
   </div>
 
+  <!-- PROGRAMMIEREN (Code-Bausteine) -->
+  <div id="view-prog" class="view game-view">
+    <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button><div class="gv-title">Code-Bausteine</div><div class="conn-dot" id="progConnDot"></div></div>
+    <div class="game-body"><div class="arena">
+      <div class="game-title">Code-Bausteine</div>
+      <div class="game-desc">Bausteine ziehen, Zahlen ändern, Start drücken – wie bei Scratch. <b>Sobald ROT gesehen wird, hält der Roboter sofort an.</b></div>
+      <div class="color-preview-wrap">
+        <div id="progColorPreview"></div>
+        <div><div class="color-preview-label">Farb-Sensor</div><div id="progColorName">--</div></div>
+      </div>
+      <div class="prog-cols">
+        <div class="prog-col prog-col-palette">
+          <div class="prog-section-label">Bausteine<span class="prog-hint">zurück = löschen</span></div>
+          <div class="prog-palette" id="progPalette"></div>
+        </div>
+        <div class="prog-col prog-col-prog">
+          <div class="prog-section-label">Dein Programm<span class="prog-hint" id="progHint"></span></div>
+          <div class="prog-strip" id="progStrip"></div>
+          <div class="prog-buttons">
+            <button class="btn btn-grey btn-lg" id="btnProgClear">Leeren</button>
+            <button class="btn btn-danger btn-lg" id="btnProgStop">STOP</button>
+            <button class="btn btn-primary btn-lg" id="btnProgRun">&#9654; Start</button>
+          </div>
+        </div>
+      </div>
+      <div class="feedback-msg" id="progFeedback"></div>
+    </div></div>
+    <button type="button" class="help-fab" onclick="openHelp('progSteps')" title="Anleitung">?</button>
+  </div>
+
   <script>
     // ==========================================
     // BLUETOOTH CORE
@@ -974,6 +1206,11 @@
           if (lineEl) lineEl.style.background = 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
           const lineNm = document.getElementById('lineColorName');
           if (lineNm) lineNm.textContent = d[3];
+          // Programmieren-Anzeige
+          const progEl = document.getElementById('progColorPreview');
+          if (progEl) progEl.style.background = 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
+          const progNm = document.getElementById('progColorName');
+          if (progNm) progNm.textContent = d[3];
         }
       } else if (msg.startsWith('RACE:')) {
         handleRaceMessage(msg);
@@ -983,6 +1220,8 @@
         handleKnobelnMessage(msg);
       } else if (msg.startsWith('MEMORY:')) {
         handleMemoryMessage(msg);
+      } else if (msg.startsWith('PROG:')) {
+        handleProgMessage(msg);
       } else if (msg.startsWith('LINE:')) {
         handleLineMessage(msg);
       }
@@ -1262,9 +1501,10 @@
       const el = document.getElementById('view-' + viewId);
       if (el) el.classList.add('active');
       // Step-State auf 0 zuruecksetzen, falls die View eine Anleitung hat
-      const viewToSteps = { drive:'driveSteps', mathrace:'raceSteps', colorquiz:'cqSteps', knobeln:'knSteps', memory:'memorySteps', line:'lineSteps' };
+      const viewToSteps = { drive:'driveSteps', mathrace:'raceSteps', colorquiz:'cqSteps', knobeln:'knSteps', memory:'memorySteps', line:'lineSteps', prog:'progSteps' };
       if (viewToSteps[viewId]) STEP_STATE[viewToSteps[viewId]] = 0;
       if (viewId === 'memory') memReset();
+      if (viewId !== 'prog' && progRunning) { sendCommand('PROG:STOP'); }
       if (viewId === 'line') {
         // Beim Verlassen des Linie-Views: aktiven Lauf stoppen
         if (lineRunning) { sendCommand('LINE:STOP'); }
@@ -1282,7 +1522,7 @@
     // HELP-ICON (FAB) + ANLEITUNGS-MODAL
     // ==========================================
     const STEP_STATE = {
-      driveSteps: 0, raceSteps: 0, cqSteps: 0, knSteps: 0, memorySteps: 0, lineSteps: 0
+      driveSteps: 0, raceSteps: 0, cqSteps: 0, knSteps: 0, memorySteps: 0, lineSteps: 0, progSteps: 0
     };
     const STEP_TITLES = {
       driveSteps: 'Frei Fahren',
@@ -1290,7 +1530,8 @@
       cqSteps: 'Korrigieren',
       knSteps: 'Pfeil-Knobeln',
       memorySteps: 'Memory',
-      lineSteps: 'Linie Folgen'
+      lineSteps: 'Linie Folgen',
+      progSteps: 'Code-Bausteine'
     };
 
     function escapeHtml(s) {
@@ -1385,6 +1626,12 @@
         { title: 'Roboter auf Linie', detailHtml: 'Sensor im Lauf über der Linie' },
         { title: 'Start drücken', detailHtml: 'Folgt selbstständig der Linie' },
         { title: 'STOP zum Anhalten' }
+      ],
+      progSteps: [
+        { title: 'Bausteine ziehen', detailHtml: 'Aus der Palette ins Programm ziehen' },
+        { title: 'Zahlen einstellen', detailHtml: 'cm, Grad, Sekunden, Anzahl direkt im Baustein' },
+        { title: 'Bis-Farbe-Block', detailHtml: 'Farb-Punkt antippen wechselt die Farbe. Bausteine hineinziehen.' },
+        { title: 'Start drücken', detailHtml: 'Roboter führt das Programm aus' }
       ]
     };
 
@@ -1984,6 +2231,687 @@
     document.getElementById('btnLineStop').addEventListener('click', () => {
       sendCommand('LINE:STOP');
     });
+
+    // ==========================================
+    // PROGRAMMIEREN (Code-Bausteine, Drag & Drop)
+    // ==========================================
+    const PROG_COLORS = [
+      { name: 'ROT',   bg: '#d63a3a' },
+      { name: 'GELB',  bg: '#e89c1e' },
+      { name: 'GRUEN', bg: '#1ea36b' },
+      { name: 'BLAU',  bg: '#2c6dd2' }
+    ];
+    const PROG_DEFS = {
+      F: { ic: '\u2191', label: 'Vorwärts',        unit: 'cm',  def: 10, min: 1, max: 50,  loop: false, slot: 'num'  },
+      B: { ic: '\u2193', label: 'Rückwärts',       unit: 'cm',  def: 10, min: 1, max: 50,  loop: false, slot: 'num'  },
+      L: { ic: '\u21B6', label: 'Drehe links',     unit: '°',   def: 90, min: 5, max: 360, loop: false, slot: 'num'  },
+      R: { ic: '\u21B7', label: 'Drehe rechts',    unit: '°',   def: 90, min: 5, max: 360, loop: false, slot: 'num'  },
+      W: { ic: '\u23F8', label: 'Warte',           unit: 's',   def: 1,  min: 1, max: 10,  loop: false, slot: 'bool' },
+      U: { ic: '\u21BB', label: 'Wiederhole',      unit: 'mal', def: 2,  min: 1, max: 10,  loop: true,  slot: 'bool' },
+      C: { ic: '\u2691', label: 'Wiederhole bis',  unit: '',    def: 0,  min: 0, max: 0,   loop: true,  slot: 'color' },
+      // Wert-Block: kann in num/bool-Slots gezogen werden
+      E: { ic: '\u2261', label: 'bis',              unit: '',    def: 0,  min: 0, max: 3,   loop: false, slot: null,  isValue: true, color: true }
+    };
+    const PROG_MAX_STEPS = 20;
+    const PROG_LOOP_MAX  = 8;
+    const PROG_MAX_ENC   = 140;   // kodiertes Programm (Firmware-Puffer: 160)
+
+    let progBlocks = [];      // [{op,val} | {op:'U',val,body:[...]} | {op:'C',color,body:[...]}]
+    let progRunning = false;
+    let progRunStep = -1, progRunSub = -1;
+    let progPaletteEColor = 0;   // persistente Farbe des E-Blocks in der Palette
+
+    // ---------- Baustein-DOM ----------
+    function progNumInput(b) {
+      const def = PROG_DEFS[b.op];
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.className = 'prog-num';
+      inp.min = def.min; inp.max = def.max; inp.value = b.val;
+      inp.addEventListener('pointerdown', e => e.stopPropagation());
+      inp.addEventListener('click', e => e.stopPropagation());
+      inp.addEventListener('change', () => {
+        let v = parseInt(inp.value);
+        if (isNaN(v)) v = def.def;
+        v = Math.max(def.min, Math.min(def.max, v));
+        inp.value = v;
+        b.val = v;
+      });
+      return inp;
+    }
+
+    // Eingebetteter E-Block (im Slot). Kompakt, drag-faehig, mit x.
+    // data: {op:'E', color}
+    function progBuildEmbed(data, ctx) {
+      const el = document.createElement('span');
+      el.className = 'prog-embed';
+      el.dataset.op = data.op;
+      const ic = document.createElement('span');
+      ic.className = 'prog-embed-ic';
+      ic.textContent = PROG_DEFS.E.ic;
+      const chip = document.createElement('span');
+      chip.className = 'prog-chip prog-embed-chip';
+      chip.style.background = PROG_COLORS[data.color].bg;
+      chip.title = 'Farbe wechseln';
+      chip.addEventListener('pointerdown', e => e.stopPropagation());
+      chip.addEventListener('click', e => {
+        e.stopPropagation();
+        if (progRunning) return;
+        data.color = (data.color + 1) % PROG_COLORS.length;
+        progRender();
+      });
+      const nm = document.createElement('span');
+      nm.className = 'prog-embed-name';
+      nm.textContent = PROG_COLORS[data.color].name;
+      el.appendChild(ic); el.appendChild(chip); el.appendChild(nm);
+      if (ctx.where !== 'palette') {
+        const x = document.createElement('span');
+        x.className = 'prog-embed-x';
+        x.textContent = '\u00D7';
+        x.title = 'Wieder Zahl eingeben';
+        x.addEventListener('pointerdown', e => e.stopPropagation());
+        x.addEventListener('click', e => {
+          e.stopPropagation();
+          if (progRunning) return;
+          // Eingebetteten Block loeschen -> Input zurueck
+          if (ctx.target && ctx.target.kind === 'slot') ctx.target.clear();
+          else if (ctx.parentKey) {
+            const parent = ctx.parentRef();
+            delete parent[ctx.parentKey];
+          }
+          progRender();
+        });
+        el.appendChild(x);
+        // Drag starten
+        el.addEventListener('pointerdown', e => {
+          if (progRunning) return;
+          if (e.target.classList.contains('prog-embed-x')) return;
+          progDragStart(e, { op: data.op, color: data.color, val: 0, body: null }, ctx.dragCtx);
+        });
+      } else {
+        el.addEventListener('pointerdown', e => {
+          if (progRunning) return;
+          progDragStart(e, { op: data.op, color: data.color, val: 0, body: null }, { where: 'palette' });
+        });
+      }
+      return el;
+    }
+
+    // Wert-Slot: enthaelt entweder eine Zahl (Input) oder einen eingebetteten Block
+    // b: Block, dessen Slot gerendert wird (z.B. {op:'W', val:2, embedded:{op:'E', color:2}})
+    // slot: 'num' | 'bool'
+    // ctx: Block-Context (prog/body/palette)
+    // slotKey: 'val' oder 'embedded' (welches Feld im Block-Datensatz)
+    function progBuildSlot(b, slot, ctx) {
+      const def = PROG_DEFS[b.op];
+      const wrap = document.createElement('span');
+      wrap.className = 'prog-slot prog-slot-' + slot;
+      if (ctx.where !== 'palette') wrap.dataset.slotOwner = JSON.stringify({where:ctx.where, idx:ctx.idx, pidx:ctx.pidx, bidx:ctx.bidx, key: b.embedded ? 'embedded' : 'val'});
+      if (b.embedded) {
+        // Eingebetteten Block rendern, mit Kontext zum Loeschen
+        const embedCtx = {
+          where: 'embed',
+          parentRef: () => b,
+          parentKey: 'embedded',
+          dragCtx: { where: 'embed', parentRef: () => b, parentKey: 'embedded' }
+        };
+        const embed = progBuildEmbed(b.embedded, embedCtx);
+        wrap.appendChild(embed);
+        // Drop-Target auch im Slot-Container
+        wrap.addEventListener('pointerdown', e => {
+          // nur Drag starten wenn nicht der embed-X button
+          if (e.target.classList.contains('prog-embed-x') || e.target.classList.contains('prog-embed')) return;
+        });
+      } else {
+        // Input rendern
+        if (ctx.where === 'palette') {
+          const st = document.createElement('span');
+          st.className = 'prog-num-static';
+          st.textContent = def.def;
+          wrap.appendChild(st);
+        } else {
+          wrap.appendChild(progNumInput(b));
+        }
+      }
+      return wrap;
+    }
+
+    // Baut den Kopf eines Bausteins (Icon + Beschriftung + Parameter).
+    // ctx: {where:'palette'} | {where:'prog',idx} | {where:'body',pidx,bidx}
+    function progBuildHead(b, ctx) {
+      const def = PROG_DEFS[b.op];
+      const head = document.createElement('div');
+      head.className = 'prog-blk-head';
+
+      const ic = document.createElement('span');
+      ic.className = 'prog-blk-ic';
+      ic.textContent = def.ic;
+      head.appendChild(ic);
+
+      const lb = document.createElement('span');
+      lb.className = 'prog-blk-label';
+      lb.textContent = def.label;
+      head.appendChild(lb);
+
+      // E-Block (Wert): nur Chip + Name, kein Slot
+      if (b.op === 'E') {
+        // Im Palette-Kontext Farbe in progPaletteEColor speichern (persistent)
+        const isPalette = (ctx.where === 'palette');
+        if (isPalette) b.color = progPaletteEColor;
+        const chip = document.createElement('span');
+        chip.className = 'prog-chip';
+        chip.style.background = PROG_COLORS[b.color].bg;
+        chip.addEventListener('pointerdown', e => e.stopPropagation());
+        chip.addEventListener('click', e => {
+          e.stopPropagation();
+          if (progRunning) return;
+          b.color = (b.color + 1) % PROG_COLORS.length;
+          if (isPalette) progPaletteEColor = b.color;
+          progRender();
+        });
+        head.appendChild(chip);
+        const cn = document.createElement('span');
+        cn.className = 'prog-unit';
+        cn.textContent = PROG_COLORS[b.color].name;
+        head.appendChild(cn);
+      } else if (b.op === 'C') {
+        // C-Block: Farb-Chip direkt im Header (kein Slot)
+        const chip = document.createElement('span');
+        chip.className = 'prog-chip';
+        chip.style.background = PROG_COLORS[b.color].bg;
+        chip.addEventListener('pointerdown', e => e.stopPropagation());
+        chip.addEventListener('click', e => {
+          e.stopPropagation();
+          if (progRunning) return;
+          b.color = (b.color + 1) % PROG_COLORS.length;
+          progRender();
+        });
+        head.appendChild(chip);
+        const cn = document.createElement('span');
+        cn.className = 'prog-unit';
+        cn.textContent = PROG_COLORS[b.color].name;
+        head.appendChild(cn);
+      } else if (def.slot) {
+        // Wert-Slot (num/bool)
+        head.appendChild(progBuildSlot(b, def.slot, ctx));
+        if (def.unit) {
+          const un = document.createElement('span');
+          un.className = 'prog-unit';
+          un.textContent = def.unit;
+          head.appendChild(un);
+        }
+      }
+
+      if (ctx.where !== 'palette') {
+        const x = document.createElement('button');
+        x.className = 'prog-item-x';
+        x.textContent = '×';
+        x.title = 'Entfernen';
+        x.addEventListener('pointerdown', e => e.stopPropagation());
+        x.addEventListener('click', e => {
+          e.stopPropagation();
+          if (progRunning) return;
+          if (ctx.where === 'prog') progBlocks.splice(ctx.idx, 1);
+          else if (ctx.where === 'body') progBlocks[ctx.pidx].body.splice(ctx.bidx, 1);
+          progRender();
+        });
+        head.appendChild(x);
+
+        head.addEventListener('pointerdown', e => {
+          if (progRunning) return;
+          // Klicks auf interaktive Kinder nicht als Drag werten
+          if (e.target.closest('.prog-num,.prog-chip,.prog-embed,.prog-embed-x,.prog-item-x')) return;
+          progDragStart(e, b, ctx);
+        });
+      } else {
+        head.addEventListener('pointerdown', e => {
+          if (progRunning) return;
+          progDragStart(e, b, { where: 'palette' });
+        });
+      }
+      return head;
+    }
+
+    // Ganzer Baustein inkl. Loop-Body
+    function progBuildBlock(b, ctx) {
+      const def = PROG_DEFS[b.op];
+      const wrap = document.createElement('div');
+      let cls = 'prog-blk';
+      if (def.loop) cls += ' prog-blk-loop';
+      if (def.isValue) cls += ' prog-blk-value';
+      wrap.className = cls;
+      if (progRunning && ctx.where === 'prog' && progRunStep === ctx.idx) {
+        wrap.classList.add(progRunSub >= 0 ? 'running-sub' : 'running');
+      }
+      wrap.appendChild(progBuildHead(b, ctx));
+
+      if (def.loop && ctx.where !== 'palette') {
+        const body = document.createElement('div');
+        body.className = 'prog-blk-body';
+        if (typeof ctx.idx === 'number') body.dataset.pidx = ctx.idx;
+        if (b.body.length === 0) {
+          const ph = document.createElement('div');
+          ph.className = 'prog-body-placeholder';
+          const plus = document.createElement('span');
+          plus.className = 'prog-body-plus';
+          plus.textContent = '+';
+          const txt = document.createElement('span');
+          txt.textContent = 'Bausteine hierher ziehen';
+          ph.appendChild(plus); ph.appendChild(txt);
+          body.appendChild(ph);
+        }
+        b.body.forEach((child, j) => {
+          const cel = progBuildBlock(child, { where: 'body', pidx: ctx.idx, bidx: j });
+          if (progRunning && progRunStep === ctx.idx && progRunSub === j) cel.classList.add('running');
+          body.appendChild(cel);
+        });
+        wrap.appendChild(body);
+      }
+      return wrap;
+    }
+
+    // ---------- Palette ----------
+    function progBuildPalette() {
+      const pal = document.getElementById('progPalette');
+      pal.innerHTML = '';
+      ['F', 'B', 'L', 'R', 'W', 'U', 'C', 'E'].forEach(op => {
+        const def = PROG_DEFS[op];
+        const b = { op: op, val: def.def, color: 0, body: [] };
+        pal.appendChild(progBuildBlock(b, { where: 'palette' }));
+      });
+    }
+
+    // ---------- Render ----------
+    function progHint(text) {
+      const el = document.getElementById('progHint');
+      if (el) el.textContent = text;
+    }
+
+    function progRender() {
+      // Palette neu rendern, damit Klicks auf den E-Chip sichtbar werden
+      progBuildPalette();
+      const strip = document.getElementById('progStrip');
+      strip.innerHTML = '';
+      if (progBlocks.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'prog-empty-big';
+        const arrow = document.createElement('div');
+        arrow.className = 'prog-empty-arrow';
+        arrow.textContent = '\u2193';
+        const title = document.createElement('div');
+        title.className = 'prog-empty-title';
+        title.textContent = 'Ziehe Bausteine hierher';
+        const sub = document.createElement('div');
+        sub.className = 'prog-empty-sub';
+        sub.textContent = '…und baue dein Programm';
+        empty.appendChild(arrow); empty.appendChild(title); empty.appendChild(sub);
+        strip.appendChild(empty);
+        progHint('');
+      } else {
+        progBlocks.forEach((b, i) => {
+          strip.appendChild(progBuildBlock(b, { where: 'prog', idx: i }));
+        });
+        progHint(progBlocks.length + (progBlocks.length === 1 ? ' Baustein' : ' Bausteine'));
+      }
+    }
+
+    // ---------- Drag & Drop (Pointer-basiert: Maus + Touch) ----------
+    let progDrag = null;
+    // { op, val, color, body, from:{...}, ghost, srcEl, startX, startY, active, target }
+    // target = { kind:'strip', idx } | { kind:'body', pidx, idx } | { kind:'palette' } | null
+    let progDropLine = null;
+
+    function progDragStart(e, b, ctx) {
+      if (progDrag) return;
+      e.preventDefault();
+      // Bei embed-Kontext: merke, woher das eingebettete Element stammt
+      const from = Object.assign({}, ctx);
+      if (ctx.where === 'embed') {
+        from.embedRef = ctx.parentRef().embedded;
+        from.parentRef = ctx.parentRef;
+        from.parentKey = ctx.parentKey;
+      }
+      progDrag = {
+        op: b.op,
+        val: b.val,
+        color: b.color,
+        body: b.body ? JSON.parse(JSON.stringify(b.body)) : null,
+        from: from,
+        startX: e.clientX,
+        startY: e.clientY,
+        active: false,
+        ghost: null,
+        srcEl: null,
+        target: null
+      };
+    }
+
+    function progDragActivate() {
+      const d = progDrag;
+      d.active = true;
+      // Ghost: kompakte Kopie des Baustein-Kopfs
+      const ghostBlk = progBuildBlock(
+        { op: d.op, val: d.val, color: d.color, body: [] },
+        { where: 'palette' }
+      );
+      d.ghost = document.createElement('div');
+      d.ghost.className = 'prog-ghost';
+      d.ghost.appendChild(ghostBlk);
+      document.body.appendChild(d.ghost);
+      // Quelle markieren (bei Move)
+      if (d.from.where === 'prog') {
+        const strip = document.getElementById('progStrip');
+        const els = strip.querySelectorAll(':scope > .prog-blk');
+        d.srcEl = els[d.from.idx] || null;
+      } else if (d.from.where === 'body') {
+        const bodies = document.querySelectorAll('.prog-blk-body[data-pidx="' + d.from.pidx + '"]');
+        if (bodies[0]) d.srcEl = bodies[0].querySelectorAll(':scope > .prog-blk')[d.from.bidx] || null;
+      }
+      if (d.srcEl) d.srcEl.classList.add('prog-src');
+      // Drop-Linie vorbereiten
+      if (!progDropLine) {
+        progDropLine = document.createElement('div');
+        progDropLine.className = 'prog-drop-here';
+      }
+    }
+
+    function progDragMoveGhost(e) {
+      if (!progDrag.ghost) return;
+      progDrag.ghost.style.left = (e.clientX + 12) + 'px';
+      progDrag.ghost.style.top = (e.clientY - 18) + 'px';
+    }
+
+    // Einfuege-Index im Container anhand der Y-Position
+    function progInsertIndex(container, y) {
+      const kids = Array.from(container.children).filter(c =>
+        c.classList.contains('prog-blk') || c.classList.contains('prog-body-empty') || c.classList.contains('prog-empty'));
+      for (let i = 0; i < kids.length; i++) {
+        const r = kids[i].getBoundingClientRect();
+        if (y < r.top + r.height / 2) return i;
+      }
+      return kids.length;
+    }
+
+    function progUpdateTarget(e) {
+      const d = progDrag;
+      d.target = null;
+      document.querySelectorAll('.prog-blk-body.drag-over').forEach(el => el.classList.remove('drag-over'));
+      document.querySelectorAll('.prog-blk-loop.target-loop').forEach(el => el.classList.remove('target-loop'));
+      document.querySelectorAll('.prog-slot.drag-over').forEach(el => el.classList.remove('drag-over'));
+      document.getElementById('progStrip').classList.remove('drag-over');
+      document.getElementById('progPalette').classList.remove('trash-over');
+      if (progDropLine && progDropLine.parentNode) progDropLine.parentNode.removeChild(progDropLine);
+
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      if (!under || !under.closest) return;
+      const isLoop = PROG_DEFS[d.op].loop;
+
+      // Auf Palette ablegen = loeschen
+      if (under.closest('#progPalette')) {
+        if (d.from.where !== 'palette') {
+          d.target = { kind: 'palette' };
+          document.getElementById('progPalette').classList.add('trash-over');
+        }
+        return;
+      }
+
+      // Wert-Slot als Drop-Zone (nur fuer E-Wert-Bloecke)
+      if (d.op === 'E' && !isLoop) {
+        const slotEl = under.closest('.prog-slot');
+        if (slotEl && slotEl.dataset.slotOwner) {
+          let info;
+          try { info = JSON.parse(slotEl.dataset.slotOwner); } catch (e) { info = null; }
+          if (info) {
+            // Nicht in den eigenen Slot droppen
+            if (!(d.from.where === 'embed' && d.from.parentRef().embedded === d.from.embedRef)) {
+              d.target = { kind: 'slot', info: info };
+              slotEl.classList.add('drag-over');
+              return;
+            }
+          }
+        }
+      }
+
+      // Ganze Loop (Header + Body) als Drop-Zone fuer einfache Bausteine (kein E)
+      if (d.op !== 'E' && !isLoop) {
+        const loopWrap = under.closest('.prog-blk-loop');
+        if (loopWrap) {
+          const bodyEl = loopWrap.querySelector(':scope > .prog-blk-body');
+          if (bodyEl && bodyEl.dataset.pidx !== undefined) {
+            const pidx = parseInt(bodyEl.dataset.pidx);
+            if (d.from.where !== 'prog' || d.from.idx !== pidx) {
+              const idx = progInsertIndex(bodyEl, e.clientY);
+              d.target = { kind: 'body', pidx: pidx, idx: idx };
+              bodyEl.classList.add('drag-over');
+              loopWrap.classList.add('target-loop');
+              const kids = Array.from(bodyEl.children).filter(c =>
+                c.classList.contains('prog-blk') || c.classList.contains('prog-body-placeholder'));
+              bodyEl.insertBefore(progDropLine, kids[idx] || null);
+              return;
+            }
+          }
+        }
+      }
+
+      // Programm-Strip als Ziel (top-level)
+      if (d.op !== 'E' && under.closest('#view-prog')) {
+        const strip = document.getElementById('progStrip');
+        const r = strip.getBoundingClientRect();
+        if (e.clientY > r.top - 50 && e.clientY < r.bottom + 80) {
+          const idx = progInsertIndex(strip, e.clientY);
+          d.target = { kind: 'strip', idx: idx };
+          strip.classList.add('drag-over');
+          const kids = Array.from(strip.children).filter(c =>
+            c.classList.contains('prog-blk') || c.classList.contains('prog-empty-big'));
+          strip.insertBefore(progDropLine, kids[idx] || null);
+        }
+      }
+    }
+
+    function progDragFinish() {
+      const d = progDrag;
+      if (!d) return;
+      if (d.ghost) d.ghost.remove();
+      if (d.srcEl) d.srcEl.classList.remove('prog-src');
+      document.querySelectorAll('.prog-blk-body.drag-over').forEach(el => el.classList.remove('drag-over'));
+      document.querySelectorAll('.prog-blk-loop.target-loop').forEach(el => el.classList.remove('target-loop'));
+      document.querySelectorAll('.prog-slot.drag-over').forEach(el => el.classList.remove('drag-over'));
+      document.getElementById('progStrip').classList.remove('drag-over');
+      document.getElementById('progPalette').classList.remove('trash-over');
+      if (progDropLine && progDropLine.parentNode) progDropLine.parentNode.removeChild(progDropLine);
+      progDrag = null;
+      if (!d.active || !d.target) return;
+
+      const t = d.target;
+
+      // Wert-Slot: eingebetteten Block setzen / ersetzen
+      if (t.kind === 'slot') {
+        const info = t.info;
+        let owner = null;
+        if (info.where === 'prog') owner = progBlocks[info.idx];
+        else if (info.where === 'body') owner = progBlocks[info.pidx].body[info.bidx];
+        if (!owner) { progRender(); return; }
+        // Wenn der Block schon einen eingebetteten Block hatte, weg damit
+        if (owner.embedded) {
+          // schon besetzt -> ersetzen erlaubt, aber Hinweis
+        }
+        owner.embedded = { op: d.op, color: d.color };
+        // Quelle entfernen, falls es aus einem anderen Slot kommt
+        if (d.from.where === 'embed') {
+          const src = d.from.parentRef();
+          if (src) delete src[d.from.parentKey];
+        }
+        progRender();
+        return;
+      }
+
+      if (t.kind === 'palette') {
+        // Loeschen durch Ablegen auf der Palette
+        if (d.from.where === 'prog') progBlocks.splice(d.from.idx, 1);
+        else if (d.from.where === 'body') progBlocks[d.from.pidx].body.splice(d.from.bidx, 1);
+        else if (d.from.where === 'embed') {
+          // Eingebetteten Block loeschen -> Slot wird wieder Input
+          const src = d.from.parentRef();
+          if (src) delete src[d.from.parentKey];
+        }
+      } else if (d.op !== 'E') {
+        // E-Block kann nicht als Top-Level / Body eingefuegt werden (nur in Slots)
+        const data = { op: d.op };
+        if (PROG_DEFS[d.op].loop) {
+          if (d.op === 'U') data.val = d.val;
+          if (d.op === 'C') data.color = d.color;
+          data.body = d.body || [];
+        } else {
+          data.val = d.val;
+        }
+        if (d.from.where === 'prog') {
+          progBlocks.splice(d.from.idx, 1);
+          if (t.kind === 'strip' && d.from.idx < t.idx) t.idx--;
+          if (t.kind === 'body' && d.from.idx < t.pidx) t.pidx--;
+        } else if (d.from.where === 'body') {
+          progBlocks[d.from.pidx].body.splice(d.from.bidx, 1);
+          if (t.kind === 'body' && t.pidx === d.from.pidx && d.from.bidx < t.idx) t.idx--;
+        }
+        if (t.kind === 'strip') {
+          if (progBlocks.length >= PROG_MAX_STEPS) {
+            showFeedback('progFeedback', 'error', 'Max ' + PROG_MAX_STEPS + ' Blöcke!');
+            if (d.from.where !== 'palette') progRender();
+            return;
+          }
+          progBlocks.splice(t.idx, 0, data);
+        } else {
+          const body = progBlocks[t.pidx].body;
+          if (body.length >= PROG_LOOP_MAX) {
+            showFeedback('progFeedback', 'error', 'Max ' + PROG_LOOP_MAX + ' Blöcke pro Schleife!');
+            if (d.from.where !== 'palette') progRender();
+            return;
+          }
+          body.splice(t.idx, 0, data);
+        }
+      }
+      progRender();
+    }
+
+    document.addEventListener('pointermove', e => {
+      if (!progDrag) return;
+      if (!progDrag.active) {
+        if (Math.hypot(e.clientX - progDrag.startX, e.clientY - progDrag.startY) > 8) {
+          progDragActivate();
+        } else return;
+      }
+      progDragMoveGhost(e);
+      progUpdateTarget(e);
+    });
+    document.addEventListener('pointerup', progDragFinish);
+    document.addEventListener('pointercancel', progDragFinish);
+
+    // ---------- Kodierung + Ausfuehrung ----------
+    function progEncodeBlock(b) {
+      // U/W mit eingebettetem E-Block -> U/W + E<color> + (body)
+      if (b.op === 'U') {
+        const slot = b.embedded ? ('E' + b.embedded.color) : String(b.val);
+        return 'U' + slot + '(' + (b.body || []).map(progEncodeBlock).join(',') + ')';
+      }
+      if (b.op === 'C') return 'C' + b.color + '(' + (b.body || []).map(progEncodeBlock).join(',') + ')';
+      if (b.op === 'W') {
+        return b.embedded ? ('W' + 'E' + b.embedded.color) : ('W' + b.val);
+      }
+      return b.op + b.val;
+    }
+
+    function progSetLocked(locked) {
+      document.querySelector('#view-prog .arena').classList.toggle('prog-locked', locked);
+      document.getElementById('btnProgRun').disabled = locked;
+      document.getElementById('btnProgClear').disabled = locked;
+    }
+
+    function progUnlock() {
+      progRunning = false;
+      progRunStep = -1; progRunSub = -1;
+      progSetLocked(false);
+      progRender();
+    }
+
+    document.getElementById('btnProgRun').addEventListener('click', () => {
+      if (progRunning) return;
+      if (!connected) { showFeedback('progFeedback', 'error', 'Erst mit dem Roboter verbinden!'); return; }
+      if (progBlocks.length === 0) { showFeedback('progFeedback', 'error', 'Programm ist leer!'); return; }
+      for (const b of progBlocks) {
+        if (PROG_DEFS[b.op].loop && b.body.length === 0) {
+          showFeedback('progFeedback', 'error', 'Ein "Wiederhole"-Block ist leer!');
+          return;
+        }
+        if (b.embedded && (b.embedded.op !== 'E' || b.embedded.color < 0 || b.embedded.color > 3)) {
+          showFeedback('progFeedback', 'error', 'Ungültiger Wert-Block!');
+          return;
+        }
+      }
+      const enc = progBlocks.map(progEncodeBlock).join(',');
+      if (enc.length > PROG_MAX_ENC) {
+        showFeedback('progFeedback', 'error', 'Programm zu lang! Weniger Blöcke.');
+        return;
+      }
+      progRunning = true;
+      progRunStep = -1; progRunSub = -1;
+      progSetLocked(true);
+      progRender();
+      sendCommand('PROG:SET:' + enc);
+      setTimeout(() => sendCommand('PROG:RUN'), 400);
+      setStep('progSteps', 3);
+    });
+    document.getElementById('btnProgClear').addEventListener('click', () => {
+      if (progRunning) return;
+      progBlocks = [];
+      progRender();
+      showFeedback('progFeedback', 'success', 'Programm geleert');
+      setStep('progSteps', 0);
+    });
+    document.getElementById('btnProgStop').addEventListener('click', () => {
+      sendCommand('PROG:STOP');
+    });
+
+    function handleProgMessage(msg) {
+      if (msg.startsWith('PROG:READY:')) {
+        showFeedback('progFeedback', 'success', 'Programm geladen – Roboter startet…');
+      } else if (msg === 'PROG:RUNNING') {
+        showFeedback('progFeedback', 'success', 'Roboter führt dein Programm aus!');
+      } else if (msg.startsWith('PROG:STEP:')) {
+        progRunStep = parseInt(msg.substring(10)) || 0;
+        progRunSub = -1;
+        progRender();
+      } else if (msg.startsWith('PROG:SUB:')) {
+        const d = msg.substring(9).split(',');
+        progRunStep = parseInt(d[0]) || 0;
+        progRunSub = parseInt(d[1]) || 0;
+        progRender();
+      } else if (msg.startsWith('PROG:COLOR:')) {
+        showFeedback('progFeedback', 'success', 'Farbe erkannt: ' + msg.substring(11));
+      } else if (msg === 'PROG:DONE') {
+        progUnlock();
+        showFeedback('progFeedback', 'success', 'Fertig! 🎉');
+        setStep('progSteps', 0);
+      } else if (msg === 'PROG:ABORT') {
+        progUnlock();
+        showFeedback('progFeedback', 'error', 'Gestoppt!');
+        setStep('progSteps', 0);
+      } else if (msg === 'PROG:BAD') {
+        progUnlock();
+        showFeedback('progFeedback', 'error', 'Programm ungültig!');
+      } else if (msg === 'PROG:NONE') {
+        progUnlock();
+        showFeedback('progFeedback', 'error', 'Kein Programm gesetzt!');
+      } else if (msg === 'PROG:STOP_RED') {
+        progUnlock();
+        showFeedback('progFeedback', 'error', '🛑 ROT gesehen – sofort gestoppt!');
+        setStep('progSteps', 0);
+      } else if (msg === 'PROG:MAXITER') {
+        showFeedback('progFeedback', 'error', 'Schleifen-Limit erreicht – weiter geht\'s!');
+      }
+    }
+
+    // Palette + leeres Programm initial aufbauen
+    progBuildPalette();
+    progRender();
 
     // ==========================================
     // HELPERS

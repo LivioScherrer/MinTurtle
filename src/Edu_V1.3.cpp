@@ -18,6 +18,7 @@
 #include "MemoryGame.h"
 #include "GameEngine.h"
 #include "LineFollower.h"
+#include "ProgGame.h"
 
 // =====================================================
 // GLOBALE KONSTANTEN
@@ -338,6 +339,7 @@ void onBleDisconnected() {
   korrigierenRunning = false;
   memoryStop();
   lineFollowerStop();
+  progStop();
   Serial.println("[BLE] Getrennt - Werbung gestartet");
   BLEDevice::startAdvertising();
   espNowEnsureChannel();
@@ -357,6 +359,7 @@ void hardStop() {
   raceActive = false;
   memoryStop();
   lineFollowerStop();
+  progStop();
   sendStatus("STOP");
 }
 
@@ -692,6 +695,25 @@ void handleCommand(const char* cmdStr) {
     } else if (sub.startsWith("INPUT:")) {
       uint8_t m = (uint8_t)sub.substring(6).toInt();
       memoryInput(m);
+    }
+    return;
+  }
+
+  // PROGRAMMIEREN (Code-Bausteine)
+  if (cmd.startsWith("PROG:")) {
+    String sub = cmd.substring(5);
+    if (sub.startsWith("SET:")) {
+      String enc = sub.substring(4);
+      if (progSetFromString(enc.c_str())) {
+        snprintf(buf, sizeof(buf), "PROG:READY:%u", progLen);
+        sendStatus(buf);
+      } else {
+        sendStatus("PROG:BAD");
+      }
+    } else if (sub == "RUN") {
+      progRun();
+    } else if (sub == "STOP") {
+      progStop();
     }
     return;
   }
