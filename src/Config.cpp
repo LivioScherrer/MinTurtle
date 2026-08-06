@@ -3,7 +3,6 @@
 
 Config config;
 Preferences prefs;
-static bool configDirty = false;
 
 void configLoad() {
   prefs.begin("edubot", false);
@@ -116,10 +115,4 @@ void configSaveBool(const char* key, bool value) {
   prefs.begin("edubot", false);
   prefs.putBool(key, value);
   prefs.end();
-}
-
-void configSaveIfDirty() {
-  if (!configDirty) return;
-  configDirty = false;
-  // Platzhalter fuer zukuenftige "dirty"-basierte Persistenz
 }

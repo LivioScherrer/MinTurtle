@@ -12,7 +12,6 @@ float speedL = 0.0;
 float speedR = 0.0;
 
 unsigned long lastCommandTime = 0;
-unsigned long lastUpdateMicros = 0;
 
 void driveClearKeys() {
   keyW = false; keyA = false; keyS = false; keyD = false;
@@ -26,13 +25,11 @@ void driveHardStop() {
 }
 
 void driveResetDt() {
-  lastUpdateMicros = micros();
 }
 
 void driveUpdate() {
   // Waehrend ein Spiel aktiv ist, wird die Bewegung von der Spiel-Engine
   // blockierend gesteuert - KEYS: vom Frontend werden ignoriert.
-  extern bool driveLockedByGame();
   if (driveLockedByGame()) return;
 
   // Freifahren: vom Benutzer einstellbare Beschleunigung (ACC:-Befehl).

@@ -7,7 +7,6 @@
 extern bool keyW, keyA, keyS, keyD;
 extern float speedL, speedR;
 extern unsigned long lastCommandTime;
-extern unsigned long lastUpdateMicros;
 
 // Tasten loeschen
 void driveClearKeys();
@@ -15,5 +14,7 @@ void driveClearKeys();
 void driveHardStop();
 // Drive-Tick (in loop() aufrufen, ausserhalb von Spielen)
 void driveUpdate();
-// Connected-Handler: dt zuruecksetzen
+// Connected-Handler
 void driveResetDt();
+// True wenn ein Spielmodus die Bewegung blockiert (deklariert in main)
+bool driveLockedByGame();

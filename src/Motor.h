@@ -9,7 +9,6 @@
 #define PIN_STEP_L  4
 #define PIN_DIR_R   1
 #define PIN_STEP_R   2
-#define PIN_ENABLE   7
 
 // Maximale Step-Rate, die der Roboter je fahren soll (steps/s)
 constexpr float MOTOR_MAX_SPEED    = 2500.0f;

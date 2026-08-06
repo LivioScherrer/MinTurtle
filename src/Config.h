@@ -16,6 +16,9 @@ constexpr float    ACCEL_DEFAULT     = 5000.0f;
 constexpr float    ACCEL_MIN         = 100.0f;
 constexpr float    ACCEL_MAX         = 10000.0f;
 
+// IR-Sensor (Hindernis-Erkennung) auf Pin D8 = GPIO7 (LM393-Modul, aktiv-low)
+constexpr uint8_t  IR_PIN            = 7;
+
 struct ColorRef {
   uint8_t r = 0, g = 0, b = 0;
   bool    calibrated = false;
@@ -52,5 +55,3 @@ void configSaveInt(const char* key, int32_t value);
 void configSaveUShort(const char* key, uint16_t value);
 void configSaveUChar(const char* key, uint8_t value);
 void configSaveBool(const char* key, bool value);
-// Sanftes Speichern wenn dirty
-void configSaveIfDirty();

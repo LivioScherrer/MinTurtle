@@ -1,4 +1,4 @@
-// EduBot V1.3 - BLE Manager Implementierung
+// EduBot V1.3 - BLE Manager Implementierung 
 #include "BLEManager.h"
 #include "ColorSensor.h"
 #include <stdarg.h>

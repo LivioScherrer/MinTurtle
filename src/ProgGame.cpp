@@ -11,6 +11,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+extern bool slalomFinished;  // Flag in Edu_V1.3.cpp
+
 ProgStep progSteps[PROG_MAX_STEPS];
 uint8_t  progLen    = 0;
 bool     progActive = false;
@@ -18,7 +20,13 @@ bool     progActive = false;
 constexpr uint32_t PROG_STEP_GAP_MS = 120;  // Pause zwischen Top-Level-Bloecken
 constexpr uint32_t PROG_LOOP_GAP_MS = 100;  // Pause zwischen Loop-Durchlaeufen
 
-static const char* const PROG_COLOR_NAMES[4] = { "ROT", "GELB", "GRUEN", "BLAU" };
+static const char* const PROG_COLOR_NAMES[6] = { "ROT", "GELB", "GRUEN", "BLAU", "IR-HIGH", "IR-LOW" };
+
+// IR-Sensor lesen: LM393-Modul ist aktiv-low (OUT = LOW bei Hindernis)
+// -> irBlocked() = true bedeutet: Hindernis erkannt (wie IR:1 im Web-UI)
+static inline bool irBlocked() {
+  return !digitalRead(IR_PIN);
+}
 
 // =====================================================
 // Farb-Erkennung mit Haltezeit
@@ -31,16 +39,33 @@ static int8_t   colMatchIdx   = -1;
 static uint32_t colQuickStart = 0;
 static int8_t   colQuickIdx   = -1;
 
-static void colorPollReset() { colMatchStart = 0; colMatchIdx = -1; colQuickStart = 0; colQuickIdx = -1; }
+static void colorPollReset() { colMatchStart = 0; colMatchIdx = -1; }
+static void colorQuickReset() { colQuickStart = 0; colQuickIdx = -1; }
 
-// true wenn die Ziel-Farbe seit >= 100ms stabil sichtbar ist
-static bool colorPoll(uint8_t idx) {
+// true wenn die Sensor-Bedingung (Farbe 0-3 oder IR 4/5) erfuellt ist.
+// Farbe: seit >= 40ms stabil sichtbar (kurze Haltezeit, damit selbst kurze
+// Fahrten im Bis-Modus genug Zeit haben zum Erkennen).
+// IR: direkter digitaler Read (keine Haltezeit noetig).
+static bool sensorPoll(uint8_t idx) {
+  if (idx >= PROG_SENSOR_IR_HIGH) return (irBlocked() == (idx == PROG_SENSOR_IR_HIGH));
   if (!colorSensorOk) return false;
   char name[16];
   getCurrentColorName(name, sizeof(name));
   if (strcasecmp(name, PROG_COLOR_NAMES[idx]) != 0) { colorPollReset(); return false; }
   if (colMatchIdx != (int8_t)idx) { colMatchIdx = (int8_t)idx; colMatchStart = millis(); return false; }
-  return (millis() - colMatchStart) >= 100;
+  return (millis() - colMatchStart) >= 40;
+}
+
+// Sofort-Check ohne Haltezeit: 1x Lesung reicht.
+// Genutzt fuer Sensor-Bedingung waehrend der Bewegung (Sensor muss MOTOREN
+// stoppen BEVOR der Roboter darueber hinausfaehrt -> Haltezeit sei 0.
+// IR: direkter digitaler Read.
+static bool sensorHitImmediate(uint8_t idx) {
+  if (idx >= PROG_SENSOR_IR_HIGH) return (irBlocked() == (idx == PROG_SENSOR_IR_HIGH));
+  if (!colorSensorOk) return false;
+  char name[16];
+  getCurrentColorName(name, sizeof(name));
+  return strcasecmp(name, PROG_COLOR_NAMES[idx]) == 0;
 }
 
 // Schnellerer Notfall-Stop-Check (50ms Haltezeit, unabhaengiger State)
@@ -49,18 +74,25 @@ static bool colorPollQuick(uint8_t idx) {
   char name[16];
   getCurrentColorName(name, sizeof(name));
   if (strcasecmp(name, PROG_COLOR_NAMES[idx]) != 0) {
-    colQuickStart = 0; colQuickIdx = -1; return false;
+    colorQuickReset(); return false;
   }
   if (colQuickIdx != (int8_t)idx) { colQuickIdx = (int8_t)idx; colQuickStart = millis(); return false; }
   return (millis() - colQuickStart) >= 50;
+}
+
+// Hilfsfunktion: laeuft gerade ein Spiel, das die Stepper nutzt?
+// GAME_PROG (Code-Bausteine solo) und GAME_SLALOM (Slalom-Multiplayer)
+// muessen die Motoren kontrollieren koennen.
+static inline bool gameAllowsMotorRun() {
+  return currentGame == GAME_PROG || currentGame == GAME_SLALOM;
 }
 
 // Kurz warten bis Farbe stabil sichtbar (max timeoutMs), mit Abbruch-Check
 static bool colorSettled(uint8_t idx, uint32_t timeoutMs = 250) {
   uint32_t start = millis();
   while (millis() - start < timeoutMs) {
-    if (currentGame != GAME_PROG) return false;
-    if (colorPoll(idx)) return true;
+    if (!gameAllowsMotorRun()) return false;
+    if (sensorPoll(idx)) return true;
     vTaskDelay(pdMS_TO_TICKS(20));
   }
   return false;
@@ -96,7 +128,7 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
   uint32_t lastPoll = 0;
   bool colorHit = false;
   while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
-    if (currentGame != GAME_PROG) { stepperL.stop(); stepperR.stop(); break; }
+    if (!gameAllowsMotorRun()) { stepperL.stop(); stepperR.stop(); break; }
     if (millis() - lastPoll >= 20) {
       lastPoll = millis();
       // Globaler ROT-Stop: immer pruefen
@@ -111,8 +143,10 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
         sendStatus("PROG:STOP_RED");
         break;
       }
-      // Optionaler Loop-Farb-Check (z.B. fuer OP_UNTIL)
-      if (colorCheck >= 0 && colorPoll((uint8_t)colorCheck)) {
+      // Optionaler Loop-Sensor-Check (z.B. fuer OP_UNTIL)
+      // Sofort-Hit: 1x Lesung reicht (Sensor muss STOPPEN bevor drueber hinweg)
+      if (colorCheck >= 0 && sensorHitImmediate((uint8_t)colorCheck)) {
+        Serial.printf("[PROG] sensorHitImmediate %s -> STOP\n", PROG_COLOR_NAMES[(uint8_t)colorCheck]);
         colorHit = true;
         stepperL.stop();
         stepperR.stop();
@@ -153,13 +187,13 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
       return false;
     case OP_WAIT: {
       if (val < 0) {
-        // Bedingtes Warten: bis Sensor == color (|val|-1)
+        // Bedingtes Warten: bis Sensor == target (|val|-1), Farbe oder IR (4/5)
         uint8_t target = (uint8_t)(-(int)val - 1);
         colorPollReset();
         uint32_t start = millis();
         while (millis() - start < 60000) {  // max 60s warten
-          if (currentGame != GAME_PROG) return false;
-          if (colorPoll(target)) return false;  // keine colorHit-Semantik hier
+          if (!gameAllowsMotorRun()) return false;
+          if (sensorPoll(target)) return false;  // keine colorHit-Semantik hier
           vTaskDelay(pdMS_TO_TICKS(30));
         }
         return false;
@@ -167,7 +201,7 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
       uint32_t ms = (uint32_t)val * 1000;
       uint32_t start = millis();
       while (millis() - start < ms) {
-        if (currentGame != GAME_PROG) break;
+        if (!gameAllowsMotorRun()) break;
         vTaskDelay(pdMS_TO_TICKS(50));
       }
       return false;
@@ -178,12 +212,13 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
 }
 
 // Prueft ob der Sensor-Wert-Slot erfuellt ist (1) oder nicht (0).
-// Wird fuer OP_REPEAT im Sensor-Modus genutzt.
-static bool sensorMatchesColor(uint8_t colorIdx) {
+// Wird fuer OP_REPEAT im Sensor-Modus genutzt. IR: 4=blockiert, 5=frei.
+static bool sensorMatches(uint8_t idx) {
+  if (idx >= PROG_SENSOR_IR_HIGH) return (irBlocked() == (idx == PROG_SENSOR_IR_HIGH));
   if (!colorSensorOk) return false;
   char name[16];
   getCurrentColorName(name, sizeof(name));
-  return strcasecmp(name, PROG_COLOR_NAMES[colorIdx]) == 0;
+  return strcasecmp(name, PROG_COLOR_NAMES[idx]) == 0;
 }
 
 // =====================================================
@@ -231,6 +266,8 @@ static bool opFromChar(char c, uint8_t& op) {
 
 // Loop-Body parsen: "F10,R90" bis zur schliessenden Klammer.
 // p steht hinter '(' und wird hinter ')' positioniert.
+// Body kann nur F/B/L/R/W enthalten (keine verschachtelten Loops).
+// W kann im Body als WE<color> vorkommen (warte bis Sensor == color).
 static bool parseBody(const char*& p, ProgStep& st) {
   uint8_t bl = 0;
   while (*p != '\0' && *p != ')') {
@@ -240,11 +277,26 @@ static bool parseBody(const char*& p, ProgStep& st) {
     p++;
     uint8_t op;
     if (!opFromChar(c, op)) return false;   // keine verschachtelten Loops
-    long v;
-    if (!parseUInt(p, v)) return false;
     if (bl >= PROG_LOOP_BODY_MAX) return false;
     st.body[bl].op = op;
-    st.body[bl].val = clampVal(op, v);
+    st.body[bl].color = -1;
+    // Spezialfall W mit eingebettetem E<color> (Wait-for-Color im Body)
+    if (op == OP_WAIT && *p == 'E') {
+      p++;
+      if (*p < '0' || *p > '3') return false;
+      st.body[bl].val = -(int16_t)((uint8_t)(*p - '0') + 1);
+      p++;
+    } else if ((op == OP_FWD || op == OP_BACK) && *p == 'E') {
+      p++;
+      if (*p < '0' || *p > '3') return false;
+      st.body[bl].color = (int8_t)(*p - '0');
+      st.body[bl].val = 50; // max search distance in cm
+      p++;
+    } else {
+      long v;
+      if (!parseUInt(p, v)) return false;
+      st.body[bl].val = clampVal(op, v);
+    }
     bl++;
   }
   if (*p != ')') return false;
@@ -255,6 +307,7 @@ static bool parseBody(const char*& p, ProgStep& st) {
 
 bool progSetFromString(const char* s) {
   if (s == nullptr) return false;
+  Serial.printf("[PROG] Parse '%s'\n", s);
   uint8_t n = 0;
   const char* p = s;
   while (*p != '\0' && n < PROG_MAX_STEPS) {
@@ -264,13 +317,14 @@ bool progSetFromString(const char* s) {
 
     ProgStep st;
     memset(&st, 0, sizeof(st));
+    st.color = -1;
     p++;
 
     if (c == 'U') {
-      // Slot: Zahl ODER E<color> (bedingte Wiederholung solange Sensor == color)
+      // Slot: Zahl ODER E<slot> (bedingte Wiederholung solange Sensor == slot)
       if (*p == 'E') {
         p++;
-        if (*p < '0' || *p > '3') return false;
+        if (*p < '0' || *p > '5') return false;
         st.op = OP_REPEAT;
         st.color = (uint8_t)(*p - '0');
         st.val = -(int16_t)(st.color + 1);   // negativer Marker
@@ -285,10 +339,10 @@ bool progSetFromString(const char* s) {
       p++;
       if (!parseBody(p, st)) return false;
     } else if (c == 'W') {
-      // Slot: Zahl ODER E<color> (warte bis Sensor == color)
+      // Slot: Zahl ODER E<slot> (warte bis Sensor == slot)
       if (*p == 'E') {
         p++;
-        if (*p < '0' || *p > '3') return false;
+        if (*p < '0' || *p > '5') return false;
         st.op = OP_WAIT;
         st.color = (uint8_t)(*p - '0');
         st.val = -(int16_t)(st.color + 1);
@@ -302,7 +356,7 @@ bool progSetFromString(const char* s) {
     } else if (c == 'C') {
       long v;
       if (!parseUInt(p, v)) return false;
-      if (v < 0 || v > 3) return false;
+      if (v < 0 || v > 5) return false;
       st.op = OP_UNTIL;
       st.color = (uint8_t)v;
       if (*p != '(') return false;
@@ -311,10 +365,19 @@ bool progSetFromString(const char* s) {
     } else {
       uint8_t op;
       if (!opFromChar(c, op)) return false;
-      long v;
-      if (!parseUInt(p, v)) return false;
       st.op = op;
-      st.val = clampVal(op, v);
+      st.color = -1;
+      if ((op == OP_FWD || op == OP_BACK) && *p == 'E') {
+        p++;
+        if (*p < '0' || *p > '5') return false;
+        st.color = (int8_t)(*p - '0');
+        st.val = 50; // max search distance in cm
+        p++;
+      } else {
+        long v;
+        if (!parseUInt(p, v)) return false;
+        st.val = clampVal(op, v);
+      }
     }
     progSteps[n++] = st;
   }
@@ -343,11 +406,11 @@ void progRun() {
         // Bedingte Wiederholung: solange Sensor == color
         uint8_t target = (uint8_t)(-(int)st.val - 1);
         for (uint8_t iter = 0; iter < PROG_UNTIL_MAX_ITER && currentGame == GAME_PROG; iter++) {
-          if (!sensorMatchesColor(target)) break;
+          if (!sensorMatches(target)) break;
           esp_task_wdt_reset();
           for (uint8_t j = 0; j < st.bodyLen && currentGame == GAME_PROG; j++) {
             sendStatusF("PROG:SUB:%u,%u", i, j);
-            progExecSimple(st.body[j].op, st.body[j].val, -1);
+            progExecSimple(st.body[j].op, st.body[j].val, st.body[j].color);
           }
           vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         }
@@ -356,42 +419,143 @@ void progRun() {
         for (int16_t k = 0; k < st.val && currentGame == GAME_PROG; k++) {
           for (uint8_t j = 0; j < st.bodyLen && currentGame == GAME_PROG; j++) {
             sendStatusF("PROG:SUB:%u,%u", i, j);
-            progExecSimple(st.body[j].op, st.body[j].val, -1);
+            progExecSimple(st.body[j].op, st.body[j].val, st.body[j].color);
           }
           vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
           esp_task_wdt_reset();
         }
       }
     } else if (st.op == OP_UNTIL) {
-      // wiederholen bis Farbe sichtbar
+      // wiederholen bis Farbe sichtbar (wird waehrend der Fahrt geprueft,
+      // kein colorSettled davor -> Roboter MUSS sich bewegen, sonst faehrt er
+      // 0cm und bricht sofort ab falls die Farbe zufaellig schon sichtbar ist).
+      Serial.printf("[PROG] OP_UNTIL color=%s bodyLen=%u\n", PROG_COLOR_NAMES[st.color], st.bodyLen);
+      for (uint8_t k = 0; k < st.bodyLen; k++) {
+        Serial.printf("[PROG]   body[%u] op=%u val=%d color=%d\n", k, st.body[k].op, st.body[k].val, (int)st.body[k].color);
+      }
       bool seen = false;
       colorPollReset();
       for (uint8_t iter = 0; iter < PROG_UNTIL_MAX_ITER && !seen && currentGame == GAME_PROG; iter++) {
-        if (colorSettled(st.color)) { seen = true; break; }
         for (uint8_t j = 0; j < st.bodyLen && !seen && currentGame == GAME_PROG; j++) {
           sendStatusF("PROG:SUB:%u,%u", i, j);
           // Farb-Check nur waehrend Fahr-Bloecken sinnvoll
           int8_t cc = (st.body[j].op == OP_FWD || st.body[j].op == OP_BACK)
-                      ? (int8_t)st.color : (int8_t)-1;
+                      ? (st.body[j].color >= 0 ? st.body[j].color : (int8_t)st.color) : (int8_t)-1;
           seen = progExecSimple(st.body[j].op, st.body[j].val, cc);
         }
         vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         esp_task_wdt_reset();
       }
+      Serial.printf("[PROG] OP_UNTIL done seen=%d iter\n", (int)seen);
       if (seen) sendStatusF("PROG:COLOR:%s", PROG_COLOR_NAMES[st.color]);
       else if (currentGame == GAME_PROG) sendStatus("PROG:MAXITER");
     } else {
-      progExecSimple(st.op, st.val, -1);
+      progExecSimple(st.op, st.val, st.color);
     }
     vTaskDelay(pdMS_TO_TICKS(PROG_STEP_GAP_MS));
   }
 
-  stopMotors(); speedL = 0; speedR = 0;
+   stopMotors(); speedL = 0; speedR = 0;
   bool aborted = (currentGame != GAME_PROG);
   progActive = false;
   currentGame = GAME_NONE;
   sendStatus(aborted ? "PROG:ABORT" : "PROG:DONE");
   Serial.printf("[PROG] %s\n", aborted ? "Abgebrochen" : "Fertig");
+}
+
+// =====================================================
+// SLALOM: Farbziel während der Fahrt passiv beobachten
+// (ähnelt progRun, aber stoppt sofort, wenn die Zielfarbe
+//  stabil erkannt wird, und meldet SLALOM:FINISH)
+// =====================================================
+void progRunSlalom(const char* targetColor) {
+  if (progLen == 0) { sendStatus("SLALOM:NONE"); return; }
+  progActive = true;
+  currentGame = GAME_SLALOM;
+  colorPollReset();
+  char msg[48];
+  snprintf(msg, sizeof(msg), "SLALOM:TARGET:%s", targetColor ? targetColor : "ROT");
+  sendStatus(msg);
+  Serial.printf("[SLALOM] Start target=%s, %u Bloecke\n", targetColor, progLen);
+
+  // Farb-Index des Ziels ermitteln (fuer colorPoll)
+  uint8_t targetIdx = 0;
+  for (uint8_t i = 0; i < 4; i++) {
+    if (strcasecmp(targetColor, PROG_COLOR_NAMES[i]) == 0) { targetIdx = i; break; }
+  }
+
+  for (uint8_t i = 0; i < progLen && currentGame == GAME_SLALOM; i++) {
+    esp_task_wdt_reset();
+    ProgStep& st = progSteps[i];
+
+    if (st.op == OP_REPEAT) {
+      uint16_t reps = (st.val < 0) ? PROG_UNTIL_MAX_ITER : st.val;
+      int16_t k = 0;
+      for (; k < reps && currentGame == GAME_SLALOM; k++) {
+        for (uint8_t j = 0; j < st.bodyLen && currentGame == GAME_SLALOM; j++) {
+          progExecSimple(st.body[j].op, st.body[j].val, st.body[j].color);
+          // Nach jedem Body-Schritt pruefen, ob Zielfarbe erreicht
+          if (sensorPoll((uint8_t)targetIdx)) {
+            stopMotors(); speedL = 0; speedR = 0;
+            progActive = false;
+            currentGame = GAME_NONE;
+            slalomFinished = true;
+            char fmsg[48];
+            snprintf(fmsg, sizeof(fmsg), "SLALOM:FINISH:%s", PROG_COLOR_NAMES[targetIdx]);
+            sendStatus(fmsg);
+            return;
+          }
+        }
+        vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
+        esp_task_wdt_reset();
+        // Bedingte Wiederholung: abbrechen wenn Farbe gesehn
+        if (st.val < 0 && sensorPoll((uint8_t)targetIdx)) break;
+      }
+    } else if (st.op == OP_UNTIL) {
+      // Für Slalom: Wiederhole bis Zielfarbe erreicht (oder max iter)
+      for (uint8_t iter = 0; iter < PROG_UNTIL_MAX_ITER && currentGame == GAME_SLALOM; iter++) {
+        for (uint8_t j = 0; j < st.bodyLen && currentGame == GAME_SLALOM; j++) {
+          int8_t cc = (st.body[j].op == OP_FWD || st.body[j].op == OP_BACK)
+                        ? (st.body[j].color >= 0 ? st.body[j].color : (int8_t)targetIdx) : (int8_t)-1;
+          progExecSimple(st.body[j].op, st.body[j].val, cc);
+          if (sensorPoll((uint8_t)targetIdx)) {
+            stopMotors(); speedL = 0; speedR = 0;
+            progActive = false;
+            currentGame = GAME_NONE;
+            slalomFinished = true;
+            char fmsg[48];
+            snprintf(fmsg, sizeof(fmsg), "SLALOM:FINISH:%s", PROG_COLOR_NAMES[targetIdx]);
+            sendStatus(fmsg);
+            return;
+          }
+        }
+        vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
+        esp_task_wdt_reset();
+        if (sensorPoll((uint8_t)targetIdx)) break;
+      }
+    } else {
+      int8_t cc = (st.color >= 0) ? st.color : (int8_t)targetIdx;
+      progExecSimple(st.op, st.val, cc);
+      if (sensorPoll((uint8_t)targetIdx)) {
+        stopMotors(); speedL = 0; speedR = 0;
+        progActive = false;
+        currentGame = GAME_NONE;
+        slalomFinished = true;
+        char fmsg[48];
+        snprintf(fmsg, sizeof(fmsg), "SLALOM:FINISH:%s", PROG_COLOR_NAMES[targetIdx]);
+        sendStatus(fmsg);
+        return;
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(PROG_STEP_GAP_MS));
+  }
+
+  // Programmende ohne Treffer: nicht gewonnen, Runde weiter
+  stopMotors(); speedL = 0; speedR = 0;
+  progActive = false;
+  currentGame = GAME_NONE;
+  sendStatus("SLALOM:DONE");
+  Serial.println("[SLALOM] Programmende ohne Treffer");
 }
 
 void progStop() {

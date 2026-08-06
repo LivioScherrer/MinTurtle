@@ -1,4 +1,7 @@
 // EduBot V1.3 - ESP-NOW Implementierung
+// Wi-Fi-Callbacks duerfen KEINE BLE-APIs oder blockierenden Lib-Aufrufe
+// enthalten (Stack-Overflow / Guru Meditation). Alle Aktionen werden in
+// eine FreeRTOS-Queue gepostet und in der Main-Loop thread-sicher ausgefuehrt.
 #include "EspNow.h"
 #include "BLEManager.h"
 #include "Drive.h"
@@ -11,39 +14,58 @@ bool espNowReady = false;
 bool hasPairedPeer = false;
 uint8_t myMac[6] = {0,0,0,0,0,0};
 
-// Forward-Declaration: Race-Logik in main
+SemaphoreHandle_t peerMutex = nullptr;
+QueueHandle_t espNowEventQueue = nullptr;
+
+// Forward-Declaration: Race-Logik und Slalom-Logik in main
 extern void onRacePacket(const RacePacket* pkt);
+extern void onSlalomPacket(const RacePacket* pkt);
 extern void espNowAddSpecificPeer(const uint8_t mac[6]);
 
 void peerListAdd(const uint8_t mac[6]) {
-  for (uint8_t i = 0; i < peerCount; i++) {
-    if (memcmp(peerList[i].mac, mac, 6) == 0) {
-      peerList[i].lastSeen = millis();
-      return;
+  if (peerMutex && xSemaphoreTake(peerMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    for (uint8_t i = 0; i < peerCount; i++) {
+      if (memcmp(peerList[i].mac, mac, 6) == 0) {
+        peerList[i].lastSeen = millis();
+        xSemaphoreGive(peerMutex);
+        return;
+      }
     }
-  }
-  if (peerCount < MAX_PEERS) {
-    memcpy(peerList[peerCount].mac, mac, 6);
-    peerList[peerCount].lastSeen = millis();
-    peerCount++;
-    char msg[48];
-    snprintf(msg, sizeof(msg), "RACE:PEER:%02X:%02X:%02X:%02X:%02X:%02X",
-      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    sendStatus(msg);
+    if (peerCount < MAX_PEERS) {
+      memcpy(peerList[peerCount].mac, mac, 6);
+      peerList[peerCount].lastSeen = millis();
+      peerCount++;
+      char msg[48];
+      snprintf(msg, sizeof(msg), "RACE:PEER:%02X:%02X:%02X:%02X:%02X:%02X",
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+      sendStatus(msg);
+    }
+    xSemaphoreGive(peerMutex);
   }
 }
 
+// Wi-Fi-Callback: KEINE BLE/Heap-Aufrufe -> nur in Queue posten
 void onEspNowRecv(const uint8_t* mac, const uint8_t* data, int len) {
   if (len != sizeof(RacePacket)) return;
-  RacePacket* pkt = (RacePacket*)data;
+  const RacePacket* pkt = (const RacePacket*)data;
   if (pkt->magic != 0xA5) return;
-  Serial.printf("[ESPNOW] pkt score=%u flags=%u\n", pkt->score, pkt->flags);
   if (memcmp(pkt->senderMac, myMac, 6) == 0) return;
 
+  if (pkt->flags & RACE_FLAG_PRESENT) {
+    EspNowEvent e = {};
+    e.type = EspNowEvent::PEER_ADD;
+    memcpy(e.mac, pkt->senderMac, 6);
+    if (espNowEventQueue) xQueueSend(espNowEventQueue, &e, 0);
+    return;
+  }
   if (pkt->flags & RACE_FLAG_HELLO) {
-    peerListAdd(pkt->senderMac);
-    espNowAddSpecificPeer(pkt->senderMac);
-    RacePacket resp;
+    // PEER_ADD + PRESENT-Antwort + addSpecificPeer in Main ausfuehren
+    EspNowEvent e = {};
+    e.type = EspNowEvent::PEER_ADD;
+    memcpy(e.mac, pkt->senderMac, 6);
+    if (espNowEventQueue) xQueueSend(espNowEventQueue, &e, 0);
+    // Antwort direkt ueber esp_now_send (nur Wi-Fi API, kein BLE)
+    RacePacket resp = {};
     resp.magic = 0xA5;
     memcpy(resp.senderMac, myMac, 6);
     resp.score = 0;
@@ -51,12 +73,31 @@ void onEspNowRecv(const uint8_t* mac, const uint8_t* data, int len) {
     esp_now_send(pkt->senderMac, (uint8_t*)&resp, sizeof(resp));
     return;
   }
-  if (pkt->flags & RACE_FLAG_PRESENT) {
-    peerListAdd(pkt->senderMac);
-    return;
+  // Normales Rennen-Paket: in Queue posten
+  EspNowEvent e = {};
+  e.type = EspNowEvent::RACE_PKT;
+  memcpy(&e.pkt, pkt, sizeof(RacePacket));
+  if (espNowEventQueue) xQueueSend(espNowEventQueue, &e, 0);
+}
+
+// In loop() aufrufen: Events thread-sicher verarbeiten
+void espNowProcessEvents() {
+  if (!espNowEventQueue) return;
+  EspNowEvent e;
+  while (xQueueReceive(espNowEventQueue, &e, 0) == pdTRUE) {
+    switch (e.type) {
+      case EspNowEvent::PEER_ADD:
+        peerListAdd(e.mac);
+        espNowAddSpecificPeer(e.mac);
+        break;
+       case EspNowEvent::RACE_PKT:
+        if (hasPairedPeer && memcmp(e.pkt.senderMac, pairedPeer, 6) != 0) break;
+        // Slalom-Pakete (slalomCmd != 0) und klassische Rennscore-Pakete
+        if (e.pkt.slalomCmd != SLALOM_CMD_NONE) onSlalomPacket(&e.pkt);
+        else onRacePacket(&e.pkt);
+        break;
+    }
   }
-  if (hasPairedPeer && memcmp(pkt->senderMac, pairedPeer, 6) != 0) return;
-  onRacePacket(pkt);
 }
 
 void onEspNowSend(const uint8_t* mac, esp_now_send_status_t status) {
@@ -77,6 +118,9 @@ void espNowAddSpecificPeer(const uint8_t mac[6]) {
 }
 
 void espNowInit() {
+  peerMutex = xSemaphoreCreateMutex();
+  espNowEventQueue = xQueueCreate(16, sizeof(EspNowEvent));
+
   WiFi.mode(WIFI_STA);
   esp_wifi_stop();
   esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
@@ -117,7 +161,7 @@ void espNowEnsureChannel() {
 
 void raceSendPacket(uint8_t score, bool winner) {
   if (!espNowReady) return;
-  RacePacket pkt;
+  RacePacket pkt = {};
   pkt.magic = 0xA5;
   memcpy(pkt.senderMac, myMac, 6);
   pkt.score = score;
@@ -131,12 +175,15 @@ void raceSendPacket(uint8_t score, bool winner) {
 
 void raceSendHello() {
   if (!espNowReady) return;
-  RacePacket pkt;
+  RacePacket pkt = {};
   pkt.magic = 0xA5;
   memcpy(pkt.senderMac, myMac, 6);
   pkt.score = 0;
   pkt.flags = RACE_FLAG_HELLO;
-  peerCount = 0;
+  if (peerMutex && xSemaphoreTake(peerMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    peerCount = 0;
+    xSemaphoreGive(peerMutex);
+  }
   esp_now_send(espNowPeer, (uint8_t*)&pkt, sizeof(pkt));
   Serial.println("[ESPNOW] HELLO gesendet");
 }

@@ -12,7 +12,8 @@ enum GameMode : uint8_t {
   GAME_RENNEN,
   GAME_MEMORY,
   GAME_LINEFOLLOWER,
-  GAME_PROG
+  GAME_PROG,
+  GAME_SLALOM
 };
 extern GameMode currentGame;
 

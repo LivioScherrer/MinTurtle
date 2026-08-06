@@ -9,6 +9,7 @@
 constexpr uint8_t PROG_MAX_STEPS      = 20;  // Top-Level-Bloecke
 constexpr uint8_t PROG_LOOP_BODY_MAX  = 8;   // Bloecke pro Loop
 constexpr uint8_t PROG_UNTIL_MAX_ITER = 60;  // Sicherheits-Limit fuer Bis-Farbe-Loops
+constexpr uint8_t PROG_MAX_ENC        = 140; // Max. Laenge des kodierten Programm-Strings
 
 // Baustein-Op-Codes
 enum ProgOp : uint8_t {
@@ -21,22 +22,25 @@ enum ProgOp : uint8_t {
   OP_UNTIL      // C<c>(body)  Body wiederholen bis Farbe c sichtbar
 };
 
-// Farb-Indizes fuer OP_UNTIL (Namen in ProgGame.cpp)
+// Sensor-Indizes fuer E/C-Slots: 0-3 Farben, 4 = IR-Sensor blockiert (High), 5 = IR-Sensor frei (Low)
 constexpr uint8_t PROG_COLOR_ROT   = 0;
 constexpr uint8_t PROG_COLOR_GELB  = 1;
 constexpr uint8_t PROG_COLOR_GRUEN = 2;
 constexpr uint8_t PROG_COLOR_BLAU  = 3;
+constexpr uint8_t PROG_SENSOR_IR_HIGH = 4;  // Hindernis erkannt
+constexpr uint8_t PROG_SENSOR_IR_LOW  = 5;  // Weg frei
 
 // Einfacher Baustein (auch Loop-Body: keine verschachtelten Loops)
 struct ProgBodyStep {
   uint8_t op;    // OP_FWD..OP_WAIT
   int16_t val;   // cm / Grad / Sekunden
+  int8_t  color; // Ziel-Farbe fuer F/B (-1 wenn nicht gesetzt)
 };
 
 struct ProgStep {
   uint8_t  op;        // ProgOp
   int16_t  val;       // cm / Grad / s / Wiederhol-Anzahl
-  uint8_t  color;     // nur OP_UNTIL: Ziel-Farbe
+  int8_t   color;     // Ziel-Farbe (OP_UNTIL oder F/B mit E-Block, -1 wenn keine)
   uint8_t  bodyLen;   // nur OP_REPEAT/OP_UNTIL
   ProgBodyStep body[PROG_LOOP_BODY_MAX];
 };
@@ -55,6 +59,12 @@ bool progSetFromString(const char* s);
 // Programm ausfuehren (blockierend, wie Pfeil-Knobeln).
 // Setzt currentGame = GAME_PROG und sendet PROG:* Statusmeldungen.
 void progRun();
+
+// Programm mit Farb-Slalom-Ablauf ausfuehren: currentGame = GAME_SLALOM.
+// Target: Zielfarbe (z.B. "ROT"). Stoppt, wenn die Farbe stabil
+// (Haltezeit ~100ms) erkannt wird, oder das Programm endet.
+// Sendet SLALOM:TARGET:<color> | SLALOM:FINISH:<color> | SLALOM:DONE.
+void progRunSlalom(const char* targetColor);
 
 // Abbruch (aus handleCommand / hardStop / Disconnect)
 void progStop();

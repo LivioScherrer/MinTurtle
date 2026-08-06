@@ -155,7 +155,8 @@ void lineFollowerTick() {
       } else if (now - lsStateEnterMs > LINE_SEARCH_TURN_MS) {
         lsSearchTries++;
         if (lsSearchTries >= LINE_SEARCH_MAX_TRIES) {
-          lsSearchTries = 0;
+          // Wechsel zur rechten Suche: lsSearchTries NICHT zuruecksetzen,
+          // damit R weitere MAX_TRIES Versuche erhaelt (symmetrisch zu L).
           motorsTurnRight(LINE_SEARCH_SPEED);
           changeState(LS_SEARCH_R);
         } else {
@@ -172,6 +173,7 @@ void lineFollowerTick() {
         changeState(LS_FORWARD);
       } else if (now - lsStateEnterMs > LINE_SEARCH_TURN_MS) {
         lsSearchTries++;
+        // 4 Versuche links + 4 Versuche rechts = 8 insgesamt (symmetrisch)
         if (lsSearchTries >= LINE_SEARCH_MAX_TRIES * 2) {
           motorsOff();
           lineFollowerActive = false;

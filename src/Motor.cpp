@@ -14,8 +14,6 @@ void initSteppers() {
   stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
   stepperL.setSpeed(0.0f);
   stepperR.setSpeed(0.0f);
-  pinMode(PIN_ENABLE, OUTPUT);
-  digitalWrite(PIN_ENABLE, LOW);  // DRV8834 aktivieren
   pinMode(PIN_STEP_L, OUTPUT);
   pinMode(PIN_STEP_R, OUTPUT);
   pinMode(PIN_DIR_L, OUTPUT);
@@ -45,11 +43,10 @@ void motorRun() {
   stepperR.runSpeed();
 }
 
-// Kurzer Piepton direkt nach dem Booten: beide Stepper ~200ms auf
-// Maximalgeschwindigkeit -> hoher, kurzer Ton. Danach kurz auslaufen.
+// Kurzer Piepton direkt nach dem Booten: beide Stepper ~600ms auf
+// einer festen Frequenz fahren -> hörbarer Ton. Danach sofort auf 0.
 void playStartupBeep() {
   constexpr uint32_t BEEP_MS = 600;
-  constexpr uint32_t STOP_MS = 0;
   constexpr float    BEEP_SPEED = 1200.0f;  // etwas unter MOTOR_MAX_SPEED -> angenehmerer Ton
   stepperL.setMaxSpeed(MOTOR_MAX_SPEED);
   stepperR.setMaxSpeed(MOTOR_MAX_SPEED);
@@ -62,9 +59,4 @@ void playStartupBeep() {
   }
   stepperL.setSpeed(0.0f);
   stepperR.setSpeed(0.0f);
-  start = millis();
-  while (millis() - start < STOP_MS) {
-    stepperL.runSpeed();
-    stepperR.runSpeed();
-  }
 }

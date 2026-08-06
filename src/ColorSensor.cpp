@@ -100,7 +100,7 @@ void colorSetup() {
   } else {
     Serial.println("[SENSOR] TCS34725 NICHT gefunden! (Trotzdem gestartet)");
   }
-  colorSem = xSemaphoreCreateBinary();
+  colorSem = xSemaphoreCreateMutex();
   if (colorSem) xSemaphoreGive(colorSem);
 }
 
@@ -135,7 +135,12 @@ void colorSensorTask(void* parameter) {
     if (colorSensorOk) {
       uint16_t rawR = 0, rawG = 0, rawB = 0, rawC = 0;
       tcs.getRawData(&rawR, &rawG, &rawB, &rawC);
-      rawSensorR = rawR; rawSensorG = rawG; rawSensorB = rawB; rawSensorC = rawC;
+      // rawSensor* sind volatile (gelesen ausserhalb des Tasks ohne Semaphore)
+      // -> atomar ueber Mutex setzen
+      if (xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) == pdTRUE) {
+        rawSensorR = rawR; rawSensorG = rawG; rawSensorB = rawB; rawSensorC = rawC;
+        xSemaphoreGive(colorSem);
+      }
 
       if (rawR == 0 && rawG == 0 && rawB == 0 && rawC == 0) {
         failCount++;

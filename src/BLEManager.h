@@ -24,7 +24,7 @@ enum BleEventType : uint8_t {
 
 struct BleEvent {
   BleEventType type;
-  char cmd[160];   // gross genug fuer kodierte Block-Programme (PROG:SET:...)
+  char cmd[256];   // gross genug fuer kodierte Block-Programme (PROG:SET:...)
 };
 
 extern BLECharacteristic* statusChar;

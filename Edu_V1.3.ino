@@ -27,14 +27,12 @@
 //   DIR_L   -> GPIO 3
 //   STEP_R  -> GPIO 2
 //   DIR_R   -> GPIO 1
-//   ENABLE  -> GPIO 7 (optional, LOW = aktiv)
 // TCS34725  -> I2C (SDA=GPIO5, SCL=GPIO6)
 
 #define PIN_DIR_L      3
 #define PIN_STEP_L     4
 #define PIN_DIR_R      1
 #define PIN_STEP_R     2
-#define PIN_ENABLE     7
 
 #define STEP_BIT_L     (1UL << PIN_STEP_L)
 #define STEP_BIT_R     (1UL << PIN_STEP_R)
@@ -717,13 +715,11 @@ void setup() {
   pinMode(PIN_STEP_L, OUTPUT);
   pinMode(PIN_DIR_R, OUTPUT);
   pinMode(PIN_STEP_R, OUTPUT);
-  pinMode(PIN_ENABLE, OUTPUT);
 
   digitalWrite(PIN_STEP_L, LOW);
   digitalWrite(PIN_STEP_R, LOW);
   digitalWrite(PIN_DIR_L, LOW);
   digitalWrite(PIN_DIR_R, LOW);
-  digitalWrite(PIN_ENABLE, LOW); // DRV8834 aktivieren
 
   GPIO.out_w1tc = STEP_BIT_L | STEP_BIT_R;
 
