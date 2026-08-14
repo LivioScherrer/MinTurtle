@@ -38,6 +38,7 @@ void memoryShowSequence() {
     if (memoryStopReq) return;
     memoryExecuteMove(memorySeq[i]);
     sendStatusF("MEMORY:SHOW_STEP:%u,%u", i, memorySeq[i]);
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(MEM_GAP_MS));
     if (memoryStopReq) return;
   }

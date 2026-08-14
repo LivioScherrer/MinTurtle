@@ -1,0 +1,49 @@
+- generic [ref=f7e3]:
+  - generic [ref=f7e4]:
+    - generic [ref=f7e5]: EduBot
+    - generic [ref=f7e7]:
+      - generic [ref=f7e8]: Getrennt
+      - button "Verbinden" [ref=f7e11] [cursor=pointer]
+      - button "STOP" [ref=f7e12] [cursor=pointer]
+  - generic [ref=f7e14]:
+    - generic [ref=f7e15]: Steuern & Fahren
+    - generic [ref=f7e17] [cursor=pointer]:
+      - generic [ref=f7e22]:
+        - generic [ref=f7e23]: Frei Fahren
+        - generic [ref=f7e24]: Steuern mit WASD oder Touch
+      - text: →
+    - generic [ref=f7e25]: Programmieren
+    - generic [ref=f7e27] [cursor=pointer]:
+      - generic [ref=f7e33]:
+        - generic [ref=f7e34]: Code-Bausteine
+        - generic [ref=f7e35]: Roboter mit Blöcken programmieren
+      - text: →
+    - generic [ref=f7e36]: Autonom
+    - generic [ref=f7e38] [cursor=pointer]:
+      - generic [ref=f7e44]:
+        - generic [ref=f7e45]: Linie Folgen
+        - generic [ref=f7e46]: Folgt einer schwarzen Linie automatisch
+      - text: →
+    - generic [ref=f7e47]: Multiplayer
+    - generic [ref=f7e49] [cursor=pointer]:
+      - generic [ref=f7e53]:
+        - generic [ref=f7e54]: Mathe-Rennen
+        - generic [ref=f7e55]: Rechne gegen einen anderen Roboter
+      - text: →
+    - generic [ref=f7e56]: Knobeln
+    - generic [ref=f7e58] [cursor=pointer]:
+      - generic [ref=f7e62]:
+        - generic [ref=f7e63]: Pfeil-Knobeln
+        - generic [ref=f7e64]: Folge wird länger - Roboter faehrt sie ab
+      - text: →
+    - generic [ref=f7e65]: Lernen
+    - generic [ref=f7e67] [cursor=pointer]:
+      - generic [ref=f7e72]:
+        - generic [ref=f7e73]: Korrigieren
+        - generic [ref=f7e74]: Quiz - Lege Plättchen, Roboter prüft
+      - text: →
+    - generic [ref=f7e75] [cursor=pointer]:
+      - generic [ref=f7e80]:
+        - generic [ref=f7e81]: Memory
+        - generic [ref=f7e82]: Bewegungen merken und nachfahren
+      - text: →

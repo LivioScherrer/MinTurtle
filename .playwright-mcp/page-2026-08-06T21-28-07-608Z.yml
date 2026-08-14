@@ -1,0 +1,65 @@
+- generic [active] [ref=e1]:
+  - generic: → → → → → → → → →
+  - generic [ref=e106]:
+    - generic [ref=e107]:
+      - button "←" [ref=e108] [cursor=pointer]
+      - generic [ref=e109]: Code-Bausteine
+    - generic [ref=e112]:
+      - generic [ref=e113]: Code-Bausteine
+      - generic [ref=e114]: Bausteine ziehen, Zahlen ändern, Start drücken – wie bei Scratch. Sobald ROT gesehen wird, hält der Roboter sofort an.
+      - generic [ref=e116]:
+        - generic [ref=e117]: Farb-Sensor
+        - generic [ref=e118]: "--"
+      - generic [ref=e119]:
+        - generic [ref=e120]:
+          - generic [ref=e121]: Bausteinezurück = löschen
+          - generic [ref=e122]:
+            - generic [ref=e423]:
+              - generic [ref=e424]: ↑
+              - generic [ref=e425]: Vorwärts
+              - generic [ref=e426]: "10"
+              - generic [ref=e428]: cm
+            - generic [ref=e430]:
+              - generic [ref=e431]: ↓
+              - generic [ref=e432]: Rückwärts
+              - generic [ref=e433]: "10"
+              - generic [ref=e435]: cm
+            - generic [ref=e437]:
+              - generic [ref=e438]: ↶
+              - generic [ref=e439]: Drehe links
+              - generic [ref=e440]: "90"
+              - generic [ref=e442]: °
+            - generic [ref=e444]:
+              - generic [ref=e445]: ↷
+              - generic [ref=e446]: Drehe rechts
+              - generic [ref=e447]: "90"
+              - generic [ref=e449]: °
+            - generic [ref=e451]:
+              - generic [ref=e452]: ⏸
+              - generic [ref=e453]: Warte
+              - generic [ref=e454]: "1"
+              - generic [ref=e456]: s
+            - generic [ref=e458]:
+              - generic [ref=e459]: ↻
+              - generic [ref=e460]: Wiederhole
+              - generic [ref=e461]: "2"
+              - generic [ref=e463]: mal
+            - generic [ref=e465]:
+              - generic [ref=e466]: ⚑
+              - generic [ref=e467]: Wiederhole bis
+              - generic [ref=e469]: ROT
+            - generic [ref=e471]:
+              - generic [ref=e472]: ≡
+              - generic [ref=e473]: bis
+              - generic [ref=e475]: IR-HIGH
+        - generic [ref=e177]:
+          - generic [ref=e178]: Dein Programm
+          - generic [ref=e476]:
+            - generic [ref=e477]: ↓
+            - generic [ref=e478]: Ziehe Bausteine hierher
+            - generic [ref=e479]: …und baue dein Programm
+          - generic [ref=e185]:
+            - button "Leeren" [ref=e186] [cursor=pointer]
+            - button "STOP" [ref=e187] [cursor=pointer]
+            - button "▶ Start" [ref=e188] [cursor=pointer]
+    - button "?" [ref=e189] [cursor=pointer]

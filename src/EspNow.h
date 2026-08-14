@@ -38,6 +38,9 @@ constexpr uint8_t SLALOM_CMD_TARGET  = 6;  // Zielfarbe (Host -> Client) - locke
 constexpr uint8_t SLALOM_CMD_OPP_FINISHED = 7;  // Gegner hat Farbe erreicht (10-Sek-Extension)
 constexpr uint8_t SLALOM_CMD_TIMEOUT     = 8;  // Runde abgelaufen (niemand hat Farbe erreicht)
 constexpr uint8_t SLALOM_CMD_TARGET_ACK  = 9;  // Client bestaetigt Zielfarbe -> Host broadcastet SLALOM:TARGET
+constexpr uint8_t SLALOM_CMD_INVITE      = 10; // Einladung (Initiator -> Gegner)
+constexpr uint8_t SLALOM_CMD_INVITE_ACK  = 11; // Einladung angenommen (Gegner -> Initiator)
+constexpr uint8_t SLALOM_CMD_SLALOM_UNPAIR = 12; // Slalom-spezifisches Unpair (nur dieses Spiel)
 struct PeerEntry {
   uint8_t mac[6];
   uint32_t lastSeen;
@@ -72,3 +75,5 @@ void raceSendPacket(uint8_t score, bool winner);
 // Pairing mit spezifischem Peer
 void racePairWith(const uint8_t mac[6]);
 void raceUnpair();
+// Peer fuer beliebigen Zweck (Slalom-Invite) registrieren
+void espNowAddSpecificPeer(const uint8_t mac[6]);

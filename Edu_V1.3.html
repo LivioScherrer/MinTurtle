@@ -2769,10 +2769,6 @@
             <button class="key-btn" data-key="s">S</button>
             <button class="key-btn" data-key="d">D</button>
           </div>
-          <div class="speed-wrap">
-            <label>Tempo: <span id="speedDisplay">900</span></label>
-            <input type="range" id="speedSlider" min="200" max="2500" value="900">
-          </div>
           <button class="btn btn-danger" id="btnStop">STOP</button>
           <div class="feedback-msg" id="driveFeedback"></div>
         </div>
@@ -3013,19 +3009,19 @@
 
           <div id="slalomSetupArea">
             <div class="mesh-section" style="margin-bottom:18px;">
-              <div class="mesh-section-title">Gegner verbinden</div>
+              <div class="mesh-section-title">Gegner einladen</div>
               <div id="slalomPairStatus" style="font-size:14px;color:var(--ink-mute);font-weight:700;margin-bottom:10px;">Noch nicht verbunden</div>
               <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
-                <button class="btn btn-primary" id="btnSlalomScan">Gegner suchen</button>
+                <button class="btn btn-primary" id="btnSlalomScan">Erneut suchen</button>
                 <button class="btn btn-grey" id="btnSlalomUnpair" style="display:none;">Trennen</button>
               </div>
               <div id="slalomPeers" style="margin-top:10px;"></div>
             </div>
-            <!-- Spiel starten Button (nur sichtbar wenn gepaart + noch nicht gespielt) -->
+            <!-- Einladen-Button (nur sichtbar wenn gepaart + Host + IDLE) -->
             <div id="slalomStartArea" style="display:none;margin-top:18px;text-align:center;">
-              <div style="font-size:14px;color:var(--ink-mute);font-weight:700;margin-bottom:10px;">Bereit zu spielen?</div>
-              <button class="btn btn-lg btn-success" id="btnSlalomStart" style="font-size:18px;padding:14px 28px;">🎮 SPIEL STARTEN</button>
-              <div style="font-size:12px;color:var(--ink-mute);margin-top:6px;">Wählt eine zufällige Zielfarbe und startet Runde 1</div>
+              <div style="font-size:14px;color:var(--ink-mute);font-weight:700;margin-bottom:10px;">Du bist Host - lade den Gegner ein:</div>
+              <button class="btn btn-lg btn-success" id="btnSlalomStart" style="font-size:18px;padding:14px 28px;">🎮 Einladen & Start</button>
+              <div style="font-size:12px;color:var(--ink-mute);margin-top:6px;">Wählt eine zufällige Zielfarbe und startet das Match</div>
             </div>
             <!-- Wartet auf Host-Bestätigung -->
             <div id="slalomWaitingArea" style="display:none;margin-top:18px;text-align:center;padding:14px;background:linear-gradient(135deg,#e8f4ff,#cce5ff);border:2px solid var(--ink);border-radius:12px;">
@@ -3041,8 +3037,7 @@
           </div>
 
           <div id="slalomScorePanel" style="display:none;text-align:center;margin:10px 0;padding:10px;background:linear-gradient(135deg,#fff7d6,#ffe9b3);border:2px solid var(--ink);border-radius:12px;">
-            <div style="font-size:13px;color:var(--ink-mute);font-weight:700;letter-spacing:1px;">RUNDE <span id="slalomRoundNum">1</span> / 3</div>
-            <div style="display:flex;justify-content:center;align-items:center;gap:18px;margin-top:6px;font-family:'Caveat',cursive;font-size:32px;font-weight:700;">
+            <div style="display:flex;justify-content:center;align-items:center;gap:18px;font-family:'Caveat',cursive;font-size:32px;font-weight:700;">
               <span><span style="color:var(--teal-mark);">DU</span> <span id="slalomScoreMe">0</span></span>
               <span style="color:var(--ink-mute);">:</span>
               <span><span id="slalomScoreOpp">0</span> <span style="color:var(--ink-soft);">Gegner</span></span>
@@ -3076,7 +3071,6 @@
                 <div class="prog-buttons">
                   <button class="btn btn-grey btn-lg" id="btnSlalomClear">Leeren</button>
                   <button class="btn btn-danger btn-lg" id="btnSlalomStop" style="display:none;">STOP</button>
-                  <button class="btn btn-primary btn-lg" id="btnSlalomReady" style="display:none;">Bereit!</button>
                 </div>
               </div>
             </div>
@@ -3092,6 +3086,22 @@
         </div>
       </div>
       <button type="button" class="help-fab" onclick="openHelp('slalomSteps')" title="Anleitung">?</button>
+    </div>
+
+    <!-- SLALOM EINLADUNGS-POP-UP -->
+    <div id="slalomInvitePopup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fffbe7;border:4px solid var(--ink);border-radius:18px;padding:28px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 0 var(--ink);">
+        <div style="font-size:54px;line-height:1;">📨</div>
+        <div style="font-family:'Caveat',cursive;font-size:32px;font-weight:700;margin-top:8px;">Einladung!</div>
+        <div style="font-size:15px;color:var(--ink-mute);font-weight:700;margin-top:8px;">
+          Ein anderer EduBot laedt dich zu einer Runde Farben-Slalom ein.
+        </div>
+        <div id="slalomInviteFrom" style="font-family:monospace;font-size:13px;color:var(--ink-soft);margin-top:10px;word-break:break-all;"></div>
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:20px;flex-wrap:wrap;">
+          <button class="btn btn-lg btn-success" id="btnSlalomInviteAccept" style="font-size:16px;padding:12px 22px;">✓ Annehmen</button>
+          <button class="btn btn-lg btn-grey" id="btnSlalomInviteDecline" style="font-size:16px;padding:12px 22px;">✗ Ablehnen</button>
+        </div>
+      </div>
     </div>
 
     <!-- PROGRAMMIEREN (Code-Bausteine) -->
@@ -3142,7 +3152,7 @@
       const STATUS_UUID = 'a9b1c2d3-1111-2222-3333-abcdefabcdef';
 
       let device = null, cmdChar = null, statusChar = null;
-      let connected = false, writing = false, queuedCommand = null;
+      let connected = false, writing = false, commandQueue = [], pendingKeys = null;
       let keys = { w: 0, a: 0, s: 0, d: 0 };
       let heartbeatInterval = null, lastSent = '';
 let reconnecting = false;
@@ -3171,20 +3181,35 @@ let slalomState = {
   extTimer: null,
   bereitStart: 0,
   bereitTimer: null,
-  isHost: false,         // werden wir vom Web als Host gehandhabt (wir haben START_MATCH gedrueckt)
-  pairedMac: null,
+  isHost: false,         // durch Invite-Flow gesetzt: Initiator = Host
+  pairedMac: null,       // MAC des Slalom-Peers
   scanPeers: [],
   scanTimer: null,
   // fuer die Anzeige-Uebergaenge:
   targetAnimTimer: null,  // 2s Countdown bis shrinkToTopRight
   showEditor: false,      // Editor (slalomActiveArea) erst NACH Animation sichtbar
-  matchEnd: false         // ob das Match beendet ist (Score >= 3) -> keine naechste Runde mehr
+  matchEnd: false,        // ob das Match beendet ist (Score >= 3) -> keine naechste Runde mehr
+  // Invite-Flow
+  invitePending: false,   // wir haben eine Einladung bekommen, Pop-up ist offen
+  inviterMac: ''          // MAC des Einladenden
 };
 let slalomProgBlocks = [];
 
 // Slalom-Phase setzen (zentral + Logging + Anzeige-Sync)
+// Erlaubte Vorwaerts-Pfade; alles andere wird als Warnung geloggt
+const SLALOM_PHASE_ORDER = {
+  [SLALOM_PHASE.IDLE]: 0, [SLALOM_PHASE.SETUP]: 1,
+  [SLALOM_PHASE.BUILD]: 2, [SLALOM_PHASE.READY]: 3,
+  [SLALOM_PHASE.RACE]: 4, [SLALOM_PHASE.RESULT]: 5
+};
 function setSlalomPhase(newPhase) {
   if (slalomState.phase === newPhase) return;
+  const fromOrd = SLALOM_PHASE_ORDER[slalomState.phase];
+  const toOrd   = SLALOM_PHASE_ORDER[newPhase];
+  // Rueckwaerts-Spruenge (ausser Reset zu IDLE) sind verdächtig
+  if (slalomState.phase !== SLALOM_PHASE.IDLE && toOrd < fromOrd && newPhase !== SLALOM_PHASE.IDLE) {
+    console.warn('[SLALOM] Phase-Sprung zurueck: ' + slalomState.phase + ' -> ' + newPhase);
+  }
   console.log('[SLALOM] UI-Phase ' + slalomState.phase + ' -> ' + newPhase);
   slalomState.phase = newPhase;
   // Phase-Indikator im Status (falls vorhanden)
@@ -3446,7 +3471,6 @@ function updateConnectionUI(isConn, text) {
         connected = true;
         updateConnectionUI(true, 'Verbunden');
         startSending();
-        sendCommand('EduBot V1.3 bereit');
       }
 
       async function connectBLE() {
@@ -3482,6 +3506,9 @@ function updateConnectionUI(isConn, text) {
       // Bei Trennung: automatisch neu verbinden
       async function onDisconnected() {
         connected = false;
+        writing = false;
+        commandQueue.length = 0;
+        pendingKeys = null;
         resetKeys();
         stopSending();
         updateConnectionUI(false, 'Getrennt');
@@ -3504,29 +3531,49 @@ function updateConnectionUI(isConn, text) {
         updateConnectionUI(false, 'Getrennt');
       }
 
-      async function sendCommand(cmd) {
-        if (!connected || !cmdChar) return;
-        if (writing) { queuedCommand = cmd; return; }
+      // Zentraler Write-Puffer: alle GATT-Writes laufen nacheinander.
+      // Web Bluetooth erlaubt KEINE parallelen Operationen auf derselben
+      // Characteristic -> sonst "GATT operation already in progress" und
+      // Befehle (z.B. KNOBELN:RUN, PROG:RUN) gehen verloren.
+      // Befehle werden per FIFO nie verworfen; KEYS: kollabiert auf den
+      // letzten Stand (nur der aktuelle Tastenzustand zaehlt).
+      async function sendNext() {
+        if (writing || !connected || !cmdChar) return;
         writing = true;
         try {
-          await cmdChar.writeValueWithoutResponse(new TextEncoder().encode(cmd));
-        } catch (e) {
-          console.warn('[BLE] send error', e);
+          let data = null;
+          if (commandQueue.length > 0) {
+            data = new TextEncoder().encode(commandQueue.shift());
+          } else if (pendingKeys !== null) {
+            data = new TextEncoder().encode(pendingKeys);
+            pendingKeys = null;
+          }
+          if (data) {
+            try {
+              await cmdChar.writeValueWithoutResponse(data);
+            } catch (e) {
+              console.warn('[BLE] send error', e);
+            }
+          }
+        } finally {
+          writing = false;
+          if (commandQueue.length > 0 || pendingKeys !== null) sendNext();
         }
-        writing = false;
-        if (queuedCommand) { const n = queuedCommand; queuedCommand = null; sendCommand(n); }
       }
 
-      async function sendKeys(force) {
+      function sendCommand(cmd) {
+        if (!connected || !cmdChar) return;
+        commandQueue.push(cmd);
+        sendNext();
+      }
+
+      function sendKeys(force) {
         if (!connected || !cmdChar) return;
         const msg = 'KEYS:' + keys.w + keys.a + keys.s + keys.d;
         if (!force && msg === lastSent) return;
         lastSent = msg;
-        try {
-          await cmdChar.writeValueWithoutResponse(new TextEncoder().encode(msg));
-        } catch (e) {
-          console.warn('[BLE] sendKeys error', e);
-        }
+        pendingKeys = msg;
+        sendNext();
       }
 
       function startSending() {
@@ -3560,31 +3607,24 @@ function updateConnectionUI(isConn, text) {
         if (viewId === 'slalom') {
           setDndMode('slalom');
           slalomRenderProgram();
-          // Nach Pairing: Setup zeigen, "Spiel starten" Button + "Warte auf Host" zeigen
-          if (slalomState.pairedMac) {
-            document.getElementById('slalomSetupArea').style.display = 'block';
-            document.getElementById('slalomScorePanel').style.display = 'block';
-            // Wenn weder Host-Phase noch laufendes Spiel: Start-Button + Waiting zeigen
-            if (slalomState.phase === SLALOM_PHASE.IDLE) {
-              document.getElementById('slalomStartArea').style.display = 'block';
-              document.getElementById('slalomWaitingArea').style.display = 'block';
-            }
-            // Editor sichtbar? nur wenn Zielfarbe bereits da + Phase BUILD/READY
-            if (slalomState.targetColor &&
-                (slalomState.phase === SLALOM_PHASE.BUILD || slalomState.phase === SLALOM_PHASE.READY)) {
-              showSlalomEditor();
-            } else {
-              document.getElementById('slalomActiveArea').style.display = 'none';
-              document.getElementById('slalomActiveArea').classList.remove('shown');
-              document.getElementById('slalomReadyArea').style.display = 'none';
-            }
-            updateSlalomReadyState();
+          // Zentrales UI-Refresh je nach Verbindungsstatus + Phase
+          slalomRefreshUi();
+          // Score-Panel: nur sichtbar wenn gepaart (im Match)
+          document.getElementById('slalomScorePanel').style.display =
+            slalomState.pairedMac ? 'block' : 'none';
+          // Editor sichtbar? nur wenn Zielfarbe bereits da + Phase BUILD/READY
+          if (slalomState.targetColor &&
+              (slalomState.phase === SLALOM_PHASE.BUILD || slalomState.phase === SLALOM_PHASE.READY)) {
+            showSlalomEditor();
           } else {
-            hideSlalomAllSections();
-            document.getElementById('slalomSetupArea').style.display = 'block';
-            document.getElementById('slalomStartArea').style.display = 'none';
-            document.getElementById('slalomWaitingArea').style.display = 'none';
-            document.getElementById('slalomScorePanel').style.display = 'none';
+            document.getElementById('slalomActiveArea').style.display = 'none';
+            document.getElementById('slalomActiveArea').classList.remove('shown');
+            document.getElementById('slalomReadyArea').style.display = 'none';
+          }
+          updateSlalomReadyState();
+          // Auto-Scan wenn noch nicht eingeladen
+          if (!slalomState.pairedMac) {
+            slalomAutoScan();
           }
         }
         if (viewId === 'prog') {
@@ -3599,6 +3639,12 @@ function updateConnectionUI(isConn, text) {
           setSlalomPhase(SLALOM_PHASE.IDLE);
           stopExtCountdown();
           stopBereitGraceCountdown();
+        }
+        // Slalom-View verlassen: laufenden Scan-Timer stoppen, damit er
+        // nicht im Hintergrund weiterlaeuft
+        if (viewId !== 'slalom' && slalomState.scanTimer) {
+          clearInterval(slalomState.scanTimer);
+          slalomState.scanTimer = null;
         }
       }
       document.querySelectorAll('.tile[data-view]').forEach(t => t.addEventListener('click', () => nav(t.dataset.view)));
@@ -3755,10 +3801,6 @@ function updateConnectionUI(isConn, text) {
       window.addEventListener('keyup', e => {
         const k = e.key.toLowerCase();
         if (k in keys) { keys[k] = 0; const b = document.querySelector('[data-key="' + k + '"]'); if (b) b.classList.remove('active'); }
-      });
-      document.getElementById('speedSlider').addEventListener('change', e => {
-        document.getElementById('speedDisplay').textContent = e.target.value;
-        sendCommand('MAX:' + e.target.value);
       });
       document.getElementById('btnStop').addEventListener('click', () => { resetKeys(); sendCommand('STOP'); });
       document.getElementById('btnEmergencyStop').addEventListener('click', () => { resetKeys(); sendCommand('STOP'); });
@@ -4099,16 +4141,12 @@ function updateConnectionUI(isConn, text) {
           STEPS.raceSteps[1].chips = [{ label: racePairedMac.substring(15), bg: '#1ea36b' }];
           setStep('raceSteps', 2);
            // Slalom pairing status aktualisieren
-           slalomState.pairedMac = racePairedMac;
-           document.getElementById('btnSlalomScan').style.display = 'none';
-           document.getElementById('btnSlalomUnpair').style.display = 'inline-flex';
-           setSlalomPairStatus('Verbunden mit Gegner ' + slalomState.pairedMac);
-           // Wenn die Slalom-View aktiv ist, Setup + Start sichtbar machen
-           if (document.getElementById('view-slalom').classList.contains('active')) {
-             document.getElementById('slalomSetupArea').style.display = 'block';
-             document.getElementById('slalomStartArea').style.display = 'block';
-             document.getElementById('slalomWaitingArea').style.display = 'block';
-           }
+           // ACHTUNG: Slalom hat jetzt ein EIGENSTAENDIGES Pairing (Invite-Flow).
+           // Das Race-Pairing hier ist nur fuer den Math-Race-Modus.
+           // Slalom-Pairing wird ueber SLALOM:INVITE_PAIRED gesetzt.
+           document.getElementById('btnSlalomScan').style.display = 'inline-flex';
+           document.getElementById('btnSlalomUnpair').style.display = 'none';
+           setSlalomPairStatus('Slalom: noch nicht eingeladen');
           setStep('slalomSteps', 1);
           updateSlalomReadyState();
         } else if (msg === 'RACE:PAIR_FAIL') {
@@ -4119,23 +4157,7 @@ function updateConnectionUI(isConn, text) {
           document.getElementById('btnRaceScan').style.display = 'inline-flex';
           STEPS.raceSteps[1].chips = [];
           refreshHelp('raceSteps');
-           // Slalom unpair ebenfalls
-          slalomState.pairedMac = null;
-          slalomState.myReady = false;
-          slalomState.oppReady = false;
-          slalomState.isHost = false;
-          if (document.getElementById('view-slalom').classList.contains('active')) {
-            document.getElementById('btnSlalomScan').style.display = 'inline-flex';
-            document.getElementById('btnSlalomUnpair').style.display = 'none';
-            setSlalomPairStatus('Getrennt. Suche einen neuen Gegner.');
-            hideSlalomAllSections();
-            document.getElementById('slalomSetupArea').style.display = 'block';
-            document.getElementById('slalomStartArea').style.display = 'none';
-            document.getElementById('slalomWaitingArea').style.display = 'none';
-            updateSlalomReadyState();
-          }
-          setSlalomPhase(SLALOM_PHASE.IDLE);
-          setStep('slalomSteps', 0);
+          // Slalom hat eigenes Pairing - RACE:UNPAIRED hat darauf keinen Einfluss
         }
       }
       function showRaceWinner(text, color) {
@@ -4431,8 +4453,20 @@ function updateConnectionUI(isConn, text) {
       }
 
       function updateSlalomReadyState() {
+        const readyArea = document.getElementById('slalomReadyArea');
         const readyBtn = document.getElementById('btnSlalomReady');
+        const stopBtn  = document.getElementById('btnSlalomStop');
+        const clearBtn = document.getElementById('btnSlalomClear');
         if (!readyBtn) return;
+        // STOP-Button: nur waehrend RACE sichtbar
+        if (stopBtn) {
+          stopBtn.style.display = slalomState.racing ? 'inline-flex' : 'none';
+        }
+        // CLEAR-Button: nur im BUILD/READY deaktiviert wenn Rennen laeuft
+        if (clearBtn) {
+          clearBtn.disabled = slalomState.racing;
+        }
+        let readyVisible = false;
         if (slalomState.racing) {
           readyBtn.style.display = 'none';
         } else if (!slalomState.pairedMac) {
@@ -4444,10 +4478,17 @@ function updateConnectionUI(isConn, text) {
           readyBtn.textContent = '✓ Bereit!';
           readyBtn.disabled = true;
           readyBtn.style.display = 'inline-flex';
+          readyVisible = true;
         } else {
           readyBtn.disabled = slalomProgBlocks.length === 0;
           readyBtn.textContent = '✓ Bereit!';
           readyBtn.style.display = 'inline-flex';
+          readyVisible = true;
+        }
+        // Ready-Container nur sichtbar wenn ein Ready-Button sichtbar ist
+        // (sonst steht ein leeres Flex-Feld mit gap dort)
+        if (readyArea) {
+          readyArea.style.display = readyVisible ? 'flex' : 'none';
         }
       }
 
@@ -4456,7 +4497,7 @@ function updateConnectionUI(isConn, text) {
         if (!list) return;
         list.innerHTML = '';
         if (slalomState.scanPeers.length === 0) {
-          list.innerHTML = '<div style="font-size:13px;color:#6b6354;text-align:center;">Keine EduBots gefunden. Beide Roboter müssen an sein.</div>';
+          list.innerHTML = '<div style="font-size:13px;color:#6b6354;text-align:center;">Keine EduBots in der Naehe. Beide muessen eingeschaltet sein.</div>';
           return;
         }
         slalomState.scanPeers.forEach(mac => {
@@ -4469,10 +4510,11 @@ function updateConnectionUI(isConn, text) {
           btn.className = 'btn btn-primary';
           btn.style.fontSize = '13px';
           btn.style.padding = '6px 12px';
-          btn.textContent = 'Verbinden';
+          btn.textContent = 'Einladen';
           btn.addEventListener('click', () => {
-            sendCommand('RACE:PAIR:' + mac);
-            showFeedback('slalomFeedback', 'success', 'Verbinde mit ' + mac);
+            // Invite-Flow: sende SLALOM:INVITE:<MAC>
+            sendCommand('SLALOM:INVITE:' + mac);
+            showFeedback('slalomFeedback', 'info', 'Einladung an ' + mac + ' gesendet...');
             setStep('slalomSteps', 1);
           });
           row.appendChild(name);
@@ -4486,31 +4528,80 @@ function updateConnectionUI(isConn, text) {
         if (el) el.textContent = text;
       }
 
-      document.getElementById('btnSlalomScan').addEventListener('click', () => {
-        if (!slalomState.pairedMac) {
-          setSlalomPairStatus('Suche nach EduBots...');
-          sendCommand('RACE:SCAN');
-          slalomState.scanPeers = [];
-          renderSlalomPeers();
-          if (slalomState.scanTimer) clearInterval(slalomState.scanTimer);
-          let elapsed = 0;
-          slalomState.scanTimer = setInterval(() => {
-            elapsed++;
-            if (elapsed >= 5) {
-              clearInterval(slalomState.scanTimer);
-              slalomState.scanTimer = null;
-              if (slalomState.scanPeers.length === 0) {
-                setSlalomPairStatus('Keine EduBots gefunden. Beide an?');
-              } else {
-                setSlalomPairStatus(slalomState.scanPeers.length + ' EduBot(s) gefunden.');
-              }
+      // ESP-NOW Auto-Scan: sendet ein HELLO-Broadcast, damit andere Roboter uns finden.
+      // Wird automatisch beim Betreten des Slalom-Views aufgerufen (einmal pro View-Wechsel).
+      function slalomAutoScan() {
+        if (slalomState.pairedMac) return;  // schon gepaart - nichts tun
+        if (slalomState.scanTimer) return;   // laeuft schon
+        setSlalomPairStatus('Suche nach EduBots in der Naehe...');
+        sendCommand('RACE:SCAN');
+        slalomState.scanPeers = [];
+        renderSlalomPeers();
+        let elapsed = 0;
+        slalomState.scanTimer = setInterval(() => {
+          elapsed++;
+          if (elapsed >= 5) {
+            clearInterval(slalomState.scanTimer);
+            slalomState.scanTimer = null;
+            if (slalomState.scanPeers.length === 0) {
+              setSlalomPairStatus('Keine EduBots gefunden. Beide an? "Erneut suchen" klicken.');
+            } else {
+              setSlalomPairStatus(slalomState.scanPeers.length + ' EduBot(s) gefunden - Einladen klicken.');
             }
-          }, 1000);
+          }
+        }, 1000);
+      }
+
+      // UI-Aktualisierung je nach Slalom-Verbindungsstatus
+      // - keine Verbindung: Scan-Button + Peer-Liste
+      // - gepaart als Host: "Einladen" + Waiting-Status
+      // - gepaart als Client: "Warte auf Host..."
+      // - im Match: Setup ausgeblendet
+      function slalomRefreshUi() {
+        const setupArea  = document.getElementById('slalomSetupArea');
+        const startArea  = document.getElementById('slalomStartArea');
+        const waitingArea= document.getElementById('slalomWaitingArea');
+        const unpairBtn  = document.getElementById('btnSlalomUnpair');
+        const scanBtn    = document.getElementById('btnSlalomScan');
+        if (!setupArea) return;
+        // Waehrend Match: Setup komplett ausblenden
+        if (slalomState.phase !== SLALOM_PHASE.IDLE && slalomState.phase !== SLALOM_PHASE.SETUP) {
+          setupArea.style.display = 'none';
+          startArea.style.display = 'none';
+          waitingArea.style.display = 'none';
+          return;
         }
+        setupArea.style.display = 'block';
+        if (!slalomState.pairedMac) {
+          // Noch nicht eingeladen
+          scanBtn.style.display = 'inline-flex';
+          unpairBtn.style.display = 'none';
+          startArea.style.display = 'none';
+          waitingArea.style.display = 'none';
+        } else {
+          // Gepaart
+          scanBtn.style.display = 'none';
+          unpairBtn.style.display = 'inline-flex';
+          if (slalomState.isHost) {
+            startArea.style.display = 'block';
+            waitingArea.style.display = 'none';
+          } else {
+            startArea.style.display = 'none';
+            waitingArea.style.display = 'block';
+          }
+        }
+      }
+
+      // (Legacy-Funktion entfernt - durch slalomRefreshUi ersetzt)
+
+      document.getElementById('btnSlalomScan').addEventListener('click', () => {
+        // Manueller Fallback: Auto-Scan erneut anstossen
+        slalomAutoScan();
       });
 
       document.getElementById('btnSlalomUnpair').addEventListener('click', () => {
-        sendCommand('RACE:UNPAIR');
+        // Slalom-spezifisches Unpair schicken (nur Slalom, nicht Race)
+        sendCommand('SLALOM:UNPAIR');
         slalomState.pairedMac = null;
         slalomState.myReady = false;
         slalomState.oppReady = false;
@@ -4520,15 +4611,10 @@ function updateConnectionUI(isConn, text) {
         slalomState.isHost = false;
         slalomProgBlocks = [];
         slalomRenderProgram();
-        document.getElementById('btnSlalomUnpair').style.display = 'none';
-        document.getElementById('btnSlalomScan').style.display = 'inline-flex';
         // Alle Phase-spezifischen Bereiche ausblenden
         hideSlalomAllSections();
         document.getElementById('slalomTargetDisplay').style.display = 'none';
         document.getElementById('slalomScorePanel').style.display = 'none';
-        document.getElementById('slalomSetupArea').style.display = 'block';
-        document.getElementById('slalomStartArea').style.display = 'none';
-        document.getElementById('slalomWaitingArea').style.display = 'none';
         stopExtCountdown();
         stopBereitGraceCountdown();
         if (slalomState.targetAnimTimer) {
@@ -4537,6 +4623,7 @@ function updateConnectionUI(isConn, text) {
         }
         setSlalomPairStatus('Getrennt. Suche einen neuen Gegner.');
         setSlalomPhase(SLALOM_PHASE.IDLE);
+        slalomRefreshUi();
         updateSlalomReadyState();
         setStep('slalomSteps', 0);
       });
@@ -4547,6 +4634,61 @@ function updateConnectionUI(isConn, text) {
         slalomRenderProgram();
         showFeedback('slalomFeedback', 'success', 'Programm geleert.');
         setStep('slalomSteps', 2);
+      });
+
+      document.getElementById('btnSlalomStop').addEventListener('click', () => {
+        // STOP: Rennen oder Bereit-Phase abbrechen, Roboter anhalten
+        sendCommand('SLALOM:STOP');
+        stopExtCountdown();
+        stopBereitGraceCountdown();
+        slalomState.racing = false;
+        slalomState.myReady = false;
+        slalomState.oppReady = false;
+        if (slalomState.targetAnimTimer) {
+          clearTimeout(slalomState.targetAnimTimer);
+          slalomState.targetAnimTimer = null;
+        }
+        setSlalomPhase(SLALOM_PHASE.IDLE);
+        // Lokale UI bereinigen
+        hideSlalomAllSections();
+        const td = document.getElementById('slalomTargetDisplay');
+        td.className = '';
+        td.style.cssText = '';
+        td.style.display = 'none';
+        document.getElementById('slalomScorePanel').style.display = 'none';
+        slalomProgBlocks = [];
+        slalomRenderProgram();
+        showFeedback('slalomFeedback', 'info', 'Spiel abgebrochen.');
+        setStep('slalomSteps', 1);
+      });
+
+      // ==========================================
+      // SLALOM EINLADUNGS-POP-UP
+      // ==========================================
+      function slalomShowInvitePopup(mac) {
+        const popup = document.getElementById('slalomInvitePopup');
+        const from  = document.getElementById('slalomInviteFrom');
+        if (popup) {
+          from.textContent = 'Von: ' + mac;
+          popup.style.display = 'flex';
+          slalomState.invitePending = true;
+        }
+      }
+      function slalomHideInvitePopup() {
+        const popup = document.getElementById('slalomInvitePopup');
+        if (popup) popup.style.display = 'none';
+        slalomState.invitePending = false;
+        slalomState.inviterMac = '';
+      }
+      document.getElementById('btnSlalomInviteAccept').addEventListener('click', () => {
+        sendCommand('SLALOM:INVITE_ACCEPT');
+        slalomHideInvitePopup();
+        showFeedback('slalomFeedback', 'success', 'Einladung angenommen - warte auf Host...');
+      });
+      document.getElementById('btnSlalomInviteDecline').addEventListener('click', () => {
+        sendCommand('SLALOM:INVITE_DECLINE');
+        slalomHideInvitePopup();
+        showFeedback('slalomFeedback', 'info', 'Einladung abgelehnt.');
       });
 
       document.getElementById('btnSlalomReady').addEventListener('click', () => {
@@ -4571,9 +4713,17 @@ function updateConnectionUI(isConn, text) {
 
       document.getElementById('btnSlalomStart').addEventListener('click', () => {
         // CMD_START_MATCH: Web -> Host. Wir markieren uns als Host.
-        slalomState.isHost = true;
+        // Schutz: nur senden, wenn wir wirklich Host sind (kleinere MAC).
+        if (!slalomState.isHost) {
+          showFeedback('slalomFeedback', 'info', 'Nur der Host kann einladen - warte auf Einladung.');
+          return;
+        }
+        if (!slalomState.pairedMac) {
+          showFeedback('slalomFeedback', 'error', 'Erst mit Gegner verbinden!');
+          return;
+        }
         sendCommand('SLALOM:START_MATCH');
-        showFeedback('slalomFeedback', 'success', 'Spiel wird gestartet...');
+        showFeedback('slalomFeedback', 'success', 'Einladung gesendet - warte auf Gegner...');
         // Button + Waiting-Bereich verschwinden
         document.getElementById('slalomStartArea').style.display = 'none';
         document.getElementById('slalomWaitingArea').style.display = 'none';
@@ -4583,38 +4733,85 @@ function updateConnectionUI(isConn, text) {
         return slalomProgBlocks.map(b => progEncodeBlock(b)).join(',');
       }
 
-      function slalomStartCountdown() {
-        document.getElementById('slalomSetupArea').style.display = 'none';
-        document.getElementById('slalomReadyArea').style.display = 'none';
-        document.getElementById('slalomActiveArea').style.display = 'none';
-        document.getElementById('slalomWinnerMsg').textContent = '';
-        document.getElementById('slalomWinnerMsg').style.display = 'none';
-
-        const countEl = document.getElementById('slalomCountdownArea');
-        countEl.style.display = 'block';
-        countEl.style.color = 'var(--teal-mark)';
-        let count = 3;
-        countEl.textContent = count;
-
-        const timer = setInterval(() => {
-          count--;
-          if (count > 0) {
-            countEl.textContent = count;
-          } else if (count === 0) {
-            countEl.textContent = "LOS!";
-            countEl.style.color = 'var(--green-600,#147a4d)';
-          } else {
-            clearInterval(timer);
-            countEl.style.display = 'none';
-            slalomState.racing = true;
-            setSlalomPhase(SLALOM_PHASE.RACE);
-            sendCommand('SLALOM:GO');
-            setStep('slalomSteps', 5);
-          }
-        }, 1000);
-      }
-
       function handleSlalomMessage(msg) {
+        // ============================================================
+        // SLALOM PAIRING-FLOW (Invite-System)
+        // ============================================================
+        if (msg.startsWith('SLALOM:INVITED_BY:')) {
+          // Einladung empfangen: Pop-up zeigen
+          const mac = msg.substring(17);
+          slalomState.inviterMac = mac;
+          slalomShowInvitePopup(mac);
+          return;
+        } else if (msg === 'SLALOM:INVITE_SENT') {
+          showFeedback('slalomFeedback', 'success', 'Einladung gesendet! Warte auf Antwort...');
+          return;
+        } else if (msg === 'SLALOM:INVITE_ACCEPTED') {
+          // Wir (Client) haben gerade akzeptiert - Pairing wurde gerade gemacht
+          showFeedback('slalomFeedback', 'success', 'Verbindung hergestellt! Warte auf Host...');
+          return;
+        } else if (msg === 'SLALOM:INVITE_PAIRED:HOST') {
+          // Wir sind Host (Initiator) - Pairing erfolgreich
+          slalomState.pairedMac = slalomState.scanPeers[0] || 'Gegner';
+          slalomState.isHost = true;
+          setSlalomPairStatus('Eingeladen: ' + slalomState.pairedMac);
+          setSlalomPhase(SLALOM_PHASE.IDLE);
+          slalomRefreshUi();
+          showFeedback('slalomFeedback', 'success', 'Gegner ist beigetreten! Du bist Host - starte das Match.');
+          return;
+        } else if (msg === 'SLALOM:INVITE_PAIRED:CLIENT') {
+          // Wir sind Client (Empfänger) - Pairing erfolgreich
+          slalomState.pairedMac = slalomState.inviterMac || slalomState.scanPeers[0] || 'Gegner';
+          slalomState.isHost = false;
+          setSlalomPairStatus('Verbunden mit: ' + slalomState.pairedMac);
+          setSlalomPhase(SLALOM_PHASE.IDLE);
+          slalomRefreshUi();
+          showFeedback('slalomFeedback', 'info', 'Verbindung hergestellt. Warte auf Host...');
+          return;
+        } else if (msg === 'SLALOM:UNPAIRED') {
+          // Slalom-spezifisches Unpair empfangen
+          slalomState.pairedMac = null;
+          slalomState.myReady = false;
+          slalomState.oppReady = false;
+          slalomState.isHost = false;
+          slalomState.round = 0;
+          slalomState.targetColor = '';
+          slalomProgBlocks = [];
+          slalomRenderProgram();
+          hideSlalomAllSections();
+          const td = document.getElementById('slalomTargetDisplay');
+          td.className = '';
+          td.style.cssText = '';
+          td.style.display = 'none';
+          document.getElementById('slalomScorePanel').style.display = 'none';
+          stopExtCountdown();
+          stopBereitGraceCountdown();
+          if (slalomState.targetAnimTimer) {
+            clearTimeout(slalomState.targetAnimTimer);
+            slalomState.targetAnimTimer = null;
+          }
+          setSlalomPhase(SLALOM_PHASE.IDLE);
+          setSlalomPairStatus('Getrennt. Suche einen neuen Gegner.');
+          slalomRefreshUi();
+          updateSlalomReadyState();
+          setStep('slalomSteps', 0);
+          return;
+        } else if (msg === 'SLALOM:ERROR:ALREADY_PAIRED') {
+          showFeedback('slalomFeedback', 'error', 'Bereits mit einem Gegner verbunden! Erst trennen.');
+          return;
+        } else if (msg === 'SLALOM:ERROR:NOT_PAIRED') {
+          showFeedback('slalomFeedback', 'error', 'Erst einen Gegner einladen!');
+          return;
+        } else if (msg === 'SLALOM:ERROR:NOT_HOST') {
+          showFeedback('slalomFeedback', 'error', 'Nur der Host kann starten.');
+          return;
+        } else if (msg === 'SLALOM:ERROR:NO_INVITE') {
+          showFeedback('slalomFeedback', 'error', 'Keine offene Einladung.');
+          return;
+        } else if (msg === 'SLALOM:ERROR:BAD_MAC') {
+          showFeedback('slalomFeedback', 'error', 'Ungültige MAC-Adresse.');
+          return;
+        }
         // ============================================================
         // SLALOM: Ziel-Farbe (gelockt, von Host oder Client broadcastet)
         // ============================================================
@@ -4625,6 +4822,13 @@ function updateConnectionUI(isConn, text) {
           if (slalomState.targetColor === color) {
             slalomState.targetColor = color;
             setSlalomPhase(SLALOM_PHASE.BUILD);
+            // Veraltete Countdowns/Timer aus vorheriger Runde zuruecksetzen
+            stopExtCountdown();
+            stopBereitGraceCountdown();
+            if (slalomState.targetAnimTimer) {
+              clearTimeout(slalomState.targetAnimTimer);
+              slalomState.targetAnimTimer = null;
+            }
             const el = document.getElementById('slalomTargetName');
             if (el) {
               const col = SLALOM_COLORS.find(c => c.name === color);
@@ -4645,6 +4849,13 @@ function updateConnectionUI(isConn, text) {
           }
           slalomState.targetColor = color;
           setSlalomPhase(SLALOM_PHASE.BUILD);
+          // Veraltete Countdowns/Timer aus vorheriger Runde zuruecksetzen
+          stopExtCountdown();
+          stopBereitGraceCountdown();
+          if (slalomState.targetAnimTimer) {
+            clearTimeout(slalomState.targetAnimTimer);
+            slalomState.targetAnimTimer = null;
+          }
           const el = document.getElementById('slalomTargetName');
           if (el) {
             const col = SLALOM_COLORS.find(c => c.name === color);
@@ -4720,8 +4931,16 @@ function updateConnectionUI(isConn, text) {
           startExtCountdown('Gegner war schneller! 10 Sek. Zeit zum Kontern!');
         } else if (msg === 'SLALOM:MATCH_STARTED') {
           showFeedback('slalomFeedback', 'success', '🎮 Match gestartet!');
-          document.getElementById('slalomStartArea').style.display = 'none';
-          document.getElementById('slalomWaitingArea').style.display = 'none';
+          // Host: Setup-Bereich komplett weg, wir warten auf ROUND_START vom Roboter
+          if (slalomState.isHost) {
+            document.getElementById('slalomSetupArea').style.display = 'none';
+            document.getElementById('slalomStartArea').style.display = 'none';
+            document.getElementById('slalomWaitingArea').style.display = 'none';
+          } else {
+            // Client: nur Start-Button weg, Waiting + Status sichtbar
+            document.getElementById('slalomStartArea').style.display = 'none';
+            document.getElementById('slalomWaitingArea').style.display = 'block';
+          }
         } else if (msg.startsWith('SLALOM:ROUND_END:')) {
           const parts = msg.split(':');
           const round = parseInt(parts[2]);
@@ -4734,9 +4953,9 @@ function updateConnectionUI(isConn, text) {
           slalomState.myReady = false;
           slalomState.oppReady = false;
           slalomState.targetColor = '';
+          slalomState.round = round;  // wichtig fuer ROUND_START-Mismatch-Schutz
           slalomProgBlocks = [];
           slalomRenderProgram();
-          document.getElementById('slalomRoundNum').textContent = round;
           document.getElementById('slalomScoreMe').textContent = scoreMe;
           document.getElementById('slalomScoreOpp').textContent = scoreOpp;
           document.getElementById('slalomScorePanel').style.display = 'block';
@@ -4747,7 +4966,7 @@ function updateConnectionUI(isConn, text) {
                          'Unentschieden!';
           const title = matchOver
             ? (scoreMe > scoreOpp ? '🏆 MATCH GEWONNEN!' : '😞 MATCH VERLOREN')
-            : ('Runde ' + round + ' — ' + winner);
+            : winner;
           slalomShowWinner(title + ' (Du: ' + scoreMe + ' | Gegner: ' + scoreOpp + ')', scoreMe >= scoreOpp ? '#1ea36b' : '#d63a3a');
           // Setup-Bereiche dauerhaft ausblenden waehrend RESULT
           document.getElementById('slalomSetupArea').style.display = 'none';
@@ -4765,14 +4984,31 @@ function updateConnectionUI(isConn, text) {
           }
         } else if (msg.startsWith('SLALOM:ROUND_START:')) {
           const round = parseInt(msg.split(':')[2]);
+          // Sync-Schutz: ignorieren wenn gleiche Runde noch laeuft (Re-Broadcast)
+          if (slalomState.round === round && slalomState.phase !== SLALOM_PHASE.RESULT) {
+            console.log('[SLALOM] ROUND_START:' + round + ' ignoriert (gleiche Runde)');
+            return;
+          }
+          // Sync-Schutz: wenn eine spaetere Runde schon laeuft, alte ueberspringen
+          if (slalomState.round > round) {
+            console.log('[SLALOM] ROUND_START:' + round + ' ignoriert (bereits in Runde ' + slalomState.round + ')');
+            return;
+          }
           setSlalomPhase(SLALOM_PHASE.SETUP);
+          // Sicherheitsreset: alle Timer aus alter Runde stoppen
+          stopExtCountdown();
+          stopBereitGraceCountdown();
+          if (slalomState.targetAnimTimer) {
+            clearTimeout(slalomState.targetAnimTimer);
+            slalomState.targetAnimTimer = null;
+          }
+          slalomState.round = round;
           slalomState.myReady = false;
           slalomState.oppReady = false;
           slalomState.racing = false;
           slalomState.targetColor = '';
           slalomProgBlocks = [];
           slalomRenderProgram();
-          document.getElementById('slalomRoundNum').textContent = round;
           document.getElementById('slalomWinnerMsg').style.display = 'none';
           document.getElementById('slalomCountdownArea').style.display = 'none';
           document.getElementById('slalomExtArea').style.display = 'none';
@@ -4798,19 +5034,21 @@ function updateConnectionUI(isConn, text) {
             document.getElementById('slalomWaitingArea').style.display = 'none';
             document.getElementById('slalomSetupArea').style.display = 'none';
           } else {
-            // Client: Setup-Bereich sichtbar (fuer Status-Info), Waiting an
-            document.getElementById('slalomSetupArea').style.display = 'block';
+            // Client: KEIN Setup-Bereich (sonst "springt das Menü zwischen Runden")
+            // Nur dezenter Waiting-Hinweis im Status-Bereich
+            document.getElementById('slalomSetupArea').style.display = 'none';
             document.getElementById('slalomStartArea').style.display = 'none';
             document.getElementById('slalomWaitingArea').style.display = 'block';
           }
-          showFeedback('slalomFeedback', 'info', 'Runde ' + round + ' — Zielfarbe wird ermittelt...');
+          showFeedback('slalomFeedback', 'info', 'Zielfarbe wird ermittelt...');
           updateSlalomReadyState();
         } else if (msg === 'SLALOM:WAITING_TARGET') {
           // Client wartet auf Ziel vom Host
           setSlalomPhase(SLALOM_PHASE.SETUP);
           document.getElementById('slalomStartArea').style.display = 'none';
+          // KEIN Setup-Bereich zeigen (sonst springt das Menü zwischen Runden)
+          document.getElementById('slalomSetupArea').style.display = 'none';
           document.getElementById('slalomWaitingArea').style.display = 'block';
-          document.getElementById('slalomSetupArea').style.display = 'block';
           showFeedback('slalomFeedback', 'info', '⏳ Warte auf Zielfarbe vom Host...');
         } else if (msg === 'SLALOM:STOPPED' || msg === 'SLALOM:RESET') {
           stopExtCountdown();
@@ -4973,10 +5211,11 @@ function updateConnectionUI(isConn, text) {
           } else {
             clearInterval(timer);
             countEl.style.display = 'none';
-            setSlalomPhase(SLALOM_PHASE.RACE);
-            slalomState.racing = true;
-            // Sende GO an den Roboter - er führt das Programm aus
-            sendCommand('SLALOM:GO');
+            // KEIN sendCommand('SLALOM:GO') mehr: der Start wird fuer perfekten
+            // Sync in der FIRMWARE des Hosts gezaehlt (3s-Timer). Nach Ablauf
+            // sendet der Host SLALOM_CMD_GO per ESP-NOW an den Client und beide
+            // Roboter starten gleichzeitig. Dieses Web zeigt den Countdown nur
+            // noch zur Anzeige; SLALOM:RUNNING uebernimmt dann die Phase.
             setStep('slalomSteps', 5);
           }
         }, 1000);

@@ -19,6 +19,7 @@
 #include "GameEngine.h"
 #include "LineFollower.h"
 #include "ProgGame.h"
+#include "LedStrip.h"
 
 // =====================================================
 // GLOBALE KONSTANTEN
@@ -28,7 +29,7 @@ constexpr int          STACK_COLOR_SENSOR = 8192;
 constexpr int          TASK_PRIORITY_SENSOR = 2;
 constexpr int          CORE_SENSOR        = 0;
 constexpr unsigned long COLOR_NOTIFY_MS    = 100;
-constexpr uint32_t     LOOP_DELAY_MS      = 5;
+constexpr uint32_t     LOOP_DELAY_MS      = 1;
 
 // IR-Sensor: IR_PIN kommt aus Config.h (D8 = GPIO7)
 constexpr unsigned long IR_NOTIFY_MS      = 250;  // alle 250ms Wert an Web senden
@@ -45,8 +46,8 @@ bool driveLockedByGame() { return currentGame != GAME_NONE; }
 // Einheitliche Zeiten: jedes Spiel (Knobeln, Memory, Quiz, Rennen) nutzt
 // dieselbe Vor/Zurueck- und Drehdauer -> konsistenter Bewegungsablauf.
 // Beschleunigung/Bremsen uebernimmt AccelStepper (kein Wheelie, kein Schraeglauf).
-const float     GAME_DRIVE_GAIN   = 1.0f;
-constexpr uint32_t GAME_TICK_MS    = 5;    // Polling-Intervall fuer motorRun() waehrend blockierender Moves
+constexpr float GAME_DRIVE_GAIN   = 1.0f;
+constexpr uint32_t GAME_TICK_MS    = 1;    // Polling-Intervall fuer motorRun() waehrend blockierender Moves
 const uint32_t GAME_MOVE_MS       = 360;  // Vor/Zurueck-Fahrt in ALLEN Spielen
 const uint32_t GAME_COLOR_READ_MS = 250;  // Pause waehrend Farbsensor liest
 constexpr uint8_t QUIZ_MAX_COLOR_USE = 4;  // jede Farbe max. so oft im Quiz verwendbar
@@ -59,23 +60,25 @@ bool gameMoveBusy = false;
 static void waitForStop(uint32_t startMs, uint32_t maxExtraMs = 1000) {
   uint32_t extra = millis();
   while ((stepperL.isRunning() || stepperR.isRunning()) && millis() - extra < maxExtraMs) {
+    esp_task_wdt_reset();
     motorRun();
     if (currentGame == GAME_NONE) { stopMotors(); return; }
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
 }
 
 void gameDriveForward(uint32_t ms) {
   gameMoveBusy = true;
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  const float target = config.maxSpeed * GAME_DRIVE_GAIN;
+  const float target = FIXED_DRIVE_SPEED * GAME_DRIVE_GAIN;
   setMotorSpeed(0, target);
   setMotorSpeed(1, target);
   uint32_t start = millis();
   while (millis() - start < ms) {
+    esp_task_wdt_reset();
     motorRun();
     if (currentGame == GAME_NONE) { stopMotors(); gameMoveBusy = false; return; }
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
   setMotorSpeed(0, 0);
@@ -86,15 +89,15 @@ void gameDriveForward(uint32_t ms) {
 
 void gameDriveBackward(uint32_t ms) {
   gameMoveBusy = true;
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  const float target = -config.maxSpeed * GAME_DRIVE_GAIN;
+  const float target = -FIXED_DRIVE_SPEED * GAME_DRIVE_GAIN;
   setMotorSpeed(0, target);
   setMotorSpeed(1, target);
   uint32_t start = millis();
   while (millis() - start < ms) {
+    esp_task_wdt_reset();
     motorRun();
     if (currentGame == GAME_NONE) { stopMotors(); gameMoveBusy = false; return; }
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
   setMotorSpeed(0, 0);
@@ -109,7 +112,9 @@ void gameStop(uint32_t ms) {
   setMotorSpeed(1, 0);
   uint32_t start = millis();
   while (millis() - start < (uint32_t)ms) {
+    esp_task_wdt_reset();
     motorRun();
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
   gameMoveBusy = false;
@@ -119,16 +124,11 @@ void gameStop(uint32_t ms) {
 // Beruecksichtigt config.leftSign/rightSign fuer die Verkabelung.
 void gameDriveForwardSteps(int32_t steps) {
   gameMoveBusy = true;
-  // Maximalgeschwindigkeit fuer diesen Move (benutzerkonfigurierbar)
-  stepperL.setMaxSpeed(config.maxSpeed);
-  stepperR.setMaxSpeed(config.maxSpeed);
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  // Relative Position: Roboter bewegt sich um 'steps' vorwaerts.
-  // Durch config.leftSign/rightSign wird die Richtung korrigiert.
-  stepperL.move(steps * static_cast<int32_t>(config.leftSign));
-  stepperR.move(steps * static_cast<int32_t>(config.rightSign));
+  // Feste Geschwindigkeit fuer diesen Move
+  prepPositionMove(stepperL, steps * static_cast<int32_t>(config.leftSign), FIXED_DRIVE_SPEED);
+  prepPositionMove(stepperR, steps * static_cast<int32_t>(config.rightSign), FIXED_DRIVE_SPEED);
   while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+    esp_task_wdt_reset();
     if (currentGame == GAME_NONE) {
       stepperL.stop();
       stepperR.stop();
@@ -137,6 +137,7 @@ void gameDriveForwardSteps(int32_t steps) {
     }
     stepperL.run();
     stepperR.run();
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
   gameMoveBusy = false;
@@ -145,16 +146,14 @@ void gameDriveForwardSteps(int32_t steps) {
 // Test-Helper: fahre n Schritte ohne currentGame-Abhaengigkeit, mit Timeout.
 // Wird vom STEPS:-Befehl genutzt, um den richtigen Wert fuer 3cm zu finden.
 void testDriveSteps(int32_t steps) {
-  stepperL.setMaxSpeed(config.maxSpeed);
-  stepperR.setMaxSpeed(config.maxSpeed);
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperL.move(steps * static_cast<int32_t>(config.leftSign));
-  stepperR.move(steps * static_cast<int32_t>(config.rightSign));
+  prepPositionMove(stepperL, steps * static_cast<int32_t>(config.leftSign), FIXED_DRIVE_SPEED);
+  prepPositionMove(stepperR, steps * static_cast<int32_t>(config.rightSign), FIXED_DRIVE_SPEED);
   uint32_t start = millis();
   while ((stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) && millis() - start < 5000) {
+    esp_task_wdt_reset();
     stepperL.run();
     stepperR.run();
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
   if (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
@@ -166,34 +165,30 @@ void testDriveSteps(int32_t steps) {
 // Positionsbasierte Drehung: jeder Motor 'steps' in entgegengesetzte Richtung.
 void gameTurnLeftSteps(int32_t steps) {
   gameMoveBusy = true;
-  stepperL.setMaxSpeed(config.turnOnlySpeed);
-  stepperR.setMaxSpeed(config.turnOnlySpeed);
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperL.move(-steps * static_cast<int32_t>(config.leftSign));
-  stepperR.move( steps * static_cast<int32_t>(config.rightSign));
+  prepPositionMove(stepperL, -steps * static_cast<int32_t>(config.leftSign), FIXED_DRIVE_SPEED);
+  prepPositionMove(stepperR,  steps * static_cast<int32_t>(config.rightSign), FIXED_DRIVE_SPEED);
   while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+    esp_task_wdt_reset();
     if (currentGame == GAME_NONE) {
       stepperL.stop(); stepperR.stop(); gameMoveBusy = false; return;
     }
     stepperL.run(); stepperR.run();
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
   gameMoveBusy = false;
 }
 void gameTurnRightSteps(int32_t steps) {
   gameMoveBusy = true;
-  stepperL.setMaxSpeed(config.turnOnlySpeed);
-  stepperR.setMaxSpeed(config.turnOnlySpeed);
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperL.move( steps * static_cast<int32_t>(config.leftSign));
-  stepperR.move(-steps * static_cast<int32_t>(config.rightSign));
+  prepPositionMove(stepperL,  steps * static_cast<int32_t>(config.leftSign), FIXED_DRIVE_SPEED);
+  prepPositionMove(stepperR, -steps * static_cast<int32_t>(config.rightSign), FIXED_DRIVE_SPEED);
   while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+    esp_task_wdt_reset();
     if (currentGame == GAME_NONE) {
       stepperL.stop(); stepperR.stop(); gameMoveBusy = false; return;
     }
     stepperL.run(); stepperR.run();
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
   gameMoveBusy = false;
@@ -201,15 +196,13 @@ void gameTurnRightSteps(int32_t steps) {
 
 // Test-Helper: drehe auf der Stelle (rechts) um 'steps' Schritte pro Rad.
 void testTurnSteps(int32_t steps) {
-  stepperL.setMaxSpeed(config.turnOnlySpeed);
-  stepperR.setMaxSpeed(config.turnOnlySpeed);
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperL.move( steps * static_cast<int32_t>(config.leftSign));
-  stepperR.move(-steps * static_cast<int32_t>(config.rightSign));
+  prepPositionMove(stepperL,  steps * static_cast<int32_t>(config.leftSign), FIXED_DRIVE_SPEED);
+  prepPositionMove(stepperR, -steps * static_cast<int32_t>(config.rightSign), FIXED_DRIVE_SPEED);
   uint32_t start = millis();
   while ((stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) && millis() - start < 5000) {
+    esp_task_wdt_reset();
     stepperL.run(); stepperR.run();
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
   }
   if (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
@@ -236,6 +229,7 @@ void knobelnExecute() {
       case 2: gameDriveBackward(GAME_MOVE_MS); break;
       case 3: gameTurnLeftSteps(config.quizTurnSteps); break;
     }
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(80));
   }
   currentGame = GAME_NONE;
@@ -268,6 +262,7 @@ void korrigierenExecute() {
     char part[48];
     snprintf(part, sizeof(part), "QUIZ:STEP:%u,%s,%s", i, korrigierenExpected[i], found);
     sendStatus(part);
+    bleProcessEvents();
   }
   stopMotors(); speedL = 0; speedR = 0;
   korrigierenRunning = false;
@@ -384,6 +379,14 @@ unsigned long slalomRoundTimeout = 0; // Timeout für gesamte Runde (60 Sek)
 unsigned long slalomTransitionStart = 0; // 3-Sek-Pause zwischen Runden
 bool slalomTransitionActive = false;     // Wartet auf 3-Sek-Pause vor neuer Runde
 
+// GO-Sync: NUR der HOST ist der Zeitgeber (3s nach BOTH_READY).
+// Er sendet SLALOM_CMD_GO per ESP-NOW an den Client und startet gleichzeitig
+// selbst -> beide Roboter fahren mit minimalem Versatz (ESP-NOW-Latenz) los.
+// Der Client startet sofort bei Empfang von SLALOM_CMD_GO; als Fallback
+// (Paketverlust) startet er nach 4.5s eigenstaendig.
+unsigned long slalomGoTimer = 0;   // Absoluter GO-Zeitpunkt (millis)
+bool slalomGoPending = false;      // GO-Timer laeuft
+
 // Farbnamen für den Slalom-Modus (4 Farben)
 static const char* const SLALOM_COLOR_NAMES[4] = { "ROT", "GELB", "GRUEN", "BLAU" };
 
@@ -392,6 +395,68 @@ static void slalomSetPhase(SlalomPhase p) {
   if (slalomPhase == p) return;
   Serial.printf("[SLALOM] Phase %s -> %s\n", SLALOM_PHASE_NAMES[slalomPhase], SLALOM_PHASE_NAMES[p]);
   slalomPhase = p;
+}
+
+// =====================================================
+// SLALOM PAIRING (eigenstaendig vom Race-Pairing)
+// Einladungs-Flow:
+//   1. Web A sendet SLALOM:INVITE:<MAC_B>  -> wir schicken CMD_INVITE an B
+//   2. Web B empfaengt SLALOM:INVITED_BY:.. -> Pop-up, B klickt "Annehmen"
+//   3. Web B sendet SLALOM:INVITE_ACCEPT   -> wir schicken CMD_INVITE_ACK an A
+//   4. Beide Seiten markieren sich als gepaart; Initiator (A) = Host
+// =====================================================
+static bool    slalomHasPeer     = false;     // haben wir einen Slalom-Peer?
+static uint8_t slalomPeerMac[6]  = {0,0,0,0,0,0}; // MAC des Slalom-Peers
+// MAC des Initiators (von dem die Einladung kam) - bei Empfang von CMD_INVITE
+static uint8_t slalomInviterMac[6] = {0,0,0,0,0,0};
+// Pending: wir haben eine Einladung bekommen, aber Web-Accept steht noch aus
+static bool    slalomInvitePending = false;
+
+// Slalom-Pairing aufbauen (intern, von beiden Seiten gerufen)
+static void slalomPairWith(const uint8_t mac[6], bool initiator) {
+  memcpy(slalomPeerMac, mac, 6);
+  slalomHasPeer = true;
+  slalomIsHost  = initiator;  // Initiator = Host
+  // ESP-NOW Peer registrieren (falls noch nicht)
+  espNowAddSpecificPeer(mac);
+  // Status ans Web
+  sendStatus(initiator ? "SLALOM:INVITE_PAIRED:HOST" : "SLALOM:INVITE_PAIRED:CLIENT");
+  Serial.printf("[SLALOM] Pairing mit %02X:%02X:%02X:%02X:%02X:%02X (Initiator=%d)\n",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], initiator);
+}
+
+// Slalom-spezifisches Unpair (nur Slalom-State, Race-Pairing unberuehrt)
+static void slalomUnpair() {
+  if (slalomHasPeer) {
+    esp_now_del_peer(slalomPeerMac);
+  }
+  slalomHasPeer       = false;
+  slalomIsHost        = false;
+  slalomInvitePending = false;
+  memset(slalomPeerMac, 0, 6);
+  memset(slalomInviterMac, 0, 6);
+  // Slalom-Phase zurueck auf IDLE (voller Reset)
+  slalomReady = false;
+  slalomOppReady = false;
+  slalomRunning = false;
+  slalomBereitPhase = false;
+  slalomReadyToRun = false;
+  slalomBereitActive = false;
+  slalomExtActive = false;
+  slalomTransitionActive = false;
+  slalomGoPending = false;
+  slalomTargetLocked = false;
+  slalomTargetColor[0] = '\0';
+  slalomRound = 0;
+  slalomScoreMe = 0;
+  slalomScoreOpp = 0;
+  slalomFinished = false;
+  slalomOppFinished = false;
+  slalomMyProgram[0] = '\0';
+  slalomOppProgram[0] = '\0';
+  slalomSetPhase(SLALOM_IDLE);
+  sendStatus("SLALOM:UNPAIRED");
+  Serial.println("[SLALOM] Slalom-Unpair");
 }
 
 // ACK-Timeout: merkt sich wann der Host das letzte CMD_TARGET gesendet hat.
@@ -414,11 +479,33 @@ void slalomSendPacket(uint8_t cmd, const char* data) {
   } else {
     pkt.slalomLen = 0;
   }
-  if (hasPairedPeer) {
+  if (slalomHasPeer) {
+    esp_now_send(slalomPeerMac, (uint8_t*)&pkt, sizeof(pkt));
+  } else if (hasPairedPeer) {
     esp_now_send(pairedPeer, (uint8_t*)&pkt, sizeof(pkt));
   } else {
     esp_now_send(espNowPeer, (uint8_t*)&pkt, sizeof(pkt));
   }
+}
+
+// An eine bestimmte MAC senden (fuer Slalom-Invite vor dem Pairing)
+void slalomSendPacketTo(uint8_t cmd, const char* data, const uint8_t destMac[6]) {
+  if (memcmp(destMac, myMac, 6) == 0) return;  // nicht an uns selbst
+  RacePacket pkt = {};
+  pkt.magic = 0xA5;
+  memcpy(pkt.senderMac, myMac, 6);
+  pkt.score = 0;
+  pkt.flags = 0;
+  pkt.slalomCmd = cmd;
+  if (data) {
+    size_t len = strlen(data);
+    if (len > sizeof(pkt.slalomData) - 1) len = sizeof(pkt.slalomData) - 1;
+    memcpy(pkt.slalomData, data, len);
+    pkt.slalomLen = len;
+  } else {
+    pkt.slalomLen = 0;
+  }
+  esp_now_send(destMac, (uint8_t*)&pkt, sizeof(pkt));
 }
 
 // CMD_TARGET_ACK: Client bestaetigt dem Host den Erhalt der Zielfarbe.
@@ -513,9 +600,25 @@ void slalomMaybeRun() {
   slalomBereitActive = false;
   slalomReadyToRun = true;
   sendStatus("SLALOM:BOTH_READY");
+  // Perfekter Start-Sync: der HOST zaehlt den 3s-Countdown in der Firmware
+  // (nicht im Web - dort haetten beide Seiten unabhaengige BLE-Jitter).
+  // Nach Ablauf sendet der Host SLALOM_CMD_GO per ESP-NOW und startet selbst.
+  if (slalomIsHost) {
+    slalomGoTimer = millis() + 3000;
+    slalomGoPending = true;
+  } else {
+    // Client: Fallback-Timer falls das GO-Paket verloren geht (4.5s > 3s)
+    slalomGoTimer = millis() + 4500;
+    slalomGoPending = true;
+  }
 }
 
 void slalomStartNextRound() {
+  // Schutz: nicht doppelt aufrufen (Loop-Timer + sonstige Trigger)
+  if (slalomPhase == SLALOM_SETUP && slalomTransitionActive) {
+    Serial.println("[SLALOM] slalomStartNextRound: bereits in SETUP, skip");
+    return;
+  }
   slalomTransitionActive = false;
   slalomRound++;
   slalomFinished = false;
@@ -552,13 +655,22 @@ void slalomStartNextRound() {
                     slalomRound, slalomTargetColor);
     }
   } else {
-    slalomWaitingForTarget = true;
     if (slalomTargetColor[0] == '\0') {
       // Erste Runde: Zielfarbe vom Host abwarten
+      slalomWaitingForTarget = true;
       sendStatus("SLALOM:WAITING_TARGET");
     } else {
-      // Folge-Runden: gleiche Farbe erwarten, warten auf neue CMD_TARGET-Bestaetigung
-      sendStatus("SLALOM:WAITING_TARGET");
+      // Folge-Runden: die Zielfarbe ist dieselbe wie in Runde 1 -> direkt
+      // verfuegbar. NICHT auf ein erneutes CMD_TARGET vom Host warten:
+      // Paketverlust oder Timing-Versatz (Host sendet CMD_TARGET evtl.
+      // waehrend wir noch in der ROUND_END-Transition sind) wuerde den
+      // Client sonst fuer immer in SETUP haengen lassen.
+      slalomWaitingForTarget = false;
+      slalomTargetLocked = true;
+      slalomSetPhase(SLALOM_BUILDING);
+      char msg[48];
+      snprintf(msg, sizeof(msg), "SLALOM:TARGET:%s", slalomTargetColor);
+      sendStatus(msg);
     }
   }
   Serial.printf("[SLALOM] Neue Runde %d gestartet (Phase SETUP, Farbe=%s)\n",
@@ -741,6 +853,17 @@ void onSlalomPacket(const RacePacket* pkt) {
         speedR = 0;
         sendStatus("SLALOM:TIMEOUT");
         break;
+      case SLALOM_CMD_GO:
+        // Host-Startsignal: perfekter Sync. Der Host hat seinen 3s-Countdown
+        // in der Firmware abgeschlossen und uns per ESP-NOW gestartet.
+        slalomGoPending = false;
+        if (slalomReadyToRun && !slalomRunning) {
+          slalomReadyToRun = false;
+          slalomBereitPhase = false;
+          slalomBereitActive = false;
+          slalomExecute();
+        }
+        break;
       case SLALOM_CMD_RESET:
   slalomReady = false;
   slalomOppReady = false;
@@ -752,6 +875,7 @@ void onSlalomPacket(const RacePacket* pkt) {
   slalomBereitActive = false;
   slalomExtActive = false;
   slalomTransitionActive = false;
+  slalomGoPending = false;
   slalomTargetLocked = false;
   slalomTargetColor[0] = '\0';
   slalomRound = 0;
@@ -760,6 +884,65 @@ void onSlalomPacket(const RacePacket* pkt) {
         slalomTargetColor[0] = '\0';
         slalomSetPhase(SLALOM_IDLE);
         sendStatus("SLALOM:RESET");
+        break;
+      case SLALOM_CMD_INVITE:
+        // Einladung empfangen - Slalom-Phase muss IDLE sein
+        if (slalomPhase != SLALOM_IDLE) {
+          Serial.println("[SLALOM] INVITE ignoriert: nicht in IDLE");
+          return;
+        }
+        {
+          memcpy(slalomInviterMac, pkt->senderMac, 6);
+          slalomInvitePending = true;
+          // Web benachrichtigen
+          char invMsg[48];
+          snprintf(invMsg, sizeof(invMsg), "SLALOM:INVITED_BY:%02X:%02X:%02X:%02X:%02X:%02X",
+                   pkt->senderMac[0], pkt->senderMac[1], pkt->senderMac[2],
+                   pkt->senderMac[3], pkt->senderMac[4], pkt->senderMac[5]);
+          sendStatus(invMsg);
+          Serial.printf("[SLALOM] Einladung empfangen von %02X:%02X:%02X:%02X:%02X:%02X\n",
+            pkt->senderMac[0], pkt->senderMac[1], pkt->senderMac[2],
+            pkt->senderMac[3], pkt->senderMac[4], pkt->senderMac[5]);
+        }
+        break;
+      case SLALOM_CMD_INVITE_ACK:
+        // Initiator: Empfaenger hat die Einladung angenommen
+        if (slalomHasPeer) {
+          // Bereits gepaart (z.B. doppelte ACK): ignorieren
+          break;
+        }
+        {
+          slalomPairWith(pkt->senderMac, true);  // Initiator = Host
+        }
+        break;
+      case SLALOM_CMD_SLALOM_UNPAIR:
+        // Peer hat das Slalom-Match beendet - bei uns auch unpairen
+        if (slalomHasPeer && memcmp(pkt->senderMac, slalomPeerMac, 6) == 0) {
+          Serial.println("[SLALOM] Peer hat Slalom-Unpair gesendet");
+          // Slalom-State zuruecksetzen, aber Race-Pairing unangetastet
+          slalomReady = false;
+          slalomOppReady = false;
+          slalomRunning = false;
+          slalomIsHost = false;
+          slalomBereitPhase = false;
+          slalomReadyToRun = false;
+          slalomWaitingForTarget = false;
+          slalomBereitActive = false;
+          slalomExtActive = false;
+          slalomTransitionActive = false;
+          slalomGoPending = false;
+          slalomTargetLocked = false;
+          slalomTargetColor[0] = '\0';
+          slalomRound = 0;
+          slalomScoreMe = 0;
+          slalomScoreOpp = 0;
+          slalomMyProgram[0] = '\0';
+          slalomOppProgram[0] = '\0';
+          slalomHasPeer = false;
+          memset(slalomPeerMac, 0, 6);
+          slalomSetPhase(SLALOM_IDLE);
+          sendStatus("SLALOM:UNPAIRED");
+        }
         break;
       default:
         break;
@@ -811,6 +994,7 @@ void onBleDisconnected() {
 // Forward declarations for Slalom
 void onSlalomPacket(const RacePacket* pkt);
 void slalomSendPacket(uint8_t cmd, const char* data);
+void slalomSendPacketTo(uint8_t cmd, const char* data, const uint8_t destMac[6]);
 
 // =====================================================
 // COMMAND-HANDLER
@@ -840,6 +1024,7 @@ void hardStop() {
   slalomTargetLocked = false;
   slalomTargetColor[0] = '\0';
   slalomSetPhase(SLALOM_IDLE);
+  ledStripShowAlert();
   sendStatus("STOP");
 }
 
@@ -864,39 +1049,6 @@ void handleCommand(const char* cmdStr) {
   if (cmd == "STOP") { hardStop(); return; }
 
   char buf[48];
-
-  if (cmd.startsWith("MAX:")) {
-    float v = cmd.substring(4).toFloat();
-    if (v >= MAX_SPEED_MIN && v <= MAX_SPEED_MAX) {
-      config.maxSpeed = v;
-      configSaveField("maxSpeed", v);
-      snprintf(buf, sizeof(buf), "MAX=%.0f", config.maxSpeed);
-      sendStatus(buf);
-    }
-    return;
-  }
-
-  if (cmd.startsWith("TURN:")) {
-    float t = cmd.substring(5).toFloat();
-    if (t >= TURN_MIN && t <= TURN_MAX) {
-      config.turnFactor = t;
-      configSaveField("turnFactor", t);
-      snprintf(buf, sizeof(buf), "TURN=%.2f", config.turnFactor);
-      sendStatus(buf);
-    }
-    return;
-  }
-
-  if (cmd.startsWith("ACC:")) {
-    float a = cmd.substring(4).toFloat();
-    if (a >= ACCEL_MIN && a <= ACCEL_MAX) {
-      config.accelRate = a;
-      configSaveField("accelRate", a);
-      snprintf(buf, sizeof(buf), "ACC=%.0f", config.accelRate);
-      sendStatus(buf);
-    }
-    return;
-  }
 
   if (cmd == "STEPS?") {
     snprintf(buf, sizeof(buf), "STEPS=%ld", (long)config.quizForwardSteps);
@@ -1152,20 +1304,80 @@ void handleCommand(const char* cmdStr) {
     if (sub.startsWith("PROG:")) {
       String enc = sub.substring(5);
       slalomSetProgram(enc.c_str());
+    } else if (sub.startsWith("INVITE:")) {
+      // SLALOM:INVITE:<MAC> - Initiator (Host) schickt Einladung an Peer
+      // Wichtig: hat nichts mit dem Race-Pairing zu tun, ist komplett
+      // eigenstaendiges Slalom-Pairing.
+      if (slalomHasPeer) {
+        sendStatus("SLALOM:ERROR:ALREADY_PAIRED");
+        return;
+      }
+      String macStr = sub.substring(7);
+      uint8_t mac[6] = {0,0,0,0,0,0};
+      int idx = 0, pos = 0;
+      while (idx < 6 && pos < macStr.length()) {
+        String hexByte = macStr.substring(pos, pos + 2);
+        mac[idx++] = (uint8_t)strtol(hexByte.c_str(), nullptr, 16);
+        pos += 3;
+      }
+      if (idx != 6) {
+        sendStatus("SLALOM:ERROR:BAD_MAC");
+        return;
+      }
+      // CMD_INVITE an den Peer senden (senderMac identifiziert uns)
+      slalomSendPacketTo(SLALOM_CMD_INVITE, nullptr, mac);
+      sendStatus("SLALOM:INVITE_SENT");
+      Serial.printf("[SLALOM] Einladung an %02X:%02X:%02X:%02X:%02X:%02X gesendet\n",
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    } else if (sub == "INVITE_ACCEPT") {
+      // Web des Empfaengers hat das Pop-up bestaetigt
+      if (!slalomInvitePending) {
+        sendStatus("SLALOM:ERROR:NO_INVITE");
+        return;
+      }
+      // CMD_INVITE_ACK an den Initiator schicken
+      slalomSendPacketTo(SLALOM_CMD_INVITE_ACK, nullptr, slalomInviterMac);
+      // Wir sind Client (nicht Initiator)
+      slalomPairWith(slalomInviterMac, false);
+      slalomInvitePending = false;
+      sendStatus("SLALOM:INVITE_ACCEPTED");
+    } else if (sub == "INVITE_DECLINE") {
+      // Einladung abgelehnt
+      if (slalomInvitePending) {
+        slalomSendPacketTo(SLALOM_CMD_SLALOM_UNPAIR, nullptr, slalomInviterMac);
+      }
+      slalomInvitePending = false;
+      memset(slalomInviterMac, 0, 6);
+    } else if (sub == "UNPAIR") {
+      // Slalom-spezifisches Unpair (nur Slalom-State, nicht das Race-Pairing)
+      if (slalomHasPeer) {
+        // Dem Peer mitteilen, dass wir uns trennen
+        slalomSendPacketTo(SLALOM_CMD_SLALOM_UNPAIR, nullptr, slalomPeerMac);
+      }
+      slalomUnpair();
     } else if (sub == "START_MATCH") {
       // CMD_START_MATCH (Web -> Host): initiiert den Host-Prozess
-      if (!hasPairedPeer) {
+      if (!slalomHasPeer) {
         sendStatus("SLALOM:ERROR:NOT_PAIRED");
+        return;
+      }
+      if (!slalomIsHost) {
+        sendStatus("SLALOM:ERROR:NOT_HOST");
         return;
       }
       slalomStartMatch();
     } else if (sub == "GO") {
-      // CMD_GO (Web nach 3s Countdown): startet das Programm
-      // Strikt: nur in Phase READY_WAIT (BOTH_READY), niemals frueh.
+      // CMD_GO (Web nach 3s Countdown, nur Fallback fuer alte Web-Sessions):
+      // startet das Programm. Fuer perfekten Sync sendet der HOST das
+      // Startsignal zusaetzlich per ESP-NOW an den Client.
       if (slalomReadyToRun && !slalomRunning) {
+        slalomGoPending = false;
         slalomReadyToRun = false;
         slalomBereitPhase = false;
         slalomBereitActive = false;
+        if (slalomIsHost) {
+          slalomSendPacket(SLALOM_CMD_GO, nullptr);
+        }
         slalomExecute();
       } else {
         Serial.printf("[SLALOM] GO ignoriert: readyToRun=%d running=%d phase=%s\n",
@@ -1185,6 +1397,7 @@ void handleCommand(const char* cmdStr) {
       slalomBereitActive = false;
       slalomExtActive = false;
       slalomTransitionActive = false;
+      slalomGoPending = false;
       slalomTargetLocked = false;
       slalomTargetColor[0] = '\0';
       slalomSetPhase(SLALOM_IDLE);
@@ -1299,7 +1512,6 @@ void setup() {
 
   initSteppers();
   Serial.println("[MOTOR] AccelStepper initialisiert (Beschleunigung aktiv)");
-  playStartupBeep();
 
   pinMode(IR_PIN, INPUT);  // D8 = IR-Sensor (digital)
   Serial.println("[IR] Sensor auf D8 (GPIO7, INPUT) initialisiert");
@@ -1319,6 +1531,7 @@ void setup() {
   espNowInit();
   bleSetup();
   espNowEnsureChannel();
+  ledStripSetup();
   Serial.println("======================================\n");
 }
 
@@ -1376,6 +1589,22 @@ void loop() {
       slalomMaybeRun();
     }
   }
+  // (0c) GO-Timer: 3s nach BOTH_READY (HOST zaehlt; Client nur Fallback 4.5s)
+  if (slalomGoPending && !slalomRunning && slalomReadyToRun && millis() >= slalomGoTimer) {
+    slalomGoPending = false;
+    slalomReadyToRun = false;
+    slalomBereitPhase = false;
+    slalomBereitActive = false;
+    if (slalomIsHost) {
+      // Erst GO per ESP-NOW senden (Client startet ~1-3ms spaeter), dann selbst
+      slalomSendPacket(SLALOM_CMD_GO, nullptr);
+      Serial.println("[SLALOM] HOST-GO-Timer: GO gesendet, starte selbst");
+    } else {
+      // Fallback: GO-Paket verloren - trotzdem starten (leicht verspaetet)
+      Serial.println("[SLALOM] Client-Fallback-GO: kein Paket erhalten, starte trotzdem");
+    }
+    slalomExecute();
+  }
   // (2) RACING: 10s-Extension Timer (nach Treffer, warten auf Gegner)
   if (slalomExtActive && millis() - slalomExtStart >= 10000) {
     slalomExtActive = false;
@@ -1397,6 +1626,20 @@ void loop() {
   if (deviceConnected && millis() - lastColorNotify > COLOR_NOTIFY_MS) {
     lastColorNotify = millis();
     sendColorToWebsite();
+  }
+  // LED-Streifen: Alert > Zielfarbe > Status (max. 4x/s aktualisieren)
+  {
+    static unsigned long lastLedUpdate = 0;
+    if (millis() - lastLedUpdate >= 250) {
+      lastLedUpdate = millis();
+      if (ledAlertActive) {
+        ledStripTick();
+      } else if (slalomTargetColor[0] != '\0') {
+        ledStripShowTarget(slalomTargetColor);
+      } else {
+        ledStripShowStatus(deviceConnected);
+      }
+    }
   }
   // IR-Sensor: LM393-Modul ist aktiv-low (OUT = LOW bei Hindernis).
   // Daher invertieren: irVal = 1 bedeutet Hindernis, 0 bedeutet frei.

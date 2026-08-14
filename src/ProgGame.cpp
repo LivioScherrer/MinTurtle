@@ -93,6 +93,7 @@ static bool colorSettled(uint8_t idx, uint32_t timeoutMs = 250) {
   while (millis() - start < timeoutMs) {
     if (!gameAllowsMotorRun()) return false;
     if (sensorPoll(idx)) return true;
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(20));
   }
   return false;
@@ -119,15 +120,12 @@ static int32_t degToSteps(int16_t deg) {
 // Rueckgabe: true wenn die Ziel-Farbe die Fahrt beendet hat ODER ROT gesehn.
 // =====================================================
 static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
-  stepperL.setMaxSpeed(speed);
-  stepperR.setMaxSpeed(speed);
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperL.move(sL * (int32_t)config.leftSign);
-  stepperR.move(sR * (int32_t)config.rightSign);
+  prepPositionMove(stepperL, sL * (int32_t)config.leftSign, speed);
+  prepPositionMove(stepperR, sR * (int32_t)config.rightSign, speed);
   uint32_t lastPoll = 0;
   bool colorHit = false;
   while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+    esp_task_wdt_reset();
     if (!gameAllowsMotorRun()) { stepperL.stop(); stepperR.stop(); break; }
     if (millis() - lastPoll >= 20) {
       lastPoll = millis();
@@ -155,13 +153,16 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
     }
     stepperL.run();
     stepperR.run();
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(5));
   }
   // sanft auslaufen lassen
   uint32_t stop = millis();
   while ((stepperL.isRunning() || stepperR.isRunning()) && millis() - stop < 800) {
+    esp_task_wdt_reset();
     stepperL.run();
     stepperR.run();
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(5));
   }
   return colorHit;
@@ -170,20 +171,21 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
 // Einfachen Baustein ausfuehren (kein Loop). Rueckgabe: true wenn Farbe ausgeloest.
 static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
   int32_t steps;
+// Feste Geschwindigkeit - keine Einstellung irgendwo.
   switch (op) {
     case OP_FWD:
       steps = cmToSteps(val);
-      return progMove(steps, steps, config.maxSpeed, colorCheck);
+      return progMove(steps, steps, FIXED_DRIVE_SPEED, colorCheck);
     case OP_BACK:
       steps = cmToSteps(val);
-      return progMove(-steps, -steps, config.maxSpeed, colorCheck);
+      return progMove(-steps, -steps, FIXED_DRIVE_SPEED, colorCheck);
     case OP_LEFT:
       steps = degToSteps(val);
-      progMove(-steps, steps, config.turnOnlySpeed, -1);
+      progMove(-steps, steps, FIXED_DRIVE_SPEED, -1);
       return false;
     case OP_RIGHT:
       steps = degToSteps(val);
-      progMove(steps, -steps, config.turnOnlySpeed, -1);
+      progMove(steps, -steps, FIXED_DRIVE_SPEED, -1);
       return false;
     case OP_WAIT: {
       if (val < 0) {
@@ -194,6 +196,7 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
         while (millis() - start < 60000) {  // max 60s warten
           if (!gameAllowsMotorRun()) return false;
           if (sensorPoll(target)) return false;  // keine colorHit-Semantik hier
+          bleProcessEvents();
           vTaskDelay(pdMS_TO_TICKS(30));
         }
         return false;
@@ -202,6 +205,7 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
       uint32_t start = millis();
       while (millis() - start < ms) {
         if (!gameAllowsMotorRun()) break;
+        bleProcessEvents();
         vTaskDelay(pdMS_TO_TICKS(50));
       }
       return false;
@@ -412,6 +416,7 @@ void progRun() {
             sendStatusF("PROG:SUB:%u,%u", i, j);
             progExecSimple(st.body[j].op, st.body[j].val, st.body[j].color);
           }
+          bleProcessEvents();
           vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         }
       } else {
@@ -421,6 +426,7 @@ void progRun() {
             sendStatusF("PROG:SUB:%u,%u", i, j);
             progExecSimple(st.body[j].op, st.body[j].val, st.body[j].color);
           }
+          bleProcessEvents();
           vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
           esp_task_wdt_reset();
         }
@@ -443,6 +449,7 @@ void progRun() {
                       ? (st.body[j].color >= 0 ? st.body[j].color : (int8_t)st.color) : (int8_t)-1;
           seen = progExecSimple(st.body[j].op, st.body[j].val, cc);
         }
+        bleProcessEvents();
         vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         esp_task_wdt_reset();
       }
@@ -452,6 +459,7 @@ void progRun() {
     } else {
       progExecSimple(st.op, st.val, st.color);
     }
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(PROG_STEP_GAP_MS));
   }
 
@@ -506,6 +514,7 @@ void progRunSlalom(const char* targetColor) {
             return;
           }
         }
+        bleProcessEvents();
         vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         esp_task_wdt_reset();
         // Bedingte Wiederholung: abbrechen wenn Farbe gesehn
@@ -529,6 +538,7 @@ void progRunSlalom(const char* targetColor) {
             return;
           }
         }
+        bleProcessEvents();
         vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         esp_task_wdt_reset();
         if (sensorPoll((uint8_t)targetIdx)) break;
@@ -547,6 +557,7 @@ void progRunSlalom(const char* targetColor) {
         return;
       }
     }
+    bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(PROG_STEP_GAP_MS));
   }
 

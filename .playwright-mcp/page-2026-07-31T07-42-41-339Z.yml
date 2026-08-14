@@ -1,0 +1,18 @@
+- generic [active] [ref=f2e1]:
+  - generic:
+    - text: → → → → → →
+    - generic [ref=f2e72]:
+      - generic [ref=f2e73]:
+        - button "←" [ref=f2e74] [cursor=pointer]
+        - generic [ref=f2e75]: Mathe-Rennen
+      - generic [ref=f2e103]:
+        - generic [ref=f2e105]:
+          - generic [ref=f2e106]: ICH
+          - generic [ref=f2e107]: 0/10
+          - generic [ref=f2e108]: 3.3s
+        - generic [ref=f2e111]:
+          - generic [ref=f2e112]: 14 + 13 = ?
+          - generic [ref=f2e113]:
+            - spinbutton "Antwort" [ref=f2e114]
+            - button "Prüfen" [ref=f2e115] [cursor=pointer]
+      - button "?" [ref=f2e97] [cursor=pointer]

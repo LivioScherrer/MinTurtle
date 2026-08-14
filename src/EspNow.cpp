@@ -91,10 +91,14 @@ void espNowProcessEvents() {
         espNowAddSpecificPeer(e.mac);
         break;
        case EspNowEvent::RACE_PKT:
-        if (hasPairedPeer && memcmp(e.pkt.senderMac, pairedPeer, 6) != 0) break;
-        // Slalom-Pakete (slalomCmd != 0) und klassische Rennscore-Pakete
-        if (e.pkt.slalomCmd != SLALOM_CMD_NONE) onSlalomPacket(&e.pkt);
-        else onRacePacket(&e.pkt);
+        // Slalom-Pakete immer durchlassen (Slalom hat eigenes Pairing)
+        if (e.pkt.slalomCmd != SLALOM_CMD_NONE) {
+          onSlalomPacket(&e.pkt);
+        } else {
+          // Nur Race-Pakete gegen Race-Pairing filtern
+          if (hasPairedPeer && memcmp(e.pkt.senderMac, pairedPeer, 6) != 0) break;
+          onRacePacket(&e.pkt);
+        }
         break;
     }
   }

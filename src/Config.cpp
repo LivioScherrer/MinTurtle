@@ -6,10 +6,6 @@ Preferences prefs;
 
 void configLoad() {
   prefs.begin("edubot", false);
-  config.maxSpeed      = prefs.getFloat("maxSpeed", static_cast<float>(MAX_SPEED_DEFAULT));
-  config.turnFactor    = prefs.getFloat("turnFactor", TURN_DEFAULT);
-  config.turnOnlySpeed = prefs.getFloat("turnOnlySpeed", 320.0f);
-  config.accelRate     = prefs.getFloat("accelRate", ACCEL_DEFAULT);
   config.quizForwardSteps = prefs.getInt("quizSteps", 42);
   config.quizTurnSteps    = prefs.getInt("quizTurnSteps", 88);
   config.blackR        = prefs.getUShort("blackR", 152);
@@ -39,32 +35,19 @@ void configLoad() {
     config.blackR = 152; config.blackG = 137; config.blackB = 98;
     config.whiteR = 4143; config.whiteG = 4258; config.whiteB = 3036;
   }
-  Serial.printf("[NVS] maxSpeed=%.0f accelRate=%.0f turnFactor=%.2f\n",
-                config.maxSpeed, config.accelRate, config.turnFactor);
+  Serial.printf("[NVS] quizSteps=%ld quizTurnSteps=%ld\n",
+                (long)config.quizForwardSteps, (long)config.quizTurnSteps);
   configValidate();
   prefs.end();
 }
 
 void configValidate() {
   bool changed = false;
-  if (config.maxSpeed < MAX_SPEED_MIN || config.maxSpeed > MAX_SPEED_MAX) {
-    config.maxSpeed = static_cast<float>(MAX_SPEED_DEFAULT); changed = true;
-  }
-  if (config.turnFactor < TURN_MIN || config.turnFactor > TURN_MAX) {
-    config.turnFactor = TURN_DEFAULT; changed = true;
-  }
-  // Migration: alter Default 0.25 (car-like, kaum Drehung) -> 0.0 (Innenrad stoppt)
-  if (config.turnFactor == 0.25f) {
-    config.turnFactor = TURN_DEFAULT; changed = true;
-  }
   if (config.quizForwardSteps < 1 || config.quizForwardSteps > 2000) {
     config.quizForwardSteps = 42; changed = true;
   }
   if (config.quizTurnSteps < 1 || config.quizTurnSteps > 5000) {
     config.quizTurnSteps = 88; changed = true;
-  }
-  if (config.accelRate < ACCEL_MIN || config.accelRate > ACCEL_MAX) {
-    config.accelRate = ACCEL_DEFAULT; changed = true;
   }
   if (config.blackR >= config.whiteR || config.blackG >= config.whiteG || config.blackB >= config.whiteB) {
     config.blackR = 152; config.blackG = 137; config.blackB = 98;
@@ -73,9 +56,6 @@ void configValidate() {
   }
   if (changed) {
     prefs.begin("edubot", false);
-    prefs.putFloat("maxSpeed", config.maxSpeed);
-    prefs.putFloat("turnFactor", config.turnFactor);
-    prefs.putFloat("accelRate", config.accelRate);
     prefs.putUShort("blackR", config.blackR);
     prefs.putUShort("blackG", config.blackG);
     prefs.putUShort("blackB", config.blackB);

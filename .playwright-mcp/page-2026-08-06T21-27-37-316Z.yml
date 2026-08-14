@@ -1,0 +1,65 @@
+- generic [active] [ref=e1]:
+  - generic: → → → → → → → → →
+  - generic [ref=e106]:
+    - generic [ref=e107]:
+      - button "←" [ref=e108] [cursor=pointer]
+      - generic [ref=e109]: Code-Bausteine
+    - generic [ref=e112]:
+      - generic [ref=e113]: Code-Bausteine
+      - generic [ref=e114]: Bausteine ziehen, Zahlen ändern, Start drücken – wie bei Scratch. Sobald ROT gesehen wird, hält der Roboter sofort an.
+      - generic [ref=e116]:
+        - generic [ref=e117]: Farb-Sensor
+        - generic [ref=e118]: "--"
+      - generic [ref=e119]:
+        - generic [ref=e120]:
+          - generic [ref=e121]: Bausteinezurück = löschen
+          - generic [ref=e122]:
+            - generic [ref=e191]:
+              - generic [ref=e192]: ↑
+              - generic [ref=e193]: Vorwärts
+              - generic [ref=e194]: "10"
+              - generic [ref=e196]: cm
+            - generic [ref=e198]:
+              - generic [ref=e199]: ↓
+              - generic [ref=e200]: Rückwärts
+              - generic [ref=e201]: "10"
+              - generic [ref=e203]: cm
+            - generic [ref=e205]:
+              - generic [ref=e206]: ↶
+              - generic [ref=e207]: Drehe links
+              - generic [ref=e208]: "90"
+              - generic [ref=e210]: °
+            - generic [ref=e212]:
+              - generic [ref=e213]: ↷
+              - generic [ref=e214]: Drehe rechts
+              - generic [ref=e215]: "90"
+              - generic [ref=e217]: °
+            - generic [ref=e219]:
+              - generic [ref=e220]: ⏸
+              - generic [ref=e221]: Warte
+              - generic [ref=e222]: "1"
+              - generic [ref=e224]: s
+            - generic [ref=e226]:
+              - generic [ref=e227]: ↻
+              - generic [ref=e228]: Wiederhole
+              - generic [ref=e229]: "2"
+              - generic [ref=e231]: mal
+            - generic [ref=e233]:
+              - generic [ref=e234]: ⚑
+              - generic [ref=e235]: Wiederhole bis
+              - generic [ref=e237]: ROT
+            - generic [ref=e239]:
+              - generic [ref=e240]: ≡
+              - generic [ref=e241]: bis
+              - generic [ref=e243]: GELB
+        - generic [ref=e177]:
+          - generic [ref=e178]: Dein Programm
+          - generic [ref=e244]:
+            - generic [ref=e245]: ↓
+            - generic [ref=e246]: Ziehe Bausteine hierher
+            - generic [ref=e247]: …und baue dein Programm
+          - generic [ref=e185]:
+            - button "Leeren" [ref=e186] [cursor=pointer]
+            - button "STOP" [ref=e187] [cursor=pointer]
+            - button "▶ Start" [ref=e188] [cursor=pointer]
+    - button "?" [ref=e189] [cursor=pointer]

@@ -11,6 +11,7 @@
 #include "ColorSensor.h"
 #include "Config.h"
 #include "Drive.h"
+#include "BLEManager.h"
 
 bool lineFollowerActive = false;
 
@@ -82,9 +83,7 @@ void lineFollowerStart() {
   lineFollowerActive = true;
   lsSearchTries = 0;
   lsLastSeenMs = millis();
-  // Globale, fixe Beschleunigung (nicht vom ACC:-Befehl beeinflusst)
-  stepperL.setAcceleration(GLOBAL_ACCEL_RATE);
-  stepperR.setAcceleration(GLOBAL_ACCEL_RATE);
+  // Feste Beschleunigung (keine Einstellung irgendwo)
   motorsForward(LINE_FOLLOW_SPEED);
   changeState(LS_FORWARD);
   Serial.println("[LINE] Folge starten");
@@ -97,6 +96,7 @@ void lineFollowerStop() {
   uint32_t start = millis();
   while ((stepperL.isRunning() || stepperR.isRunning()) && millis() - start < 800) {
     motorRun();
+    bleProcessEvents();
     delay(10);
   }
   lineFollowerActive = false;

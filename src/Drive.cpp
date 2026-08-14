@@ -1,4 +1,5 @@
-// EduBot V1.3 - Drive-Implementierung (WASD / Touch, AccelStepper)
+// EduBot V1.3 - Drive-Implementierung (WASD / Touch)
+// Feste Geschwindigkeit aus Motor.h - keine Einstellung moeglich.
 #include "Drive.h"
 #include "Motor.h"
 #include "Config.h"
@@ -32,11 +33,8 @@ void driveUpdate() {
   // blockierend gesteuert - KEYS: vom Frontend werden ignoriert.
   if (driveLockedByGame()) return;
 
-  // Freifahren: vom Benutzer einstellbare Beschleunigung (ACC:-Befehl).
-  // Spiele/LineFollower setzen ihre eigene Beschleunigung davor.
-  // Beim Lenken waehrend der Fahrt: deutlich hoehere Beschleunigung,
-  // damit das Innenrad SOFORT runterfaehrt -> man kann waehrend der
-  // Fahrt lenken, ohne das Gas wegzunehmen.
+  // Feste Geschwindigkeit - keine Einstellung irgendwo.
+  // Drehen auf der Stelle: ein Motor still, der andere mit voller Geschwindigkeit.
   float targetL = 0.0;
   float targetR = 0.0;
 
@@ -45,23 +43,11 @@ void driveUpdate() {
   bool left     = keyA && !keyD;
   bool right    = keyD && !keyA;
 
-  const bool moving   = (forward || backward);
-  const bool steering = (left || right) && moving;
-  const float driveAccel = steering ? 20000.0f : config.accelRate;
-  stepperL.setMaxSpeed(config.maxSpeed);
-  stepperR.setMaxSpeed(config.maxSpeed);
-  stepperL.setAcceleration(driveAccel);
-  stepperR.setAcceleration(driveAccel);
-
-  if (forward) { targetL = config.maxSpeed; targetR = config.maxSpeed; }
-  else if (backward) { targetL = -config.maxSpeed; targetR = -config.maxSpeed; }
-  if (forward || backward) {
-    if (left)  targetL *= config.turnFactor;
-    if (right) targetR *= config.turnFactor;
-  }
+  if (forward)  { targetL = FIXED_DRIVE_SPEED; targetR = FIXED_DRIVE_SPEED; }
+  else if (backward) { targetL = -FIXED_DRIVE_SPEED; targetR = -FIXED_DRIVE_SPEED; }
   if (!forward && !backward) {
-    if (left)  { targetL = 0; targetR = config.turnOnlySpeed; }
-    else if (right) { targetL = config.turnOnlySpeed; targetR = 0; }
+    if (left)  { targetL = 0; targetR = FIXED_DRIVE_SPEED; }
+    else if (right) { targetL = FIXED_DRIVE_SPEED; targetR = 0; }
   }
 
   // Timeout: kein BLE-Befehl mehr -> Stop
@@ -73,7 +59,7 @@ void driveUpdate() {
     }
   }
 
-  // AccelStepper erledigt die Rampe intern - nur Ziel setzen.
+  // Feste Geschwindigkeit setzen - Motor.cpp nutzt immer FIXED_DRIVE_SPEED.
   setMotorSpeed(0, targetL);
   setMotorSpeed(1, targetR);
   speedL = targetL;

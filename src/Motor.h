@@ -1,4 +1,5 @@
 // EduBot V1.3 - Motor-Modul (DRV8834 Stepper, AccelStepper)
+// Feste Geschwindigkeit - keine Einstellung irgendwo im Code.
 #pragma once
 
 #include <Arduino.h>
@@ -10,24 +11,26 @@
 #define PIN_DIR_R   1
 #define PIN_STEP_R   2
 
-// Maximale Step-Rate, die der Roboter je fahren soll (steps/s)
-constexpr float MOTOR_MAX_SPEED    = 2500.0f;
-// Feste Beschleunigung (steps/s^2). 1500 -> 0->380 steps/s in ca. 250ms.
-// Wird vom Freifahren via setAcceleration(config.accelRate) ueberschrieben.
-constexpr float GLOBAL_ACCEL_RATE  = 1500.0f;
+// Feste Fahrgeschwindigkeit in steps/s.
+// Einzige Geschwindigkeits-Konstante im gesamten Projekt.
+// 333 steps/s = 3ms zwischen den STEP-Pulsen.
+constexpr float FIXED_DRIVE_SPEED  = 450.0f;
 
 // Stepper-Instanzen (in Motor.cpp definiert)
 extern AccelStepper stepperL;
 extern AccelStepper stepperR;
 
 // Geschwindigkeit setzen (steps/s, Vorzeichen = Richtung).
-// Ueber AccelStepper intern beschleunigt/abgebremst -> kein Wheelie.
+// Die Geschwindigkeit wird auf FIXED_DRIVE_SPEED begrenzt - egal was uebergeben wird.
 void setMotorSpeed(int motorIdx, float speed);
-// Beide Motoren sanft auf 0 (AccelStepper rampt runter).
+// Beide Motoren sofort stoppen.
 void stopMotors();
 // Jede Loop aufrufen: fuehrt die geplanten Schritte aus.
 void motorRun();
-// Initialisierung (Pins + Stepper-Defaults)
+// Position-Move sauber vorbereiten (AccelStepper-State + Richtung):
+// setzt _n/_speed zurueck, damit run() ohne Fehltritt und ohne
+// Rest-Rampen-Zustand in die richtige Richtung startet.
+// physicalSteps: vorzeichenkorrigierte Schritte (positiv = CW).
+void prepPositionMove(AccelStepper& s, long physicalSteps, float speed);
+// Initialisierung (Pins + Stepper-Defaults, feste Geschwindigkeit)
 void initSteppers();
-// Kurzer Startton: beide Motoren kurz mit Maximalgeschwindigkeit fahren
-void playStartupBeep();

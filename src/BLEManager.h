@@ -14,7 +14,7 @@
 #define CMD_UUID     "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define STATUS_UUID  "a9b1c2d3-1111-2222-3333-abcdefabcdef"
 
-constexpr int BLE_QUEUE_LENGTH = 16;
+constexpr int BLE_QUEUE_LENGTH = 32;
 
 enum BleEventType : uint8_t {
   BLE_EVT_CONNECTED,

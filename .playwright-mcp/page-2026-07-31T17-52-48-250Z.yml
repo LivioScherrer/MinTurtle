@@ -1,0 +1,18 @@
+- generic [active] [ref=e1]:
+  - generic:
+    - text: → → → → → →
+    - generic [ref=e72]:
+      - generic [ref=e73]:
+        - button "←" [ref=e74] [cursor=pointer]
+        - generic [ref=e75]: Mathe-Rennen
+      - generic [ref=e112]:
+        - generic [ref=e114]:
+          - generic [ref=e115]: ICH
+          - generic [ref=e116]: 0/10
+          - generic [ref=e117]: 3.9s
+        - generic [ref=e120]:
+          - generic [ref=e121]: 1/5 + 3/5 = ?
+          - generic [ref=e122]:
+            - textbox "Antwort" [ref=e123]
+            - button "Prüfen" [ref=e124] [cursor=pointer]
+      - button "?" [ref=e110] [cursor=pointer]
