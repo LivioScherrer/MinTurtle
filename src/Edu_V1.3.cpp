@@ -300,7 +300,8 @@ void raceForwardStep() {
 // Forward declarations for Slalom
 void onSlalomPacket(const RacePacket* pkt);
 void slalomExecute();
-void slalomMaybeRun();
+void slalomMaybeStart();
+void slalomCheckRetry();
 
 void onRacePacket(const RacePacket* pkt) {
   if (pkt->flags & RACE_FLAG_WINNER || pkt->score >= RENNEN_TARGET_SCORE) {
@@ -319,71 +320,63 @@ void onRacePacket(const RacePacket* pkt) {
 }
 
 // =====================================================
-// FARBMARKER-SLALOM (Multiplayer)
-//
+// FARBMARKER-SLALOM (Multiplayer) - VEREINFACHTE Logik
 // =====================================================
-// 5-Phasen State Machine (v2.0)
-//   IDLE       : Keine Pairing-Verbindung
-//   SETUP      : Gepaart, Host hat Spiel gestartet, Zielfarbe noch nicht synchronisiert
-//   BUILDING   : Zielfarbe ist gelockt (Host hat ACK bekommen), Spieler bauen Programm
-//   READY_WAIT : Mindestens ein Spieler hat "Bereit" gedrueckt, 10s-Grace laeuft
-//   RACING     : Countdown vorbei, Roboter fuehren das Programm aus
-//   ROUND_END  : Punkte angezeigt, 3s Uebergangspause vor naechster Runde
+// Regeln:
+//   * KEINE Punkte / Runden. Es geht nur darum, wer ZUERST die Zielfarbe erreicht.
+//   * Sobald ein Roboter die Zielfarbe stabil erkennt, ist das Spiel SOFORT
+//     vorbei: dieser Roboter gewinnt, beide stoppen (Phase DONE).
+//   * Hat NIEMAND getroffen (beide Programme ohne Treffer zu Ende), geht es
+//     automatisch zurueck in die Bauphase (gleiche Zielfarbe) - die Spieler
+//     duerfen ihr Programm verbessern. So lange, bis jemand trifft.
 //
-// ESP-NOW Protokoll:
-//   CMD_START_MATCH (Web -> Host)         : SLALOM:START_MATCH
-//   CMD_TARGET       (Host -> Client)     : SLALOM_CMD_TARGET  (nur Broadcast, kein Web-Update)
-//   CMD_TARGET_ACK   (Client -> Host)     : SLALOM_CMD_TARGET_ACK
-//   CMD_BEREIT       (Peer  -> Peer)      : SLALOM_CMD_PROG  (Programm/Bereit-Signal)
-//   CMD_GO           (Host -> Client)     : SLALOM:GO (nach 3s Web-Countdown)
-//
-// Host wartet auf CMD_TARGET_ACK bevor er SLALOM:TARGET an das WEB broadcastet.
-// Dadurch ist die Zielfarbe auf beiden Seiten garantiert "locked" wenn das Spiel startet.
+// Ablauf / Sync (bewusst simpel + robust, KEINE ACK-Kette):
+//   1. Pairing per Invite/Accept (Initiator = Host).
+//   2. Host drueckt "Spiel starten" -> waehlt Zufallsfarbe, sendet
+//      SLALOM_CMD_START (+Farbe) 3x an den Client (Paketverlust), zeigt die
+//      Farbe lokal an. Beide gehen in die Bauphase (BUILD).
+//   3. Jeder Spieler baut sein Programm und drueckt "Bereit" -> sendet
+//      SLALOM_CMD_PROG an den Peer. Sobald BEIDE bereit sind (COUNTDOWN):
+//      * Host zaehlt einen 3s-Countdown in der Firmware und sendet danach
+//        SLALOM_CMD_GO (3x) an den Client; beide fahren (fast) gleichzeitig.
+//      * Client startet sofort bei Empfang von GO; Fallback nach 4.5s.
+//   4. RACE: beide fahren ihr Programm. Wer die Farbe erreicht, sendet
+//      SLALOM_CMD_WIN -> beide stoppen, Gewinner wird angezeigt (DONE).
+//      Wer ohne Treffer fertig wird, sendet SLALOM_CMD_MISS. Haben BEIDE
+//      "miss" gemeldet (oder 15s Sicherheits-Timeout), geht es zurueck zu BUILD.
 // =====================================================
 enum SlalomPhase : uint8_t {
-  SLALOM_IDLE       = 0,
-  SLALOM_SETUP      = 1,
-  SLALOM_BUILDING   = 2,
-  SLALOM_READY_WAIT = 3,
-  SLALOM_RACING     = 4,
-  SLALOM_ROUND_END  = 5
+  SLALOM_IDLE       = 0,   // nicht gepaart
+  SLALOM_PAIRED     = 1,   // gepaart, wartet auf Spielstart (Host)
+  SLALOM_BUILD      = 2,   // Zielfarbe bekannt, Programm bauen
+  SLALOM_COUNTDOWN  = 3,   // beide bereit, 3s bis Start
+  SLALOM_RACING     = 4,   // Roboter fahren
+  SLALOM_DONE       = 5    // Gewinner gefunden, Spiel vorbei
 };
 static const char* const SLALOM_PHASE_NAMES[6] = {
-  "IDLE", "SETUP", "BUILDING", "READY_WAIT", "RACING", "ROUND_END"
+  "IDLE", "PAIRED", "BUILD", "COUNTDOWN", "RACING", "DONE"
 };
 SlalomPhase slalomPhase = SLALOM_IDLE;
 
 char slalomTargetColor[16] = "";
 char slalomMyProgram[PROG_MAX_ENC + 1] = "";
-char slalomOppProgram[PROG_MAX_ENC + 1] = "";
-bool slalomReady = false;        // Eigenes Programm ist gesetzt (Bereit gedrückt)
-bool slalomOppReady = false;     // Gegner-Programm empfangen (Gegner hat Bereit gedrückt)
-bool slalomRunning = false;
-bool slalomIsHost = false;       // Bin ich Host (Spiel-Einlader)?
-bool slalomBereitPhase = false;  // Warte auf beide Spieler-Bereit-Drücke
-bool slalomReadyToRun = false;   // Beide bereit → Web zeigt Countdown
-bool slalomWaitingForTarget = false; // Nicht-Host: warte auf CMD_TARGET für neue Runde
-bool slalomTargetLocked = false;     // Zielfarbe ist zwischen Host+Client synchronisiert (ACK erhalten)
-unsigned long slalomBereitStart = 0; // Startzeitpunkt 10s-Grace nach erstem Bereit
-bool slalomBereitActive = false;     // 10s-Grace läuft (für 2. Spieler)
+bool slalomRunning   = false;   // faehrt gerade (RACE)
+bool slalomIsHost    = false;   // Initiator = Host
+bool slalomReady     = false;   // ich habe Bereit gedrueckt
+bool slalomOppReady  = false;   // Gegner hat Bereit gedrueckt (PROG empfangen)
+bool slalomFinished  = false;   // mein Roboter hat die Zielfarbe erreicht (von progRunSlalom)
+bool slalomWon       = false;   // das Spiel ist entschieden (jemand hat getroffen)
 
-// Runden-Tracking
-int slalomRound = 0;
-int slalomScoreMe = 0;
-int slalomScoreOpp = 0;
-bool slalomFinished = false;       // Hat dieses Board die Zielfarbe erreicht?
-bool slalomOppFinished = false;    // Hat der Gegner die Zielfarbe erreicht?
-unsigned long slalomExtStart = 0;  // Startzeit der 10-Sek-Extension
-bool slalomExtActive = false;      // 10-Sek-Extension läuft
-unsigned long slalomRoundTimeout = 0; // Timeout für gesamte Runde (60 Sek)
-unsigned long slalomTransitionStart = 0; // 3-Sek-Pause zwischen Runden
-bool slalomTransitionActive = false;     // Wartet auf 3-Sek-Pause vor neuer Runde
+// Retry-Logik (niemand hat getroffen -> neue Runde mit gleicher Farbe)
+bool slalomMyRunDone  = false;  // mein Durchlauf ist zu Ende (ohne Treffer)
+bool slalomOppRunDone = false;  // Gegner-Durchlauf zu Ende (MISS empfangen)
+unsigned long slalomOppWaitStart = 0; // seit wann warte ich auf das Gegner-Ergebnis
 
-// GO-Sync: NUR der HOST ist der Zeitgeber (3s nach BOTH_READY).
+// GO-Sync: NUR der HOST ist der Zeitgeber (3s nachdem beide bereit sind).
 // Er sendet SLALOM_CMD_GO per ESP-NOW an den Client und startet gleichzeitig
 // selbst -> beide Roboter fahren mit minimalem Versatz (ESP-NOW-Latenz) los.
-// Der Client startet sofort bei Empfang von SLALOM_CMD_GO; als Fallback
-// (Paketverlust) startet er nach 4.5s eigenstaendig.
+// Der Client startet sofort bei Empfang von GO; als Fallback (Paketverlust)
+// startet er nach 4.5s eigenstaendig.
 unsigned long slalomGoTimer = 0;   // Absoluter GO-Zeitpunkt (millis)
 bool slalomGoPending = false;      // GO-Timer laeuft
 
@@ -412,6 +405,23 @@ static uint8_t slalomInviterMac[6] = {0,0,0,0,0,0};
 // Pending: wir haben eine Einladung bekommen, aber Web-Accept steht noch aus
 static bool    slalomInvitePending = false;
 
+// Laufzeit-Zustand zuruecksetzen (ohne Pairing/Phase anzufassen).
+// WICHTIG: slalomTargetColor bleibt ERHALTEN - bei einem Retry (niemand
+// getroffen) wird mit DERSELBEN Zielfarbe weitergespielt.
+static void slalomResetRuntime() {
+  slalomRunning = false;
+  slalomReady = false;
+  slalomOppReady = false;
+  slalomFinished = false;
+  slalomWon = false;
+  slalomMyRunDone = false;
+  slalomOppRunDone = false;
+  slalomOppWaitStart = 0;
+  slalomGoPending = false;
+  slalomGoTimer = 0;
+  slalomMyProgram[0] = '\0';
+}
+
 // Slalom-Pairing aufbauen (intern, von beiden Seiten gerufen)
 static void slalomPairWith(const uint8_t mac[6], bool initiator) {
   memcpy(slalomPeerMac, mac, 6);
@@ -419,6 +429,9 @@ static void slalomPairWith(const uint8_t mac[6], bool initiator) {
   slalomIsHost  = initiator;  // Initiator = Host
   // ESP-NOW Peer registrieren (falls noch nicht)
   espNowAddSpecificPeer(mac);
+  slalomResetRuntime();
+  slalomTargetColor[0] = '\0';  // frisches Spiel, noch keine Zielfarbe
+  slalomSetPhase(SLALOM_PAIRED);
   // Status ans Web
   sendStatus(initiator ? "SLALOM:INVITE_PAIRED:HOST" : "SLALOM:INVITE_PAIRED:CLIENT");
   Serial.printf("[SLALOM] Pairing mit %02X:%02X:%02X:%02X:%02X:%02X (Initiator=%d)\n",
@@ -435,34 +448,12 @@ static void slalomUnpair() {
   slalomInvitePending = false;
   memset(slalomPeerMac, 0, 6);
   memset(slalomInviterMac, 0, 6);
-  // Slalom-Phase zurueck auf IDLE (voller Reset)
-  slalomReady = false;
-  slalomOppReady = false;
-  slalomRunning = false;
-  slalomBereitPhase = false;
-  slalomReadyToRun = false;
-  slalomBereitActive = false;
-  slalomExtActive = false;
-  slalomTransitionActive = false;
-  slalomGoPending = false;
-  slalomTargetLocked = false;
+  slalomResetRuntime();
   slalomTargetColor[0] = '\0';
-  slalomRound = 0;
-  slalomScoreMe = 0;
-  slalomScoreOpp = 0;
-  slalomFinished = false;
-  slalomOppFinished = false;
-  slalomMyProgram[0] = '\0';
-  slalomOppProgram[0] = '\0';
   slalomSetPhase(SLALOM_IDLE);
   sendStatus("SLALOM:UNPAIRED");
   Serial.println("[SLALOM] Slalom-Unpair");
 }
-
-// ACK-Timeout: merkt sich wann der Host das letzte CMD_TARGET gesendet hat.
-// Falls nach 3s kein ACK vom Client kommt (z.B. ESP-NOW Paketverlust),
-// wird die Zielfarbe automatisch gelockt, damit das Match nicht haengt.
-unsigned long slalomAckDeadline = 0;
 
 void slalomSendPacket(uint8_t cmd, const char* data) {
   RacePacket pkt = {};
@@ -508,445 +499,261 @@ void slalomSendPacketTo(uint8_t cmd, const char* data, const uint8_t destMac[6])
   esp_now_send(destMac, (uint8_t*)&pkt, sizeof(pkt));
 }
 
-// CMD_TARGET_ACK: Client bestaetigt dem Host den Erhalt der Zielfarbe.
-//   - Auf dem Client direkt: nach Empfang von CMD_TARGET, slalomTargetColor setzen + ACK senden
-//   - Auf dem Host: nur den ACK-Path (slalomLockTarget) aufrufen
-// Strikt getrennt von slalomSetTargetColor: kein doppeltes Web-Broadcast.
+// Spiel vorbei, weil JEMAND die Zielfarbe erreicht hat: stoppen, DONE-Phase.
+void slalomEndGame(bool iWon) {
+  if (slalomRunning) {
+    progStop();
+    slalomRunning = false;
+    currentGame = GAME_NONE;
+  }
+  slalomResetRuntime();
+  slalomWon = true;   // Spiel ist entschieden (verhindert z.B. spaetes MISS)
+  slalomSetPhase(SLALOM_DONE);
+  sendStatus(iWon ? "SLALOM:WIN:ME" : "SLALOM:WIN:OPP");
+  Serial.printf("[SLALOM] Spielende: %s\n", iWon ? "ICH habe gewonnen!" : "Gegner hat gewonnen");
+}
 
-// NUR der Host ruft dies auf. Waehlt eine Zufallsfarbe, sendet CMD_TARGET
-// an den Client, aber NOCH NICHT SLALOM:TARGET an das Web. Das passiert erst
-// in slalomLockTarget() nach erfolgreichem ACK-Handshake.
-void slalomPickTarget() {
-  if (!slalomIsHost) {
-    Serial.println("[SLALOM] slalomPickTarget() blockiert: ich bin nicht Host");
+// Spiel abgebrochen (manuell): zurueck zu PAIRED, Peer informieren.
+void slalomAbortGame() {
+  if (slalomRunning) {
+    progStop();
+    slalomRunning = false;
+    currentGame = GAME_NONE;
+  }
+  slalomResetRuntime();
+  slalomTargetColor[0] = '\0';  // keine alte Zielfarbe mehr anzeigen
+  slalomSetPhase(SLALOM_PAIRED);
+  sendStatus("SLALOM:STOPPED");
+  Serial.println("[SLALOM] Spiel abgebrochen");
+  if (slalomHasPeer) {
+    slalomSendPacket(SLALOM_CMD_ABORT, nullptr);
+  }
+}
+
+// NUR der Host ruft dies auf (Web-Befehl SLALOM:START_MATCH):
+// Zufallsfarbe waehlen und den Client in die Bauphase holen (CMD_START 3x,
+// damit ein einzelnes verlorenes ESP-NOW-Paket nicht den Client haengen
+// laesst). Die Farbe wird dem Web ueber SLALOM:TARGET gemeldet.
+void slalomStartGame() {
+  if (!slalomHasPeer) {
+    Serial.println("[SLALOM] Start blockiert: kein Peer gepaart");
     return;
   }
+  slalomResetRuntime();
+  slalomSetPhase(SLALOM_BUILD);
   uint8_t idx = random(0, 4);
   strlcpy(slalomTargetColor, SLALOM_COLOR_NAMES[idx], sizeof(slalomTargetColor));
-  slalomTargetLocked = false;
-  // ACK-Timeout starten: falls in 3s kein ACK kommt, selbst locken
-  slalomAckDeadline = millis() + 3000;
-  // NUR ESP-NOW an Client. Web-Update kommt spaeter (slalomLockTarget)
-  slalomSendPacket(SLALOM_CMD_TARGET, slalomTargetColor);
-  Serial.printf("[SLALOM] Host hat Ziel %s gewaehlt, warte auf Client-ACK (Timeout 3s)\n", slalomTargetColor);
-}
-
-// Client setzt die Zielfarbe (nach CMD_TARGET vom Host), schickt ACK
-// zurueck, und schickt SLALOM:TARGET an das lokale Web.
-void slalomSetTargetColor(const char* col) {
-  if (!col || strlen(col) == 0) return;
-  strlcpy(slalomTargetColor, col, sizeof(slalomTargetColor));
-  // Lokales Lock-Flag: Client weiss, dass das Ziel angekommen ist.
-  // Der finale ACK-Lock passiert serverseitig (Host) durch slalomLockTarget.
-  // Setzen wir hier dennoch auf true, damit der Client nicht durch ein
-  // verfruehtes SLALOM:GO aus dem Tritt kommt (slalomExecute prueft dies).
-  slalomTargetLocked = true;
-  // Phase: SETUP -> BUILDING (lokal weiss der Client: Ziel ist da)
-  if (slalomPhase == SLALOM_SETUP) {
-    slalomSetPhase(SLALOM_BUILDING);
+  for (int i = 0; i < 3; i++) {
+    slalomSendPacket(SLALOM_CMD_START, slalomTargetColor);
+    delay(40);
   }
-  // ACK an Host schicken (Color mit Prefix, damit Host verifizieren kann)
-  slalomSendPacket(SLALOM_CMD_TARGET_ACK, slalomTargetColor);
-  // Lokales Web informieren
   char msg[48];
   snprintf(msg, sizeof(msg), "SLALOM:TARGET:%s", slalomTargetColor);
   sendStatus(msg);
-  Serial.printf("[SLALOM] Client hat Ziel %s empfangen + ACK gesendet\n", slalomTargetColor);
+  sendStatus("SLALOM:MATCH_STARTED");
+  Serial.printf("[SLALOM] Host startete Spiel, Zielfarbe %s (3x gesendet)\n", slalomTargetColor);
 }
 
-// Host bekommt ACK vom Client: Zielfarbe ist jetzt auf BEIDEN Seiten gesetzt.
-// Erst jetzt darf der Host SLALOM:TARGET an sein Web broadcasten -> beide UIs
-// zeigen die grosse Zielfarbe, Phase wechselt zu BUILDING.
-void slalomLockTarget() {
-  if (!slalomIsHost) return;
-  slalomTargetLocked = true;
+// Client: Zielfarbe vom Host empfangen (CMD_START) -> Phase BUILD, Farbe anzeigen.
+void slalomOnStartReceived(const char* col) {
+  // Nur annehmen, wenn gerade KEIN Spiel laeuft (PAIRED, DONE oder IDLE).
+  // So stoeren verspaetete/doppelte START-Pakete kein laufendes Spiel.
+  if (slalomPhase == SLALOM_BUILD || slalomPhase == SLALOM_COUNTDOWN ||
+      slalomPhase == SLALOM_RACING) return;
+  slalomResetRuntime();
+  if (col && col[0] != '\0') {
+    strlcpy(slalomTargetColor, col, sizeof(slalomTargetColor));
+  }
+  slalomSetPhase(SLALOM_BUILD);
   char msg[48];
-  snprintf(msg, sizeof(msg), "SLALOM:TARGET:%s", slalomTargetColor);
+  snprintf(msg, sizeof(msg), "SLALOM:TARGET:%s", slalomTargetColor[0] ? slalomTargetColor : "?");
   sendStatus(msg);
-  slalomSetPhase(SLALOM_BUILDING);
-  Serial.printf("[SLALOM] Host hat ACK erhalten, Ziel %s ist LOCKED\n", slalomTargetColor);
+  sendStatus("SLALOM:MATCH_STARTED");
+  Serial.printf("[SLALOM] Client: Spiel gestartet, Zielfarbe %s\n", slalomTargetColor);
 }
 
+// Bereit gedrueckt: Programm speichern, Peer informieren, ggf. gemeinsam starten.
 void slalomSetProgram(const char* enc) {
   strlcpy(slalomMyProgram, enc, sizeof(slalomMyProgram));
   slalomReady = true;
-  // Phase READY_WAIT (vorher BUILDING, jetzt wartet man auf Gegner)
-  if (slalomPhase == SLALOM_BUILDING) {
-    slalomSetPhase(SLALOM_READY_WAIT);
-  }
   sendStatus("SLALOM:READY");
   slalomSendPacket(SLALOM_CMD_PROG, slalomMyProgram);
-  // Prüfe, ob beide bereit sind; falls nicht, 10s-Grace-Timer starten
-  if (slalomOppReady) {
-    slalomMaybeRun();
-  } else {
-    // Wir haben zuerst gedrückt: 10s-Grace für Gegner starten
-    slalomBereitStart = millis();
-    slalomBereitActive = true;
-  }
+  slalomMaybeStart();
 }
 
-// Wird aufgerufen wenn beide Spieler bereit sind (oder 10s-Grace abgelaufen).
-// Signalisiert dem Web, dass nun ein 3-Sekunden-Countdown angezeigt werden soll.
-void slalomMaybeRun() {
-  if (!slalomBereitPhase) return;
-  if (slalomRunning) return;
+// Beide Spieler bereit? Dann zaehlt der HOST einen 3s-Countdown in der
+// Firmware (nicht im Web - dort haetten beide Seiten unabhaengige
+// BLE-Jitter) und sendet danach SLALOM_CMD_GO an den Client. Der Client
+// startet sofort bei Empfang des GO; als Fallback (Paketverlust) startet er
+// nach 4.5s eigenstaendig.
+void slalomMaybeStart() {
+  if (slalomPhase != SLALOM_BUILD) return;
+  if (slalomRunning || slalomGoPending) return;
   if (!slalomReady || !slalomOppReady) return;
-  if (slalomTargetColor[0] == '\0') {
-    // Sollte nicht passieren: Zielfarbe muss bereits in SETUP gelockt sein
-    if (slalomIsHost) slalomPickTarget();
-    else return;
-  }
-  slalomBereitActive = false;
-  slalomReadyToRun = true;
+  if (slalomTargetColor[0] == '\0') return;
+  slalomSetPhase(SLALOM_COUNTDOWN);
   sendStatus("SLALOM:BOTH_READY");
-  // Perfekter Start-Sync: der HOST zaehlt den 3s-Countdown in der Firmware
-  // (nicht im Web - dort haetten beide Seiten unabhaengige BLE-Jitter).
-  // Nach Ablauf sendet der Host SLALOM_CMD_GO per ESP-NOW und startet selbst.
   if (slalomIsHost) {
     slalomGoTimer = millis() + 3000;
-    slalomGoPending = true;
   } else {
-    // Client: Fallback-Timer falls das GO-Paket verloren geht (4.5s > 3s)
-    slalomGoTimer = millis() + 4500;
-    slalomGoPending = true;
+    slalomGoTimer = millis() + 4500;  // Fallback, falls GO verloren geht
   }
+  slalomGoPending = true;
+  Serial.printf("[SLALOM] Beide bereit. %s-Countdown 3s bis GO\n", slalomIsHost ? "Host" : "Client");
 }
 
-void slalomStartNextRound() {
-  // Schutz: nicht doppelt aufrufen (Loop-Timer + sonstige Trigger)
-  if (slalomPhase == SLALOM_SETUP && slalomTransitionActive) {
-    Serial.println("[SLALOM] slalomStartNextRound: bereits in SETUP, skip");
-    return;
-  }
-  slalomTransitionActive = false;
-  slalomRound++;
-  slalomFinished = false;
-  slalomOppFinished = false;
-  slalomExtActive = false;
-  slalomReady = false;
-  slalomOppReady = false;
-  slalomReadyToRun = false;
-  // Bereit-Phase aktivieren
-  slalomBereitPhase = true;
-  slalomBereitActive = false;
-  slalomBereitStart = 0;
-  // Phase: SETUP (Zielfarbe noch nicht synchronisiert)
-  slalomSetPhase(SLALOM_SETUP);
-  // Zuerst ROUND_START senden (UI schaltet Programmierbereich frei)
-  char msg[48];
-  snprintf(msg, sizeof(msg), "SLALOM:ROUND_START:%d", slalomRound);
-  sendStatus(msg);
-  // Zielfarbe nur in der ERSTEN Runde picken; danach gleiche Farbe beibehalten.
-  // So hat jeder Spieler die Chance, sein Programm iterativ zu verbessern
-  // und es mehrfach zu versuchen, bis die Zielfarbe erreicht wird.
-  if (slalomIsHost) {
-    slalomWaitingForTarget = false;
-    if (slalomTargetColor[0] == '\0') {
-      // Erste Runde: Zufallsfarbe picken
-      slalomPickTarget();
-      // Phase bleibt SETUP bis slalomLockTarget() ACK bekommt (oder Timeout)
-    } else {
-      // Folge-Runden: gleiche Farbe beibehalten, nur neu synchronisieren
-      slalomTargetLocked = false;
-      slalomAckDeadline = millis() + 3000;
-      slalomSendPacket(SLALOM_CMD_TARGET, slalomTargetColor);
-      Serial.printf("[SLALOM] Runde %d: gleiche Zielfarbe %s, re-synchronisiere mit Client\n",
-                    slalomRound, slalomTargetColor);
-    }
-  } else {
-    if (slalomTargetColor[0] == '\0') {
-      // Erste Runde: Zielfarbe vom Host abwarten
-      slalomWaitingForTarget = true;
-      sendStatus("SLALOM:WAITING_TARGET");
-    } else {
-      // Folge-Runden: die Zielfarbe ist dieselbe wie in Runde 1 -> direkt
-      // verfuegbar. NICHT auf ein erneutes CMD_TARGET vom Host warten:
-      // Paketverlust oder Timing-Versatz (Host sendet CMD_TARGET evtl.
-      // waehrend wir noch in der ROUND_END-Transition sind) wuerde den
-      // Client sonst fuer immer in SETUP haengen lassen.
-      slalomWaitingForTarget = false;
-      slalomTargetLocked = true;
-      slalomSetPhase(SLALOM_BUILDING);
-      char msg[48];
-      snprintf(msg, sizeof(msg), "SLALOM:TARGET:%s", slalomTargetColor);
-      sendStatus(msg);
-    }
-  }
-  Serial.printf("[SLALOM] Neue Runde %d gestartet (Phase SETUP, Farbe=%s)\n",
-                slalomRound, slalomTargetColor);
-}
-
-// Host ruft dies auf, um das Spiel zu starten (initial).
-void slalomStartMatch() {
-  slalomIsHost = true;
-  slalomRound = 1;
-  slalomScoreMe = 0;
-  slalomScoreOpp = 0;
-  slalomStartNextRound();
-  sendStatus("SLALOM:MATCH_STARTED");
-  Serial.println("[SLALOM] Match vom Host gestartet");
-}
-
-void slalomRoundEnd() {
-  slalomExtActive = false;
-  slalomFinished = false;
-  slalomOppFinished = false;
-  slalomSetPhase(SLALOM_ROUND_END);
-  char msg[64];
-  snprintf(msg, sizeof(msg), "SLALOM:ROUND_END:%d:%d:%d", slalomRound, slalomScoreMe, slalomScoreOpp);
-  sendStatus(msg);
-  Serial.printf("[SLALOM] Runde %d beendet. Score: Ich=%d Gegner=%d\n", slalomRound, slalomScoreMe, slalomScoreOpp);
-  // Nicht-blockierende 3-Sek-Pause via Timer (loop() prüft ab)
-  slalomTransitionStart = millis();
-  slalomTransitionActive = true;
-}
-
+// Rennen ausfuehren: Programm laden und abfahren. Blockiert bis der Lauf
+// fertig ist (oder die Zielfarbe stabil erkannt wurde -> slalomFinished).
 void slalomExecute() {
-  currentGame = GAME_SLALOM;
-  slalomRunning = true;
-  slalomFinished = false;
-  slalomOppFinished = false;
-  slalomExtActive = false;
-  slalomRoundTimeout = millis() + 60000; // 60 Sek Gesamttimeout pro Runde
-  slalomSetPhase(SLALOM_RACING);
-  // Zielfarbe MUSS gesetzt sein (sonst kein sinnvoller Lauf)
   if (slalomTargetColor[0] == '\0') {
     Serial.println("[SLALOM] Abbruch: keine Zielfarbe gesetzt");
-    slalomRunning = false;
-    currentGame = GAME_NONE;
     sendStatus("SLALOM:ERROR:NO_TARGET");
     return;
   }
-  // Warnung (kein Abbruch): falls der ACK-Handshake noch nicht durch ist,
-  // laeuft das Rennen trotzdem. ESP-NOW kann einzelne Pakete verlieren -
-  // wir wollen das Match nicht blockieren, nur weil ein ACK fehlt.
-  if (!slalomTargetLocked) {
-    Serial.println("[SLALOM] WARNUNG: Zielfarbe noch nicht gelockt (ACK fehlt) - starte trotzdem");
-    slalomTargetLocked = true;  // nachtraeglich locken
-  }
+  currentGame = GAME_SLALOM;
+  slalomRunning = true;
+  slalomMyRunDone = false;
+  slalomOppRunDone = false;
+  slalomOppWaitStart = 0;
+  slalomSetPhase(SLALOM_RACING);
   sendStatus("SLALOM:RUNNING");
+  // LED-Ring leeren: die Zielfarbe auf dem Ring wuerde den Farbsensor
+  // am Boden verwirren (das Ziel liegt ja auf dem Boden).
+  ledStripClear();
+  Serial.printf("[SLALOM] RACE! Ziel: %s\n", slalomTargetColor);
   progSetFromString(slalomMyProgram);
   progRunSlalom(slalomTargetColor);
-  slalomRunning = false;
   currentGame = GAME_NONE;
+  slalomRunning = false;   // wichtig: sonst blockiert slalomCheckRetry im loop()
+  if (slalomWon) return;   // Gegner hat waehrenddessen gewonnen -> kein MISS senden
 
-  // Runden-Ergebnis per ESP-NOW an Gegner senden
   if (slalomFinished) {
-    slalomScoreMe++;
-    slalomSendPacket(SLALOM_CMD_OPP_FINISHED, slalomTargetColor);
-    // 10-Sek-Extension starten: warten ob Gegner auch noch trifft
-    slalomExtStart = millis();
-    slalomExtActive = true;
-  } else if (slalomOppFinished) {
-    // Gegner hat getroffen, wir nicht: 10-Sek-Extension läuft bereits
-    // (vom Gegner angestossen); wir können nicht mehr punkten
-    // (Nichts zu tun, Extension-Timer läuft)
+    // Treffer! Spiel ist sofort vorbei.
+    slalomSendPacket(SLALOM_CMD_WIN, slalomTargetColor);
+    slalomEndGame(true);
   } else {
-    // Weder ich noch Gegner haben getroffen (oder 10s-Grace-Timeout)
-    if (slalomExtActive) {
-      // Extension läuft: nichts tun
+    // Kein Treffer: Durchlauf-Ergebnis melden und auf Gegner warten.
+    slalomMyRunDone = true;
+    slalomSendPacket(SLALOM_CMD_MISS, nullptr);
+    if (slalomOppRunDone) {
+      // Gegner war schon fertig -> zurueck in die Bauphase
+      slalomResetRuntime();
+      slalomSetPhase(SLALOM_BUILD);
+      sendStatus("SLALOM:RETRY");
     } else {
-      // Keine Extension: Runde beenden und nächste starten
-      slalomSendPacket(SLALOM_CMD_TIMEOUT, nullptr);
-      slalomRoundEnd();
+      slalomOppWaitStart = millis();
     }
+  }
+}
+
+// 15s-Sicherheits-Timeout in der Retry-Phase (loop()):
+// Haben BEIDE gemeldet, dass sie die Farbe nicht erreicht haben, oder wartet
+// ein Spieler laenger als 15s auf das Gegner-Ergebnis, geht es zurueck in die
+// Bauphase. Gleiche Zielfarbe - die Spieler verbessern ihr Programm.
+void slalomCheckRetry() {
+  if (slalomRunning || slalomPhase != SLALOM_RACING) return;
+  if (slalomWon) return;
+  if (slalomMyRunDone && slalomOppRunDone) {
+    slalomResetRuntime();
+    slalomSetPhase(SLALOM_BUILD);
+    sendStatus("SLALOM:RETRY");
+  } else if (slalomMyRunDone && slalomOppWaitStart != 0 &&
+             millis() - slalomOppWaitStart > 15000) {
+    Serial.println("[SLALOM] 15s-Timeout: Gegner-Ergebnis fehlt -> Retry");
+    slalomResetRuntime();
+    slalomSetPhase(SLALOM_BUILD);
+    sendStatus("SLALOM:RETRY");
   }
 }
 
 void onSlalomPacket(const RacePacket* pkt) {
-  if (pkt->slalomCmd == SLALOM_CMD_PROG && pkt->slalomLen > 0) {
-    char buf[PROG_MAX_ENC + 1] = {0};
-    size_t len = pkt->slalomLen;
-    if (len > PROG_MAX_ENC) len = PROG_MAX_ENC;
-    memcpy(buf, pkt->slalomData, len);
-    buf[len] = '\0';
-    strlcpy(slalomOppProgram, buf, sizeof(slalomOppProgram));
-    slalomOppReady = true;
-    // Phase READY_WAIT aktivieren (sobald mind. 1 Spieler Bereit gedrueckt hat)
-    if (slalomPhase == SLALOM_BUILDING) {
-      slalomSetPhase(SLALOM_READY_WAIT);
+  switch (pkt->slalomCmd) {
+    case SLALOM_CMD_PROG:
+      if (pkt->slalomLen > 0 && slalomPhase == SLALOM_BUILD) {
+        slalomOppReady = true;
+        sendStatus("SLALOM:OPP_PROG");
+        slalomMaybeStart();
+      }
+      break;
+
+    case SLALOM_CMD_GO: {
+      // Host-Startsignal: perfekter Sync. Der Host hat seinen 3s-Countdown
+      // in der Firmware abgeschlossen und uns per ESP-NOW gestartet.
+      slalomGoPending = false;
+      if (slalomPhase == SLALOM_COUNTDOWN && !slalomRunning) {
+        slalomExecute();
+      }
+      break;
     }
-    sendStatus("SLALOM:OPP_PROG");
-    // Gegner hat Bereit gedrückt. Wenn ich auch bereit bin, sofort starten.
-    // Sonst: 10s-Grace-Timer starten (für mich).
-    if (slalomReady) {
-      slalomMaybeRun();
-    } else if (slalomBereitPhase) {
-      slalomBereitStart = millis();
-      slalomBereitActive = true;
+
+    case SLALOM_CMD_START: {
+      // Host: Spiel gestartet + Zielfarbe (3x gesendet gegen Paketverlust).
+      if (slalomIsHost) break;   // nur der Client verarbeitet das
+      char buf[16] = {0};
+      size_t len = pkt->slalomLen < 15 ? pkt->slalomLen : 15;
+      memcpy(buf, pkt->slalomData, len);
+      slalomOnStartReceived(buf);
+      break;
     }
-  } else if (pkt->slalomCmd == SLALOM_CMD_TARGET && pkt->slalomLen > 0) {
-    // Host sendet CMD_TARGET an Client. Client setzt Farbe + schickt ACK.
-    // (In slalomSetTargetColor passiert beides in einem Schritt.)
-    char buf[16] = {0};
-    size_t len = pkt->slalomLen < 15 ? pkt->slalomLen : 15;
-    memcpy(buf, pkt->slalomData, len);
-    // Wenn wir noch nicht in einer Runde sind, hat der Host das Match gestartet
-    if (slalomRound == 0) {
-      slalomRound = 1;
-      slalomScoreMe = 0;
-      slalomScoreOpp = 0;
-      slalomBereitPhase = true;
-      slalomBereitActive = false;
-      slalomBereitStart = 0;
-      slalomWaitingForTarget = false;
-      slalomIsHost = false;
-      slalomSetPhase(SLALOM_SETUP);
-      // Für das Web: Match gestartet + Runde starten
-      sendStatus("SLALOM:MATCH_STARTED");
-      char rmsg[48];
-      snprintf(rmsg, sizeof(rmsg), "SLALOM:ROUND_START:%d", slalomRound);
-      sendStatus(rmsg);
-      Serial.println("[SLALOM] Match vom Gegner (Host) gestartet");
-    } else {
-      // Neue Runde: Ziel von Host erhalten
-      slalomWaitingForTarget = false;
-    }
-    // ACK an Host + lokales Web updaten
-    slalomSetTargetColor(buf);
-    // Phase bleibt SETUP bis slalomSetTargetColor ACK gesendet hat;
-    // das eigentliche Web-SLALOM:TARGET (das die grosse Anzeige triggert) wird
-    // in slalomSetTargetColor gesendet. Phase BUILDING setzt der HOST.
-  } else if (pkt->slalomCmd == SLALOM_CMD_TARGET_ACK && pkt->slalomLen > 0) {
-    // Host empfaengt ACK vom Client. Color-Verifikation: ACK-Farbe muss
-    // mit der eigenen uebereinstimmen, sonst verwerfen (Race condition).
-    if (!slalomIsHost) return;
-    if (slalomTargetLocked) return;   // bereits gelockt, kein 2. ACK noetig
-    char buf[16] = {0};
-    size_t len = pkt->slalomLen < 15 ? pkt->slalomLen : 15;
-    memcpy(buf, pkt->slalomData, len);
-    if (strcasecmp(buf, slalomTargetColor) != 0) {
-      Serial.printf("[SLALOM] ACK-Farbe %s passt nicht zu %s, verwerfe\n", buf, slalomTargetColor);
-      return;
-    }
-    slalomAckDeadline = 0;  // ACK erhalten, Timeout deaktivieren
-    slalomLockTarget();
-  } else {
-    switch (pkt->slalomCmd) {
-      case SLALOM_CMD_FINISH:
-        slalomRunning = false;
-        currentGame = GAME_NONE;
-        stopMotors();
-        speedL = 0;
-        speedR = 0;
-        sendStatus("SLALOM:OPP_FINISH");
-        break;
-      case SLALOM_CMD_OPP_FINISHED:
-        // Gegner hat Farbe erreicht: Roboter stoppen, 10-Sek-Extension
-        slalomRunning = false;
-        currentGame = GAME_NONE;
-        stopMotors();
-        speedL = 0;
-        speedR = 0;
-        slalomOppFinished = true;
-        slalomExtActive = true;
-        slalomExtStart = millis();
-        sendStatus("SLALOM:OPP_FINISH");
-        break;
-      case SLALOM_CMD_TIMEOUT:
-        // Gegner-Runde abgelaufen (kein Treffer)
-        slalomRunning = false;
-        currentGame = GAME_NONE;
-        stopMotors();
-        speedL = 0;
-        speedR = 0;
-        sendStatus("SLALOM:TIMEOUT");
-        break;
-      case SLALOM_CMD_GO:
-        // Host-Startsignal: perfekter Sync. Der Host hat seinen 3s-Countdown
-        // in der Firmware abgeschlossen und uns per ESP-NOW gestartet.
-        slalomGoPending = false;
-        if (slalomReadyToRun && !slalomRunning) {
-          slalomReadyToRun = false;
-          slalomBereitPhase = false;
-          slalomBereitActive = false;
-          slalomExecute();
-        }
-        break;
-      case SLALOM_CMD_RESET:
-  slalomReady = false;
-  slalomOppReady = false;
-  slalomRunning = false;
-  slalomIsHost = false;
-  slalomBereitPhase = false;
-  slalomReadyToRun = false;
-  slalomWaitingForTarget = false;
-  slalomBereitActive = false;
-  slalomExtActive = false;
-  slalomTransitionActive = false;
-  slalomGoPending = false;
-  slalomTargetLocked = false;
-  slalomTargetColor[0] = '\0';
-  slalomRound = 0;
-  slalomScoreMe = 0;
-  slalomScoreOpp = 0;
-        slalomTargetColor[0] = '\0';
-        slalomSetPhase(SLALOM_IDLE);
-        sendStatus("SLALOM:RESET");
-        break;
-      case SLALOM_CMD_INVITE:
-        // Einladung empfangen - Slalom-Phase muss IDLE sein
-        if (slalomPhase != SLALOM_IDLE) {
-          Serial.println("[SLALOM] INVITE ignoriert: nicht in IDLE");
-          return;
-        }
-        {
-          memcpy(slalomInviterMac, pkt->senderMac, 6);
-          slalomInvitePending = true;
-          // Web benachrichtigen
-          char invMsg[48];
-          snprintf(invMsg, sizeof(invMsg), "SLALOM:INVITED_BY:%02X:%02X:%02X:%02X:%02X:%02X",
-                   pkt->senderMac[0], pkt->senderMac[1], pkt->senderMac[2],
-                   pkt->senderMac[3], pkt->senderMac[4], pkt->senderMac[5]);
-          sendStatus(invMsg);
-          Serial.printf("[SLALOM] Einladung empfangen von %02X:%02X:%02X:%02X:%02X:%02X\n",
-            pkt->senderMac[0], pkt->senderMac[1], pkt->senderMac[2],
-            pkt->senderMac[3], pkt->senderMac[4], pkt->senderMac[5]);
-        }
-        break;
-      case SLALOM_CMD_INVITE_ACK:
-        // Initiator: Empfaenger hat die Einladung angenommen
-        if (slalomHasPeer) {
-          // Bereits gepaart (z.B. doppelte ACK): ignorieren
-          break;
-        }
-        {
-          slalomPairWith(pkt->senderMac, true);  // Initiator = Host
-        }
-        break;
-      case SLALOM_CMD_SLALOM_UNPAIR:
-        // Peer hat das Slalom-Match beendet - bei uns auch unpairen
-        if (slalomHasPeer && memcmp(pkt->senderMac, slalomPeerMac, 6) == 0) {
-          Serial.println("[SLALOM] Peer hat Slalom-Unpair gesendet");
-          // Slalom-State zuruecksetzen, aber Race-Pairing unangetastet
-          slalomReady = false;
-          slalomOppReady = false;
-          slalomRunning = false;
-          slalomIsHost = false;
-          slalomBereitPhase = false;
-          slalomReadyToRun = false;
-          slalomWaitingForTarget = false;
-          slalomBereitActive = false;
-          slalomExtActive = false;
-          slalomTransitionActive = false;
-          slalomGoPending = false;
-          slalomTargetLocked = false;
-          slalomTargetColor[0] = '\0';
-          slalomRound = 0;
-          slalomScoreMe = 0;
-          slalomScoreOpp = 0;
-          slalomMyProgram[0] = '\0';
-          slalomOppProgram[0] = '\0';
-          slalomHasPeer = false;
-          memset(slalomPeerMac, 0, 6);
-          slalomSetPhase(SLALOM_IDLE);
-          sendStatus("SLALOM:UNPAIRED");
-        }
-        break;
-      default:
-        break;
-    }
+
+    case SLALOM_CMD_WIN:
+      // Gegner hat die Zielfarbe erreicht -> Spiel ist SOFORT vorbei.
+      // Guard: habe ich (fast gleichzeitig) selbst gewonnen, nicht ueberschreiben.
+      if (slalomWon) break;
+      slalomEndGame(false);
+      break;
+
+    case SLALOM_CMD_MISS:
+      // Gegner-Durchlauf ohne Treffer beendet -> Retry-Check (wenn beide fertig).
+      slalomOppRunDone = true;
+      sendStatus("SLALOM:OPP_MISS");
+      if (slalomMyRunDone) {
+        slalomCheckRetry();
+      }
+      break;
+
+    case SLALOM_CMD_ABORT:
+      // Gegner hat das Spiel abgebrochen -> zurueck zu PAIRED.
+      slalomAbortGame();
+      break;
+
+    case SLALOM_CMD_INVITE:
+      // Einladung empfangen - Slalom-Phase muss IDLE sein
+      if (slalomPhase != SLALOM_IDLE) {
+        Serial.println("[SLALOM] INVITE ignoriert: nicht in IDLE");
+        return;
+      }
+      {
+        memcpy(slalomInviterMac, pkt->senderMac, 6);
+        slalomInvitePending = true;
+        char invMsg[48];
+        snprintf(invMsg, sizeof(invMsg), "SLALOM:INVITED_BY:%02X:%02X:%02X:%02X:%02X:%02X",
+                 pkt->senderMac[0], pkt->senderMac[1], pkt->senderMac[2],
+                 pkt->senderMac[3], pkt->senderMac[4], pkt->senderMac[5]);
+        sendStatus(invMsg);
+        Serial.printf("[SLALOM] Einladung empfangen von %02X:%02X:%02X:%02X:%02X:%02X\n",
+          pkt->senderMac[0], pkt->senderMac[1], pkt->senderMac[2],
+          pkt->senderMac[3], pkt->senderMac[4], pkt->senderMac[5]);
+      }
+      break;
+
+    case SLALOM_CMD_INVITE_ACK:
+      // Initiator: Empfaenger hat die Einladung angenommen
+      if (!slalomHasPeer) {
+        slalomPairWith(pkt->senderMac, true);  // Initiator = Host
+      }
+      break;
+
+    case SLALOM_CMD_SLALOM_UNPAIR:
+      // Peer hat das Slalom-Match beendet - bei uns auch unpairen
+      if (slalomHasPeer && memcmp(pkt->senderMac, slalomPeerMac, 6) == 0) {
+        Serial.println("[SLALOM] Peer hat Slalom-Unpair gesendet");
+        slalomUnpair();
+      }
+      break;
+
+    default:
+      break;
   }
 }
 
@@ -972,15 +779,7 @@ void onBleDisconnected() {
   knobelnLen = 0;
   korrigierenLen = 0;
   korrigierenRunning = false;
-  slalomReady = false;
-  slalomOppReady = false;
-  slalomRunning = false;
-  slalomBereitPhase = false;
-  slalomBereitActive = false;
-  slalomReadyToRun = false;
-  slalomExtActive = false;
-  slalomTransitionActive = false;
-  slalomTargetLocked = false;
+  slalomResetRuntime();
   slalomTargetColor[0] = '\0';
   slalomSetPhase(SLALOM_IDLE);
   memoryStop();
@@ -993,8 +792,9 @@ void onBleDisconnected() {
 
 // Forward declarations for Slalom
 void onSlalomPacket(const RacePacket* pkt);
-void slalomSendPacket(uint8_t cmd, const char* data);
-void slalomSendPacketTo(uint8_t cmd, const char* data, const uint8_t destMac[6]);
+void slalomExecute();
+void slalomMaybeStart();
+void slalomCheckRetry();
 
 // =====================================================
 // COMMAND-HANDLER
@@ -1011,17 +811,7 @@ void hardStop() {
   memoryStop();
   lineFollowerStop();
   progStop();
-  slalomReady = false;
-  slalomOppReady = false;
-  slalomRunning = false;
-  slalomIsHost = false;
-  slalomBereitPhase = false;
-  slalomReadyToRun = false;
-  slalomWaitingForTarget = false;
-  slalomBereitActive = false;
-  slalomExtActive = false;
-  slalomTransitionActive = false;
-  slalomTargetLocked = false;
+  slalomResetRuntime();
   slalomTargetColor[0] = '\0';
   slalomSetPhase(SLALOM_IDLE);
   ledStripShowAlert();
@@ -1356,7 +1146,7 @@ void handleCommand(const char* cmdStr) {
       }
       slalomUnpair();
     } else if (sub == "START_MATCH") {
-      // CMD_START_MATCH (Web -> Host): initiiert den Host-Prozess
+      // Web-Befehl (Host): Spiel starten, Zufallsfarbe, Client in Bauphase holen
       if (!slalomHasPeer) {
         sendStatus("SLALOM:ERROR:NOT_PAIRED");
         return;
@@ -1365,71 +1155,10 @@ void handleCommand(const char* cmdStr) {
         sendStatus("SLALOM:ERROR:NOT_HOST");
         return;
       }
-      slalomStartMatch();
-    } else if (sub == "GO") {
-      // CMD_GO (Web nach 3s Countdown, nur Fallback fuer alte Web-Sessions):
-      // startet das Programm. Fuer perfekten Sync sendet der HOST das
-      // Startsignal zusaetzlich per ESP-NOW an den Client.
-      if (slalomReadyToRun && !slalomRunning) {
-        slalomGoPending = false;
-        slalomReadyToRun = false;
-        slalomBereitPhase = false;
-        slalomBereitActive = false;
-        if (slalomIsHost) {
-          slalomSendPacket(SLALOM_CMD_GO, nullptr);
-        }
-        slalomExecute();
-      } else {
-        Serial.printf("[SLALOM] GO ignoriert: readyToRun=%d running=%d phase=%s\n",
-          slalomReadyToRun, slalomRunning, SLALOM_PHASE_NAMES[slalomPhase]);
-      }
+      slalomStartGame();
     } else if (sub == "STOP") {
-      slalomRunning = false;
-      currentGame = GAME_NONE;
-      stopMotors();
-      speedL = 0;
-      speedR = 0;
-      slalomSendPacket(SLALOM_CMD_RESET, nullptr);
-      slalomReady = false;
-      slalomOppReady = false;
-      slalomBereitPhase = false;
-      slalomReadyToRun = false;
-      slalomBereitActive = false;
-      slalomExtActive = false;
-      slalomTransitionActive = false;
-      slalomGoPending = false;
-      slalomTargetLocked = false;
-      slalomTargetColor[0] = '\0';
-      slalomSetPhase(SLALOM_IDLE);
-      sendStatus("SLALOM:STOPPED");
-    } else if (sub == "FINISH") {
-      // Eigenes Treffer-Signal an Gegner
-      slalomSendPacket(SLALOM_CMD_FINISH, nullptr);
-      char msg[48];
-      snprintf(msg, sizeof(msg), "SLALOM:FINISH:%s", slalomTargetColor);
-      sendStatus(msg);
-    } else if (sub == "EXT_RETRY") {
-      // 10-Sek-Extension: Programm nochmal starten
-      if (slalomExtActive && !slalomRunning) {
-        // Wie slalomExecute(), aber Ziel ist bereits bekannt (aus Gegner-Sync)
-        currentGame = GAME_SLALOM;
-        slalomRunning = true;
-        slalomFinished = false;
-        slalomRoundTimeout = millis() + 60000;
-        slalomSetPhase(SLALOM_RACING);
-        sendStatus("SLALOM:RUNNING");
-        progSetFromString(slalomMyProgram);
-        progRunSlalom(slalomTargetColor);
-        slalomRunning = false;
-        currentGame = GAME_NONE;
-        if (slalomFinished) {
-          slalomScoreMe++;
-          slalomSendPacket(SLALOM_CMD_OPP_FINISHED, slalomTargetColor);
-          // Extension neu starten
-          slalomExtStart = millis();
-        }
-        // Wenn weder ich noch Gegner im Ziel: 10-Sek-Timer in loop() beendet
-      }
+      // Spiel manuell abbrechen -> beide zurueck zu PAIRED
+      slalomAbortGame();
     }
     return;
   }
@@ -1556,72 +1285,34 @@ void loop() {
     }
   }
   // ============================================================
-  // Slalom: 3 strikt getrennte Timer + ACK-Timeout
-  //   slalomBereitActive      : 10s-Grace fuer 2. Bereit-Druck (Phase READY_WAIT)
-  //   slalomExtActive         : 10s-Extension nach Treffer (Phase RACING)
-  //   slalomTransitionActive  : 3s-Pause nach Rundenende (Phase ROUND_END)
-  //   slalomAckDeadline       : 3s-Timeout fuer CMD_TARGET_ACK (sonst manuell locken)
+  // Slalom-Timer:
+  //   slalomGoPending  : 3s-Countdown nach BOTH_READY (HOST zaehlt,
+  //                      Client nur Fallback 4.5s bei Paketverlust)
+  //   slalomCheckRetry : Retry, wenn kein Treffer (beide MISS oder Timeout)
   // ============================================================
 
-  // (0) ACK-Timeout: falls Client nicht antwortet, Zielfarbe selbst locken
-  if (slalomIsHost && !slalomTargetLocked && slalomAckDeadline > 0 &&
-      slalomTargetColor[0] != '\0' && millis() >= slalomAckDeadline) {
-    Serial.println("[SLALOM] ACK-Timeout (3s) - Client hat nicht geantwortet, locke selbst");
-    slalomAckDeadline = 0;
-    slalomLockTarget();
-  }
-
-  // (1) READY_WAIT: 10s-Grace-Timer fuer 2. Bereit-Druck
-  if (slalomBereitActive && millis() - slalomBereitStart >= 10000) {
-    slalomBereitActive = false;
-    if (slalomBereitPhase && !slalomRunning && slalomPhase == SLALOM_READY_WAIT) {
-      Serial.printf("[SLALOM] 10s-Grace READY_WAIT abgelaufen. Bereit: ich=%d opp=%d\n", slalomReady, slalomOppReady);
-      if (!slalomReady) {
-        // Wir haben nicht gedrückt: leeres Programm
-        slalomMyProgram[0] = '\0';
-        slalomReady = true;
-      }
-      if (!slalomOppReady) {
-        // Gegner hat nicht gedrückt: leeres Programm ist OK
-        // (Wir müssen nicht warten, das Rennen startet)
-      }
-      // Jetzt "beide bereit" → Web zeigt Countdown + dann fahren
-      slalomMaybeRun();
-    }
-  }
-  // (0c) GO-Timer: 3s nach BOTH_READY (HOST zaehlt; Client nur Fallback 4.5s)
-  if (slalomGoPending && !slalomRunning && slalomReadyToRun && millis() >= slalomGoTimer) {
+  // (1) GO-Timer: Host zaehlt 3s, sendet GO 3x und startet selbst.
+  //     Client: Fallback, falls das GO-Paket verloren ging.
+  if (slalomGoPending && !slalomRunning && slalomPhase == SLALOM_COUNTDOWN &&
+      millis() >= slalomGoTimer) {
     slalomGoPending = false;
-    slalomReadyToRun = false;
-    slalomBereitPhase = false;
-    slalomBereitActive = false;
     if (slalomIsHost) {
-      // Erst GO per ESP-NOW senden (Client startet ~1-3ms spaeter), dann selbst
+      // GO 3x senden (Paketverlust-Retry). Der Client startet beim ersten
+      // empfangenen Paket und ignoriert die Wiederholungen (Phase ist dann
+      // RACING). So starten beide Roboter trotz ESP-NOW-Paketverlust
+      // synchron statt mit 1.5s Client-Fallback-Versatz.
       slalomSendPacket(SLALOM_CMD_GO, nullptr);
-      Serial.println("[SLALOM] HOST-GO-Timer: GO gesendet, starte selbst");
+      slalomSendPacket(SLALOM_CMD_GO, nullptr);
+      slalomSendPacket(SLALOM_CMD_GO, nullptr);
+      Serial.println("[SLALOM] HOST-GO-Timer: GO 3x gesendet, starte selbst");
     } else {
       // Fallback: GO-Paket verloren - trotzdem starten (leicht verspaetet)
       Serial.println("[SLALOM] Client-Fallback-GO: kein Paket erhalten, starte trotzdem");
     }
     slalomExecute();
   }
-  // (2) RACING: 10s-Extension Timer (nach Treffer, warten auf Gegner)
-  if (slalomExtActive && millis() - slalomExtStart >= 10000) {
-    slalomExtActive = false;
-    if (slalomPhase == SLALOM_RACING) {
-      // 10 Sekunden abgelaufen: Runde beenden
-      if (!slalomFinished) {
-        // Ich habe nicht rechtzeitig getroffen: Gegner bekommt keinen Extra-Punkt
-        slalomSendPacket(SLALOM_CMD_TIMEOUT, nullptr);
-      }
-      slalomRoundEnd();
-    }
-  }
-  // (3) ROUND_END: 3s-Uebergangspause vor naechster Runde
-  if (slalomTransitionActive && millis() - slalomTransitionStart >= 3000) {
-    slalomTransitionActive = false;
-    slalomStartNextRound();
-  }
+  // (2) Retry: beide Durchlaeufe ohne Treffer (oder 15s-Timeout) -> BUILD
+  slalomCheckRetry();
   if (!driveLockedByGame()) driveUpdate();
   if (deviceConnected && millis() - lastColorNotify > COLOR_NOTIFY_MS) {
     lastColorNotify = millis();

@@ -123,7 +123,7 @@ void espNowAddSpecificPeer(const uint8_t mac[6]) {
 
 void espNowInit() {
   peerMutex = xSemaphoreCreateMutex();
-  espNowEventQueue = xQueueCreate(16, sizeof(EspNowEvent));
+  espNowEventQueue = xQueueCreate(32, sizeof(EspNowEvent));
 
   WiFi.mode(WIFI_STA);
   esp_wifi_stop();

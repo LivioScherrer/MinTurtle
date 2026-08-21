@@ -7,6 +7,7 @@
 #include "Motor.h"
 #include "Drive.h"
 #include "ColorSensor.h"
+#include "EspNow.h"
 #include <esp_task_wdt.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -19,6 +20,7 @@ bool     progActive = false;
 
 constexpr uint32_t PROG_STEP_GAP_MS = 120;  // Pause zwischen Top-Level-Bloecken
 constexpr uint32_t PROG_LOOP_GAP_MS = 100;  // Pause zwischen Loop-Durchlaeufen
+constexpr uint32_t SLALOM_TARGET_HOLD_MS = 250;  // Zielfarbe stabil sehen, bevor der Slalom stoppt
 
 static const char* const PROG_COLOR_NAMES[6] = { "ROT", "GELB", "GRUEN", "BLAU", "IR-HIGH", "IR-LOW" };
 
@@ -80,6 +82,37 @@ static bool colorPollQuick(uint8_t idx) {
   return (millis() - colQuickStart) >= 50;
 }
 
+// Slalom-Zielfarb-Check waehrend der Fahrt (debounced + Flanken-Logik).
+// - Debounce: Farbe muss `holdMs` lang stabil sichtbar sein (spannt mehrere
+//   Sensor-Ticks a ~150ms), damit ein einzelner Bewegungs-Ausreisser nicht stoppt.
+// - Flanke: war die Farbe schon beim Start sichtbar (armed=false), wird sie
+//   ignoriert, bis sie einmal verschwunden war (armed=true) und wieder auftaucht.
+static uint32_t slalomHitStart = 0;
+static int8_t  slalomHitIdx   = -1;
+static bool    slalomHitArmed = true;
+
+static void slalomHitReset(bool armed) {
+  slalomHitStart = 0;
+  slalomHitIdx   = -1;
+  slalomHitArmed = armed;
+}
+
+static bool slalomHitPoll(uint8_t idx, uint32_t holdMs) {
+  if (idx >= PROG_SENSOR_IR_HIGH) return false;
+  if (!colorSensorOk) return false;
+  char name[16];
+  getCurrentColorName(name, sizeof(name));
+  if (strcasecmp(name, PROG_COLOR_NAMES[idx]) != 0) {
+    slalomHitArmed = true;   // Farbe weg -> naechstes Auftauchen ist eine Flanke
+    slalomHitStart = 0;
+    slalomHitIdx   = -1;
+    return false;
+  }
+  if (!slalomHitArmed) return false;  // war von Anfang an da -> ignorieren
+  if (slalomHitIdx != (int8_t)idx) { slalomHitIdx = (int8_t)idx; slalomHitStart = millis(); return false; }
+  return (millis() - slalomHitStart) >= holdMs;
+}
+
 // Hilfsfunktion: laeuft gerade ein Spiel, das die Stepper nutzt?
 // GAME_PROG (Code-Bausteine solo) und GAME_SLALOM (Slalom-Multiplayer)
 // muessen die Motoren kontrollieren koennen.
@@ -94,6 +127,7 @@ static bool colorSettled(uint8_t idx, uint32_t timeoutMs = 250) {
     if (!gameAllowsMotorRun()) return false;
     if (sensorPoll(idx)) return true;
     bleProcessEvents();
+    espNowProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(20));
   }
   return false;
@@ -122,6 +156,15 @@ static int32_t degToSteps(int16_t deg) {
 static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
   prepPositionMove(stepperL, sL * (int32_t)config.leftSign, speed);
   prepPositionMove(stepperR, sR * (int32_t)config.rightSign, speed);
+  // Slalom: merken, ob wir schon AUF der Zielfarbe starten. Dann erst nach
+  // einem Weg-Gang wieder triggern (Flanken-Logik, siehe slalomHitPoll).
+  if (colorCheck >= 0 && colorCheck < (int8_t)PROG_SENSOR_IR_HIGH) {
+    char nm[16];
+    getCurrentColorName(nm, sizeof(nm));
+    slalomHitReset(strcasecmp(nm, PROG_COLOR_NAMES[(uint8_t)colorCheck]) != 0);
+  } else {
+    slalomHitReset(true);
+  }
   uint32_t lastPoll = 0;
   bool colorHit = false;
   while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
@@ -129,8 +172,13 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
     if (!gameAllowsMotorRun()) { stepperL.stop(); stepperR.stop(); break; }
     if (millis() - lastPoll >= 20) {
       lastPoll = millis();
-      // Globaler ROT-Stop: immer pruefen
-      if (colorPollQuick(PROG_COLOR_ROT)) {
+      // Globaler ROT-Stop: NUR im Solo-Programmiermodus (GAME_PROG).
+      // Im Slalom ist ROT eine der 4 normalen Zielfarben - dort uebernimmt
+      // der Ziel-Check (sensorHitImmediate / sensorPoll) das Anhalten. Ein
+      // pauschaler ROT-Stop wuerde sonst schon direkt nach dem Losfahren
+      // stoppen (ROT-Wert der Startflaeche / Heuristik) und die Runde ohne
+      // Treffer (slalomFinished=false) abbrechen.
+      if (currentGame != GAME_SLALOM && colorPollQuick(PROG_COLOR_ROT)) {
         colorHit = true;
         stepperL.stop();
         stepperR.stop();
@@ -141,19 +189,28 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
         sendStatus("PROG:STOP_RED");
         break;
       }
-      // Optionaler Loop-Sensor-Check (z.B. fuer OP_UNTIL)
-      // Sofort-Hit: 1x Lesung reicht (Sensor muss STOPPEN bevor drueber hinweg)
-      if (colorCheck >= 0 && sensorHitImmediate((uint8_t)colorCheck)) {
-        Serial.printf("[PROG] sensorHitImmediate %s -> STOP\n", PROG_COLOR_NAMES[(uint8_t)colorCheck]);
-        colorHit = true;
-        stepperL.stop();
-        stepperR.stop();
-        break;
+      // Optionaler Sensor-Check waehrend der Fahrt.
+      // Slalom: debounced + Flanken-Logik (nur "neu" auftauchende Zielfarbe),
+      // damit ein schon beim Start sichtbarer Wert (Startflaeche / LED-Licht)
+      // nicht sofort stoppt.
+      // Solo (OP_UNTIL): Sofort-Hit (1x Lesung) - stoppen BEVOR drueber hinweg.
+      if (colorCheck >= 0) {
+        bool hit = (currentGame == GAME_SLALOM)
+                     ? slalomHitPoll((uint8_t)colorCheck, SLALOM_TARGET_HOLD_MS)
+                     : sensorHitImmediate((uint8_t)colorCheck);
+        if (hit) {
+          Serial.printf("[PROG] sensorHit %s -> STOP\n", PROG_COLOR_NAMES[(uint8_t)colorCheck]);
+          colorHit = true;
+          stepperL.stop();
+          stepperR.stop();
+          break;
+        }
       }
     }
     stepperL.run();
     stepperR.run();
     bleProcessEvents();
+    espNowProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(5));
   }
   // sanft auslaufen lassen
@@ -163,6 +220,7 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
     stepperL.run();
     stepperR.run();
     bleProcessEvents();
+    espNowProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(5));
   }
   return colorHit;
@@ -197,6 +255,7 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
           if (!gameAllowsMotorRun()) return false;
           if (sensorPoll(target)) return false;  // keine colorHit-Semantik hier
           bleProcessEvents();
+          espNowProcessEvents();
           vTaskDelay(pdMS_TO_TICKS(30));
         }
         return false;
@@ -206,6 +265,7 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
       while (millis() - start < ms) {
         if (!gameAllowsMotorRun()) break;
         bleProcessEvents();
+        espNowProcessEvents();
         vTaskDelay(pdMS_TO_TICKS(50));
       }
       return false;
@@ -417,6 +477,7 @@ void progRun() {
             progExecSimple(st.body[j].op, st.body[j].val, st.body[j].color);
           }
           bleProcessEvents();
+          espNowProcessEvents();
           vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         }
       } else {
@@ -427,6 +488,7 @@ void progRun() {
             progExecSimple(st.body[j].op, st.body[j].val, st.body[j].color);
           }
           bleProcessEvents();
+          espNowProcessEvents();
           vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
           esp_task_wdt_reset();
         }
@@ -450,6 +512,7 @@ void progRun() {
           seen = progExecSimple(st.body[j].op, st.body[j].val, cc);
         }
         bleProcessEvents();
+        espNowProcessEvents();
         vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         esp_task_wdt_reset();
       }
@@ -460,6 +523,7 @@ void progRun() {
       progExecSimple(st.op, st.val, st.color);
     }
     bleProcessEvents();
+    espNowProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(PROG_STEP_GAP_MS));
   }
 
@@ -469,6 +533,40 @@ void progRun() {
   currentGame = GAME_NONE;
   sendStatus(aborted ? "PROG:ABORT" : "PROG:DONE");
   Serial.printf("[PROG] %s\n", aborted ? "Abgebrochen" : "Fertig");
+}
+
+// Zielfarbe mit kurzer Haltezeit (sensorPoll: 40ms) stabil erkennen.
+// Kehrt sofort mit false zurueck, wenn die Farbe gerade nicht sichtbar ist,
+// damit der Slalom nach jedem Block nicht kuenstlich wartet.
+static bool slalomTargetStable(uint8_t targetIdx) {
+  uint32_t start = millis();
+  while (millis() - start < 300) {
+    if (!gameAllowsMotorRun()) return false;
+    char name[16];
+    getCurrentColorName(name, sizeof(name));
+    if (strcasecmp(name, PROG_COLOR_NAMES[targetIdx]) != 0) {
+      colorPollReset();
+      return false;
+    }
+    if (sensorPoll(targetIdx)) return true;
+    bleProcessEvents();
+    espNowProcessEvents();
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+  return false;
+}
+
+// Slalom-Zielfarbe erreicht: Roboter stoppen, Flags setzen und FINISH melden.
+// Rueckgabe immer true (Aufrufer kann direkt return).
+static bool slalomFinish(uint8_t targetIdx) {
+  stopMotors(); speedL = 0; speedR = 0;
+  progActive = false;
+  currentGame = GAME_NONE;
+  slalomFinished = true;
+  char fmsg[48];
+  snprintf(fmsg, sizeof(fmsg), "SLALOM:FINISH:%s", PROG_COLOR_NAMES[targetIdx]);
+  sendStatus(fmsg);
+  return true;
 }
 
 // =====================================================
@@ -497,28 +595,21 @@ void progRunSlalom(const char* targetColor) {
     ProgStep& st = progSteps[i];
 
     if (st.op == OP_REPEAT) {
-      uint16_t reps = (st.val < 0) ? PROG_UNTIL_MAX_ITER : st.val;
-      int16_t k = 0;
-      for (; k < reps && currentGame == GAME_SLALOM; k++) {
+      uint16_t reps = (st.val < 0) ? PROG_UNTIL_MAX_ITER : (uint16_t)st.val;
+      for (uint16_t k = 0; k < reps && currentGame == GAME_SLALOM; k++) {
         for (uint8_t j = 0; j < st.bodyLen && currentGame == GAME_SLALOM; j++) {
-          progExecSimple(st.body[j].op, st.body[j].val, st.body[j].color);
-          // Nach jedem Body-Schritt pruefen, ob Zielfarbe erreicht
-          if (sensorPoll((uint8_t)targetIdx)) {
-            stopMotors(); speedL = 0; speedR = 0;
-            progActive = false;
-            currentGame = GAME_NONE;
-            slalomFinished = true;
-            char fmsg[48];
-            snprintf(fmsg, sizeof(fmsg), "SLALOM:FINISH:%s", PROG_COLOR_NAMES[targetIdx]);
-            sendStatus(fmsg);
-            return;
-          }
+          // F/B-Bloecke stoppen sofort, sobald die Zielfarbe sichtbar ist
+          int8_t cc = (st.body[j].op == OP_FWD || st.body[j].op == OP_BACK)
+                        ? (st.body[j].color >= 0 ? st.body[j].color : (int8_t)targetIdx)
+                        : (int8_t)-1;
+          progExecSimple(st.body[j].op, st.body[j].val, cc);
+          if (slalomTargetStable(targetIdx)) { slalomFinish(targetIdx); return; }
         }
         bleProcessEvents();
+        espNowProcessEvents();
         vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         esp_task_wdt_reset();
-        // Bedingte Wiederholung: abbrechen wenn Farbe gesehn
-        if (st.val < 0 && sensorPoll((uint8_t)targetIdx)) break;
+        if (slalomTargetStable(targetIdx)) { slalomFinish(targetIdx); return; }
       }
     } else if (st.op == OP_UNTIL) {
       // Für Slalom: Wiederhole bis Zielfarbe erreicht (oder max iter)
@@ -527,37 +618,23 @@ void progRunSlalom(const char* targetColor) {
           int8_t cc = (st.body[j].op == OP_FWD || st.body[j].op == OP_BACK)
                         ? (st.body[j].color >= 0 ? st.body[j].color : (int8_t)targetIdx) : (int8_t)-1;
           progExecSimple(st.body[j].op, st.body[j].val, cc);
-          if (sensorPoll((uint8_t)targetIdx)) {
-            stopMotors(); speedL = 0; speedR = 0;
-            progActive = false;
-            currentGame = GAME_NONE;
-            slalomFinished = true;
-            char fmsg[48];
-            snprintf(fmsg, sizeof(fmsg), "SLALOM:FINISH:%s", PROG_COLOR_NAMES[targetIdx]);
-            sendStatus(fmsg);
-            return;
-          }
+          if (slalomTargetStable(targetIdx)) { slalomFinish(targetIdx); return; }
         }
         bleProcessEvents();
+        espNowProcessEvents();
         vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
         esp_task_wdt_reset();
-        if (sensorPoll((uint8_t)targetIdx)) break;
+        if (slalomTargetStable(targetIdx)) { slalomFinish(targetIdx); return; }
       }
     } else {
-      int8_t cc = (st.color >= 0) ? st.color : (int8_t)targetIdx;
+      int8_t cc = (st.op == OP_FWD || st.op == OP_BACK)
+                    ? (st.color >= 0 ? st.color : (int8_t)targetIdx)
+                    : (int8_t)-1;
       progExecSimple(st.op, st.val, cc);
-      if (sensorPoll((uint8_t)targetIdx)) {
-        stopMotors(); speedL = 0; speedR = 0;
-        progActive = false;
-        currentGame = GAME_NONE;
-        slalomFinished = true;
-        char fmsg[48];
-        snprintf(fmsg, sizeof(fmsg), "SLALOM:FINISH:%s", PROG_COLOR_NAMES[targetIdx]);
-        sendStatus(fmsg);
-        return;
-      }
+      if (slalomTargetStable(targetIdx)) { slalomFinish(targetIdx); return; }
     }
     bleProcessEvents();
+    espNowProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(PROG_STEP_GAP_MS));
   }
 

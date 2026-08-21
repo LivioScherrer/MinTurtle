@@ -1,0 +1,15 @@
+- generic [active] [ref=f4e1]:
+  - generic: → → → → → → → → →
+  - generic [ref=f4e106]:
+    - generic [ref=f4e107]:
+      - button "←" [ref=f4e108] [cursor=pointer]
+      - generic [ref=f4e109]: Farben-Slalom
+    - generic [ref=f4e112]:
+      - generic [ref=f4e113]: Farben-Slalom
+      - generic [ref=f4e114]: Zufällige Zielfarbe – wer sie zuerst stabil erreicht, gewinnt sofort! Niemand getroffen? Dann verbessere dein Programm und versuch's nochmal.
+      - generic [ref=f4e117]:
+        - generic [ref=f4e118]: Gegner einladen
+        - generic [ref=f4e119]: Suche nach EduBots in der Naehe...
+        - button "Erneut suchen" [ref=f4e121] [cursor=pointer]
+        - generic [ref=f4e122]: Keine EduBots in der Naehe. Beide muessen eingeschaltet sein.
+    - button "?" [ref=f4e126] [cursor=pointer]

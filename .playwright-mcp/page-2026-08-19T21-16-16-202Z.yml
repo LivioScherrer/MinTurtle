@@ -1,0 +1,68 @@
+- generic [ref=f5e3]:
+  - generic [ref=f5e4]:
+    - generic [ref=f5e5]: EduBot
+    - generic [ref=f5e7]:
+      - generic "IR-Sensor auf Pin D8" [ref=f5e8]:
+        - generic [ref=f5e9]: IR
+        - generic [ref=f5e10]: –
+      - generic [ref=f5e11]: Getrennt
+      - button "Verbinden" [ref=f5e14] [cursor=pointer]
+      - button "STOP" [ref=f5e15] [cursor=pointer]
+  - generic [ref=f5e16]:
+    - generic [ref=f5e17]:
+      - button "Alle" [ref=f5e18] [cursor=pointer]
+      - button "Steuerung" [ref=f5e19] [cursor=pointer]
+      - button "Programmieren" [ref=f5e20] [cursor=pointer]
+      - button "Spiele & Rennen" [ref=f5e21] [cursor=pointer]
+      - button "Kalibrierung" [ref=f5e22] [cursor=pointer]
+    - generic [ref=f5e23]:
+      - generic [ref=f5e24]: Steuern & Fahren
+      - generic [ref=f5e26] [cursor=pointer]:
+        - generic [ref=f5e31]:
+          - generic [ref=f5e32]: Frei Fahren
+          - generic [ref=f5e33]: Steuern mit WASD oder Touch
+        - text: →
+      - generic [ref=f5e34]: Programmieren
+      - generic [ref=f5e36] [cursor=pointer]:
+        - generic [ref=f5e42]:
+          - generic [ref=f5e43]: Code-Bausteine
+          - generic [ref=f5e44]: Roboter mit Blöcken programmieren
+        - text: →
+      - generic [ref=f5e45]: Autonom & Multiplayer
+      - generic [ref=f5e47] [cursor=pointer]:
+        - generic [ref=f5e53]:
+          - generic [ref=f5e54]: Linie Folgen
+          - generic [ref=f5e55]: Folgt einer schwarzen Linie automatisch
+        - text: →
+      - generic [ref=f5e56] [cursor=pointer]:
+        - generic [ref=f5e60]:
+          - generic [ref=f5e61]: Mathe-Rennen
+          - generic [ref=f5e62]: Rechne gegen einen anderen Roboter
+        - text: →
+      - generic [ref=f5e63] [cursor=pointer]:
+        - generic [ref=f5e69]:
+          - generic [ref=f5e70]: Farben-Slalom
+          - generic [ref=f5e71]: Programmiere & erreiche die Farbe
+        - text: →
+      - generic [ref=f5e72]: Knobeln & Lernen
+      - generic [ref=f5e74] [cursor=pointer]:
+        - generic [ref=f5e78]:
+          - generic [ref=f5e79]: Pfeil-Knobeln
+          - generic [ref=f5e80]: Folge wird länger - Roboter faehrt sie ab
+        - text: →
+      - generic [ref=f5e81] [cursor=pointer]:
+        - generic [ref=f5e86]:
+          - generic [ref=f5e87]: Korrigieren
+          - generic [ref=f5e88]: Quiz - Lege Plättchen, Roboter prüft
+        - text: →
+      - generic [ref=f5e89] [cursor=pointer]:
+        - generic [ref=f5e94]:
+          - generic [ref=f5e95]: Memory
+          - generic [ref=f5e96]: Bewegungen merken und nachfahren
+        - text: →
+      - generic [ref=f5e97]: Kalibrierung & Setup
+      - generic [ref=f5e99] [cursor=pointer]:
+        - generic [ref=f5e103]:
+          - generic [ref=f5e104]: Farb-Kalibrierungs-Assistent
+          - generic [ref=f5e105]: Schritt für Schritt Schwarz, Weiß und Farben kalibrieren
+        - text: →

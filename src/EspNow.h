@@ -8,7 +8,6 @@
 #include <freertos/semphr.h>
 
 constexpr uint8_t  RENNEN_TARGET_SCORE = 10;
-constexpr uint8_t  SLALOM_TARGET_WINS  = 3;
 constexpr uint8_t  MAX_PEERS = 4;
 constexpr uint8_t  RACE_FLAG_WINNER  = 0x01;
 constexpr uint8_t  RACE_FLAG_HELLO   = 0x80;
@@ -27,17 +26,15 @@ struct __attribute__((packed)) RacePacket {
 };
 static_assert(sizeof(RacePacket) == 94, "RacePacket muss 94 Bytes sein - kein Padding!");
 
-// Slalom-Befehle (ueber ESP-NOW)
+// Slalom-Befehle (ueber ESP-NOW) - vereinfacht, KEINE Punkte.
+// Wer zuerst die Zielfarbe erreicht, gewinnt sofort das Spiel.
 constexpr uint8_t SLALOM_CMD_NONE    = 0;
-constexpr uint8_t SLALOM_CMD_PROG    = 1;  // Programm (encoded string) vom Gegner
-constexpr uint8_t SLALOM_CMD_READY   = 2;  // Gegner ist bereit (Programm empfangen)
-constexpr uint8_t SLALOM_CMD_GO      = 3;  // Startsignal (beide bereit)
-constexpr uint8_t SLALOM_CMD_FINISH  = 4;  // Gegner hat Farbe getrofffen (Score=Sieg)
-constexpr uint8_t SLALOM_CMD_RESET   = 5;  // Neustart/Runde neu
-constexpr uint8_t SLALOM_CMD_TARGET  = 6;  // Zielfarbe (Host -> Client) - locked erst nach ACK
-constexpr uint8_t SLALOM_CMD_OPP_FINISHED = 7;  // Gegner hat Farbe erreicht (10-Sek-Extension)
-constexpr uint8_t SLALOM_CMD_TIMEOUT     = 8;  // Runde abgelaufen (niemand hat Farbe erreicht)
-constexpr uint8_t SLALOM_CMD_TARGET_ACK  = 9;  // Client bestaetigt Zielfarbe -> Host broadcastet SLALOM:TARGET
+constexpr uint8_t SLALOM_CMD_PROG    = 1;  // "Ich bin bereit" + Programm (encoded string)
+constexpr uint8_t SLALOM_CMD_GO      = 2;  // Startsignal (Host -> Client), beide fahren los
+constexpr uint8_t SLALOM_CMD_START   = 3;  // Spiel starten + Zielfarbe (Host -> Client)
+constexpr uint8_t SLALOM_CMD_WIN     = 4;  // Ich habe die Zielfarbe erreicht -> Spielende
+constexpr uint8_t SLALOM_CMD_MISS    = 5;  // Mein Durchlauf ist zu Ende, Farbe nicht erreicht
+constexpr uint8_t SLALOM_CMD_ABORT   = 6;  // Spiel abgebrochen -> beide zurueck zu PAIRED
 constexpr uint8_t SLALOM_CMD_INVITE      = 10; // Einladung (Initiator -> Gegner)
 constexpr uint8_t SLALOM_CMD_INVITE_ACK  = 11; // Einladung angenommen (Gegner -> Initiator)
 constexpr uint8_t SLALOM_CMD_SLALOM_UNPAIR = 12; // Slalom-spezifisches Unpair (nur dieses Spiel)
