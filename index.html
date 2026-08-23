@@ -67,13 +67,13 @@
       --radius-lg: 14px;
       --radius-xl: 18px;
       --radius-full: 9999px;
-      --fs-xs: 12px;
-      --fs-sm: 13px;
-      --fs-base: 14px;
-      --fs-lg: 16px;
-      --fs-xl: 20px;
-      --fs-2xl: 24px;
-      --fs-3xl: 38px;
+      --fs-xs: clamp(11px, 1.2vw, 12px);
+      --fs-sm: clamp(12px, 1.5vw, 13px);
+      --fs-base: clamp(13px, 1.8vw, 14px);
+      --fs-lg: clamp(14px, 2.2vw, 16px);
+      --fs-xl: clamp(18px, 3vw, 20px);
+      --fs-2xl: clamp(20px, 3.5vw, 24px);
+      --fs-3xl: clamp(28px, 5vw, 38px);
       --fw-medium: 600;
       --fw-bold: 700;
       --fw-black: 800;
@@ -278,113 +278,125 @@
       }
     }
 
-    /* =========================================================
-       BUTTONS - hand drawn
-       ========================================================= */
+/* =========================================================
+        BUTTONS - hand drawn
+        ========================================================= */
     .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 10px 22px;
-      border-radius: 10px;
-      border: var(--ink-line) solid var(--ink);
-      background: #fff;
-      color: var(--ink);
-      font-size: var(--fs-base);
-      font-weight: var(--fw-bold);
-      font-family: inherit;
-      cursor: pointer;
-      white-space: nowrap;
-      box-shadow: var(--shadow-sketch);
-      transition: transform .12s var(--ease-snap), box-shadow .12s var(--ease-snap), background .2s;
-      position: relative;
-      letter-spacing: .2px;
-    }
+       display: inline-flex;
+       align-items: center;
+       justify-content: center;
+       gap: 7px;
+       padding: 11px 22px;
+       border-radius: 11px;
+       border: var(--ink-line) solid var(--ink);
+       background: #fff;
+       color: var(--ink);
+       font-size: var(--fs-base);
+       font-weight: var(--fw-bold);
+       font-family: inherit;
+       cursor: pointer;
+       white-space: nowrap;
+       box-shadow: var(--shadow-sketch);
+       transition: transform .14s var(--ease-snap), box-shadow .14s var(--ease-snap), background .2s;
+       position: relative;
+       letter-spacing: .2px;
+       line-height: 1.1;
+       min-height: 42px;
+     }
 
     .btn:hover {
-      transform: translate(-1px, -1px);
-      box-shadow: 4px 4px 0 var(--ink);
-      background: #fffdf6
-    }
+       transform: translate(-2px, -2px);
+       box-shadow: 5px 5px 0 var(--ink);
+       background: #fffdf6
+     }
 
     .btn:active {
-      transform: translate(3px, 3px);
-      box-shadow: 0 0 0 var(--ink);
-      background: #f7eecf
-    }
+       transform: translate(3px, 3px);
+       box-shadow: 0 0 0 var(--ink);
+       background: #f7eecf
+     }
 
     .btn:focus-visible {
-      outline: none;
-      box-shadow: var(--shadow-sketch), 0 0 0 3px rgba(23, 143, 118, .35)
-    }
+       outline: none;
+       box-shadow: var(--shadow-sketch), 0 0 0 3px rgba(23, 143, 118, .35)
+     }
 
     .btn-sm {
-      padding: 6px 14px;
-      font-size: var(--fs-sm);
-      border-radius: 8px
+       padding: 7px 14px;
+       font-size: var(--fs-sm);
+       border-radius: 9px;
+       min-height: 34px;
     }
 
     .btn-lg {
-      padding: 14px 28px;
-      font-size: var(--fs-xl);
-      border-radius: 12px;
-      border-width: var(--ink-line-bold)
+       padding: 14px 30px;
+       font-size: var(--fs-xl);
+       border-radius: 13px;
+       border-width: var(--ink-line-bold);
+       min-height: 56px;
     }
 
     .btn-primary {
-      background: var(--teal-100);
-      color: var(--ink)
+       background: var(--teal-100);
+       color: var(--ink);
     }
 
     .btn-primary:hover {
-      background: var(--teal-200)
+       background: var(--teal-200);
+       box-shadow: 5px 5px 0 var(--teal-mark), 0 0 0 0 var(--ink);
     }
 
     .btn-primary:active {
-      background: var(--teal-300)
+       background: var(--teal-300);
     }
 
     .btn-danger {
-      background: #fbd2d2;
-      color: var(--ink)
+       background: #fbd2d2;
+       color: var(--ink);
     }
 
     .btn-danger:hover {
-      background: #f7b8b8
+       background: #f7b8b8;
+       box-shadow: 5px 5px 0 var(--red-mark), 0 0 0 0 var(--ink);
     }
 
     .btn-danger:active {
-      background: #ee8a8a
+       background: #ee8a8a;
     }
 
     .btn-success {
-      background: #cdebd6;
-      color: var(--ink)
+       background: #cdebd6;
+       color: var(--ink);
     }
 
     .btn-success:hover {
-      background: #b4dcc1
+       background: #b4dcc1;
+       box-shadow: 5px 5px 0 var(--green-600), 0 0 0 0 var(--ink);
     }
 
     .btn-success:active {
-      background: #88c5a0
+       background: #88c5a0;
     }
 
     .btn-grey {
-      background: #ece5d3;
-      color: var(--ink-soft)
+       background: #ece5d3;
+       color: var(--ink-soft);
     }
 
     .btn-grey:hover {
-      background: #e1d8bf
+       background: #e1d8bf;
     }
 
     .btn:disabled {
-      opacity: .5;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: var(--shadow-sketch-sm)
+       opacity: .5;
+       cursor: not-allowed;
+       transform: none;
+       box-shadow: var(--shadow-sketch-sm);
+    }
+
+    .btn:disabled:hover {
+       transform: none;
+       box-shadow: var(--shadow-sketch-sm);
     }
 
     /* Hand-drawn scribble accent inside primary buttons (top-left) */
@@ -414,88 +426,117 @@
       border-radius: 2px;
     }
 
-    /* =========================================================
-       HEADER (dashboard top bar)
-       ========================================================= */
-    .header {
-      height: 72px;
-      background: var(--teal-700);
-      background-image:
-        repeating-linear-gradient(45deg, transparent 0, transparent 14px, rgba(255, 255, 255, .04) 14px, rgba(255, 255, 255, .04) 15px);
-      color: #fff8e0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 18px;
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      border-bottom: var(--ink-line-bold) solid var(--ink);
-      box-shadow: 0 4px 0 var(--ink);
-    }
+/* =========================================================
+        HEADER (dashboard top bar)
+        ========================================================= */
+     .header {
+       height: 76px;
+       background: var(--teal-700);
+       background-image:
+         repeating-linear-gradient(45deg, transparent 0, transparent 14px, rgba(255, 255, 255, .04) 14px, rgba(255, 255, 255, .04) 15px);
+       color: #fff8e0;
+       display: flex;
+       align-items: center;
+       justify-content: space-between;
+       padding: 0 22px;
+       position: sticky;
+       top: 0;
+       z-index: 20;
+       border-bottom: var(--ink-line-bold) solid var(--ink);
+       box-shadow: 0 4px 0 var(--ink);
+       gap: 16px;
+     }
 
-    .header::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 0;
-      height: 5px;
-      background: repeating-linear-gradient(90deg, var(--amber-300) 0 12px, var(--red-400) 12px 24px, var(--teal-300) 24px 36px);
-      opacity: .5;
-    }
+     .header::before {
+       content: '';
+       position: absolute;
+       left: 0;
+       right: 0;
+       top: 0;
+       height: 5px;
+       background: repeating-linear-gradient(90deg, var(--amber-300) 0 12px, var(--red-400) 12px 24px, var(--teal-300) 24px 36px);
+       opacity: .5;
+     }
 
-    .header-l {
-      position: relative;
-      display: flex;
-      align-items: center;
-      gap: 8px
-    }
+     .header-l {
+       position: relative;
+       display: flex;
+       align-items: center;
+       gap: 10px;
+       flex-shrink: 0;
+     }
 
-    .header-l-text {
-      font-family: 'Caveat', 'Marker Felt', cursive;
-      font-size: 34px;
-      font-weight: 700;
-      color: #fff8e0;
-      letter-spacing: .5px;
-      line-height: 1;
-      text-shadow: 2px 2px 0 var(--ink)
-    }
+     /* Logo-Badge im Header: kleines gezeichnetes Robot-Icon als Marke */
+     .header-logo {
+       width: 40px;
+       height: 40px;
+       border-radius: 10px;
+       background: var(--amber-200);
+       border: var(--ink-line) solid var(--ink);
+       box-shadow: 2px 2px 0 var(--ink);
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       transform: rotate(-3deg);
+     }
 
-    .header-l-text span {
-      color: var(--amber-300);
-      text-decoration: underline wavy var(--amber-300);
-      text-underline-offset: 4px;
-      text-decoration-thickness: 2px
-    }
+     .header-l-text {
+       font-family: 'Caveat', 'Marker Felt', cursive;
+       font-size: clamp(28px, 4vw, 38px);
+       font-weight: 700;
+       color: #fff8e0;
+       letter-spacing: .5px;
+       line-height: 1;
+       text-shadow: 2px 2px 0 var(--ink);
+     }
 
-    .header-r {
-      display: flex;
-      align-items: center;
-      gap: 10px
-    }
+     .header-l-text span {
+       color: var(--amber-300);
+       text-decoration: underline wavy var(--amber-300);
+       text-underline-offset: 4px;
+       text-decoration-thickness: 2px
+     }
 
-    .conn-badge {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: var(--fs-sm);
-      font-weight: var(--fw-bold);
-      color: #fff8e0;
-      background: rgba(255, 255, 255, .12);
-      padding: 6px 14px;
-      border-radius: var(--radius-full);
-      border: var(--ink-line) solid rgba(255, 255, 255, .4);
-      transform: rotate(-1deg);
-    }
+     .header-r {
+       display: flex;
+       align-items: center;
+       gap: 10px;
+       flex-wrap: wrap;
+       justify-content: flex-end;
+     }
 
-    .conn-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--red-500);
-      position: relative
-    }
+     .conn-badge {
+       display: inline-flex;
+       align-items: center;
+       gap: 8px;
+       font-size: var(--fs-sm);
+       font-weight: var(--fw-bold);
+       color: #fff8e0;
+       background: rgba(255, 255, 255, .12);
+       padding: 7px 14px;
+       border-radius: var(--radius-full);
+       border: var(--ink-line) solid rgba(255, 255, 255, .4);
+       transform: rotate(-1deg);
+       white-space: nowrap;
+       line-height: 1;
+     }
+
+     .conn-badge-label {
+       font-size: 10px;
+       opacity: .65;
+       letter-spacing: 1px;
+       text-transform: uppercase;
+       font-weight: 700;
+     }
+
+     .conn-dot {
+       width: 12px;
+       height: 12px;
+       border-radius: 50%;
+       background: var(--red-500);
+       position: relative;
+       flex-shrink: 0;
+     }
 
     .conn-dot.connected {
       background: var(--green-400);
@@ -524,22 +565,42 @@
     }
 
     /* IR-Sensor Badge: faerbt sich je nach Zustand (0=frei, 1=Hindernis) */
-    #irBadge {
-      transition: background .15s var(--ease-snap), color .15s var(--ease-snap);
-    }
-    #irBadge.ir-clear {
-      background: rgba(62, 196, 135, .25) !important;
-      color: #c6ecd4 !important;
-    }
-    #irBadge.ir-blocked {
-      background: rgba(214, 58, 58, .35) !important;
-      color: #fbd2d2 !important;
-      animation: irPulse 0.8s ease-in-out infinite;
-    }
-    @keyframes irPulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(214, 58, 58, .4); }
-      50%      { box-shadow: 0 0 0 6px rgba(214, 58, 58, 0); }
-    }
+     #irBadge {
+       transition: background .2s var(--ease-snap), color .2s var(--ease-snap), border-color .2s var(--ease-snap);
+       border-color: rgba(255, 255, 255, .35);
+     }
+     #irBadge .conn-badge-label {
+       transition: color .2s var(--ease-snap);
+     }
+     #irBadge.ir-clear {
+       background: rgba(62, 196, 135, .28) !important;
+       border-color: rgba(198, 236, 212, .55) !important;
+       color: #d4f0e0 !important;
+     }
+     #irBadge.ir-clear .conn-badge-label {
+       color: rgba(212, 240, 224, .7) !important;
+     }
+     #irBadge.ir-clear #irStatus {
+       color: #4cd496 !important;
+       text-shadow: 0 0 8px rgba(76, 212, 150, .6);
+     }
+     #irBadge.ir-blocked {
+       background: rgba(214, 58, 58, .38) !important;
+       border-color: rgba(251, 210, 210, .55) !important;
+       color: #ffd9d9 !important;
+       animation: irPulse 0.9s ease-in-out infinite;
+     }
+     #irBadge.ir-blocked .conn-badge-label {
+       color: rgba(255, 217, 217, .75) !important;
+     }
+     #irBadge.ir-blocked #irStatus {
+       color: #ff8585 !important;
+       text-shadow: 0 0 8px rgba(255, 100, 100, .7);
+     }
+     @keyframes irPulse {
+       0%, 100% { box-shadow: 0 0 0 0 rgba(214, 58, 58, .45); }
+       50%      { box-shadow: 0 0 0 7px rgba(214, 58, 58, 0); }
+     }
 
     /* Header buttons (Verbinden / STOP) - match conn-badge style */
     .header .btn {
@@ -579,134 +640,159 @@
     /* =========================================================
        DASHBOARD
        ========================================================= */
-    .dashboard {
-      padding: 24px 32px 80px;
-      max-width: 1400px;
-      margin: 0 auto;
-      width: 100%;
-    }
+.dashboard {
+       padding: 22px 32px 80px;
+       max-width: 1400px;
+       margin: 0 auto;
+       width: 100%;
+     }
 
-    .tile-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 18px;
-    }
+     .tile-grid {
+       display: grid;
+       grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+       gap: 20px;
+     }
 
-    .cat-header {
-      grid-column: 1 / -1;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 18px 0 4px;
-      margin-top: 8px;
-      font-family: 'Caveat', 'Marker Felt', cursive;
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--ink-soft);
-      letter-spacing: .5px;
-    }
+     .cat-header {
+       grid-column: 1 / -1;
+       display: flex;
+       align-items: center;
+       gap: 12px;
+       padding: 14px 6px 10px;
+       margin-top: 18px;
+       font-family: 'Caveat', 'Marker Felt', cursive;
+       font-size: clamp(22px, 2.8vw, 28px);
+       font-weight: 700;
+       color: var(--ink-soft);
+       letter-spacing: .5px;
+       position: relative;
+     }
 
-    .cat-header::before {
-      content: '';
-      display: inline-block;
-      width: 18px;
-      height: 18px;
-      background: var(--amber-300);
-      border: 2px solid var(--ink);
-      border-radius: 50%;
-      transform: rotate(-8deg);
-      box-shadow: 1.5px 1.5px 0 var(--ink);
-    }
+     /* Trennlinie unter Kategorie-Header */
+     .cat-header::after {
+       content: '';
+       flex: 1;
+       height: 0;
+       border-bottom: 2px dashed rgba(31, 26, 20, .18);
+       margin-left: 6px;
+       align-self: center;
+       margin-top: 6px;
+     }
 
-    .tile {
-      position: relative;
-      background: #fffdf4;
-      border-radius: 14px 18px 14px 20px;
-      padding: 16px 18px;
-      display: flex;
-      align-items: center;
-      gap: 18px;
-      cursor: pointer;
-      border: var(--ink-line) solid var(--ink);
-      box-shadow: var(--shadow-sketch);
-      transition: transform .15s var(--ease-snap), box-shadow .15s var(--ease-snap);
-    }
+     .cat-header::before {
+       content: '';
+       display: inline-block;
+       width: 18px;
+       height: 18px;
+       background: var(--amber-300);
+       border: 2px solid var(--ink);
+       border-radius: 50%;
+       transform: rotate(-8deg);
+       box-shadow: 1.5px 1.5px 0 var(--ink);
+     }
 
-    .tile:nth-child(odd) {
-      transform: rotate(-.4deg)
-    }
+     .tile {
+       position: relative;
+       background: #fffdf4;
+       border-radius: 16px 20px 16px 22px;
+       padding: 18px 22px;
+       display: flex;
+       align-items: center;
+       gap: 18px;
+       cursor: pointer;
+       border: var(--ink-line) solid var(--ink);
+       box-shadow: var(--shadow-sketch);
+       transition: transform .15s var(--ease-snap), box-shadow .15s var(--ease-snap), background .2s;
+       min-height: 86px;
+     }
 
-    .tile:nth-child(even) {
-      transform: rotate(.3deg)
-    }
+     .tile:nth-child(odd) {
+       transform: rotate(-.4deg)
+     }
 
-    .tile:hover {
-      transform: translate(-1px, -1px) rotate(0);
-      box-shadow: 5px 5px 0 var(--ink)
-    }
+     .tile:nth-child(even) {
+       transform: rotate(.3deg)
+     }
 
-    .tile:active {
-      transform: translate(3px, 3px) rotate(0);
-      box-shadow: 0 0 0 var(--ink)
-    }
+     .tile:hover {
+       transform: translate(-2px, -2px) rotate(0);
+       box-shadow: 6px 6px 0 var(--ink);
+       background: #fffef8;
+     }
 
-    .tile:focus-visible {
-      outline: none;
-      box-shadow: var(--shadow-sketch), 0 0 0 3px rgba(23, 143, 118, .35)
-    }
+     .tile:active {
+       transform: translate(3px, 3px) rotate(0);
+       box-shadow: 0 0 0 var(--ink);
+       background: #f7eecf;
+     }
 
-    .tile-ic {
-      width: 54px;
-      height: 54px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      border: var(--ink-line) solid var(--ink);
-      background: #fff;
-      box-shadow: 2px 2px 0 var(--ink);
-    }
+     .tile:focus-visible {
+       outline: none;
+       box-shadow: var(--shadow-sketch), 0 0 0 3px rgba(23, 143, 118, .35)
+     }
 
-    .tile-ic svg {
-      stroke-width: 2.4px
-    }
+     .tile-ic {
+       width: 58px;
+       height: 58px;
+       border-radius: 12px;
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       flex-shrink: 0;
+       border: var(--ink-line) solid var(--ink);
+       background: #fff;
+       box-shadow: 2px 2px 0 var(--ink);
+       transition: transform .15s var(--ease-snap);
+     }
 
-    .tile>div:not(.tile-ic) {
-      flex: 1
-    }
+     .tile:hover .tile-ic {
+       transform: rotate(-5deg) scale(1.05);
+     }
 
-    .tile-ttl {
-      font-family: 'Caveat', 'Marker Felt', cursive;
-      font-size: 26px;
-      font-weight: 700;
-      color: var(--ink);
-      line-height: 1.1
-    }
+     .tile-ic svg {
+       stroke-width: 2.4px
+     }
 
-    .tile-desc {
-      font-size: 14px;
-      color: var(--ink-mute);
-      margin-top: 2px;
-      font-weight: 500
-    }
+     .tile>div:not(.tile-ic) {
+       flex: 1;
+       min-width: 0;
+     }
 
-    .tile::after {
-      content: '→';
-      position: absolute;
-      right: 18px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-family: 'Caveat', cursive;
-      font-size: 32px;
-      color: var(--ink);
-      transition: transform .2s var(--ease-bounce);
-    }
+     .tile-ttl {
+       font-family: 'Caveat', 'Marker Felt', cursive;
+       font-size: clamp(24px, 3vw, 28px);
+       font-weight: 700;
+       color: var(--ink);
+       line-height: 1.1;
+       word-wrap: break-word;
+     }
 
-    .tile:hover::after {
-      transform: translate(6px, -50%) rotate(-8deg);
-      color: var(--teal-mark)
-    }
+     .tile-desc {
+       font-size: clamp(12px, 1.5vw, 14px);
+       color: var(--ink-mute);
+       margin-top: 3px;
+       font-weight: 500;
+       line-height: 1.35;
+     }
+
+     .tile::after {
+       content: '→';
+       position: absolute;
+       right: 18px;
+       top: 50%;
+       transform: translateY(-50%);
+       font-family: 'Caveat', cursive;
+       font-size: 32px;
+       color: var(--ink);
+       transition: transform .2s var(--ease-bounce), color .2s;
+       opacity: .55;
+     }
+
+     .tile:hover::after {
+       transform: translate(8px, -50%) rotate(-8deg);
+       color: var(--teal-mark);
+       opacity: 1;
+     }
 
     /* =========================================================
        VIEWS
@@ -719,97 +805,119 @@
       overflow-y: auto
     }
 
-    .game-header {
-      height: 64px;
-      background: #fffdf4;
-      border-bottom: var(--ink-line) solid var(--ink);
-      display: flex;
-      align-items: center;
-      padding: 0 14px;
-      gap: 12px;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      box-shadow: 0 3px 0 var(--ink);
-    }
+.game-header {
+       min-height: 68px;
+       background: #fffdf4;
+       border-bottom: var(--ink-line) solid var(--ink);
+       display: flex;
+       align-items: center;
+       padding: 10px 16px;
+       gap: 14px;
+       position: sticky;
+       top: 0;
+       z-index: 10;
+       box-shadow: 0 3px 0 var(--ink);
+     }
 
-    .back-btn {
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      border: var(--ink-line) solid var(--ink);
-      background: #fff;
-      color: var(--ink);
-      font-size: 24px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: var(--shadow-sketch-sm);
-      font-family: inherit;
-      font-weight: 700;
-      transition: transform .12s, box-shadow .12s, background .15s;
-    }
+     .back-btn {
+       width: 46px;
+       height: 46px;
+       border-radius: 11px;
+       border: var(--ink-line) solid var(--ink);
+       background: #fff;
+       color: var(--ink);
+       font-size: 24px;
+       line-height: 1;
+       cursor: pointer;
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       box-shadow: var(--shadow-sketch-sm);
+       font-family: inherit;
+       font-weight: 700;
+       transition: transform .12s, box-shadow .12s, background .15s;
+       flex-shrink: 0;
+     }
 
-    .back-btn:hover {
-      transform: translate(-1px, -1px);
-      box-shadow: 3px 3px 0 var(--ink);
-      background: #fffdf0
-    }
+     .back-btn:hover {
+       transform: translate(-1px, -1px);
+       box-shadow: 3px 3px 0 var(--ink);
+       background: #fffdf0
+     }
 
-    .back-btn:active {
-      transform: translate(2px, 2px);
-      box-shadow: 0 0 0 var(--ink);
-      background: #f7eecf
-    }
+     .back-btn:active {
+       transform: translate(2px, 2px);
+       box-shadow: 0 0 0 var(--ink);
+       background: #f7eecf
+     }
 
-    .back-btn:focus-visible {
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(23, 143, 118, .35)
-    }
+     .back-btn:focus-visible {
+       outline: none;
+       box-shadow: 0 0 0 3px rgba(23, 143, 118, .35)
+     }
 
-    .gv-title {
-      font-family: 'Caveat', 'Marker Felt', cursive;
-      font-size: 30px;
-      font-weight: 700;
-      color: var(--ink);
-      flex: 1;
-      line-height: 1
-    }
+     .gv-title {
+       font-family: 'Caveat', 'Marker Felt', cursive;
+       font-size: clamp(24px, 3.4vw, 32px);
+       font-weight: 700;
+       color: var(--ink);
+       flex: 1;
+       line-height: 1.1;
+       min-width: 0;
+       word-wrap: break-word;
+     }
 
-    .game-body {
-      padding: 28px 32px 60px;
-      max-width: 1300px;
-      margin: 0 auto;
-      width: 100%;
-    }
+     .game-body {
+       padding: 26px 28px 70px;
+       max-width: 1300px;
+       margin: 0 auto;
+       width: 100%;
+     }
 
-    .arena {
-      background: #fffdf4;
-      border: var(--ink-line) solid var(--ink);
-      border-radius: 18px 22px 18px 22px;
-      padding: 30px 26px;
-      text-align: center;
-      box-shadow: var(--shadow-sketch-lg);
-      position: relative;
-      transform: rotate(-.2deg);
-    }
+     .arena {
+       background: #fffdf4;
+       border: var(--ink-line) solid var(--ink);
+       border-radius: 20px 24px 20px 24px;
+       padding: 32px 28px;
+       text-align: center;
+       box-shadow: var(--shadow-sketch-lg);
+       position: relative;
+       transform: rotate(-.2deg);
+     }
 
-    .game-title {
-      font-family: 'Caveat', 'Marker Felt', cursive;
-      font-size: 38px;
-      font-weight: 700;
-      color: var(--ink);
-      margin-bottom: 4px;
-      line-height: 1.1
-    }
+     /* dezente Ecke-Markierung an der Arena (hand-drawn Tape-Stil) */
+     .arena::before {
+       content: '';
+       position: absolute;
+       top: -10px;
+       left: 28px;
+       width: 64px;
+       height: 22px;
+       background: rgba(241, 185, 69, .55);
+       border: 2px dashed rgba(31, 26, 20, .3);
+       transform: rotate(-3deg);
+       z-index: -1;
+       pointer-events: none;
+     }
 
-    .game-desc {
-      font-size: 15px;
-      color: var(--ink-mute);
-      margin-bottom: 22px;
-      line-height: 1.5
-    }
+     .game-title {
+       font-family: 'Caveat', 'Marker Felt', cursive;
+       font-size: clamp(28px, 5vw, 40px);
+       font-weight: 700;
+       color: var(--ink);
+       margin-bottom: 4px;
+       line-height: 1.1;
+     }
+
+     .game-desc {
+       font-size: clamp(13px, 1.6vw, 15px);
+       color: var(--ink-mute);
+       margin-bottom: 24px;
+       line-height: 1.5;
+       max-width: 680px;
+       margin-left: auto;
+       margin-right: auto;
+     }
 
     .quiz-display {
       font-family: 'Caveat', 'Marker Felt', cursive;
@@ -928,44 +1036,59 @@
       line-height: 1
     }
 
-    .key-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 72px);
-      gap: 12px;
-      justify-content: center;
-      margin: 26px 0
-    }
+.key-grid {
+       display: grid;
+       grid-template-columns: repeat(3, clamp(64px, 13vw, 76px));
+       gap: 14px;
+       justify-content: center;
+       margin: 26px 0
+     }
 
-    .key-btn {
-      height: 72px;
-      border-radius: 12px;
-      font-family: 'Caveat', 'Marker Felt', cursive;
-      font-size: 36px;
-      font-weight: 700;
-      background: #fffdf4;
-      border: var(--ink-line) solid var(--ink);
-      color: var(--ink);
-      cursor: pointer;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      user-select: none;
-      box-shadow: var(--shadow-sketch);
-      transition: all .12s var(--ease-snap);
-    }
+     .key-btn {
+       height: clamp(64px, 13vw, 76px);
+       border-radius: 14px;
+       font-family: 'Caveat', 'Marker Felt', cursive;
+       font-size: clamp(28px, 6vw, 38px);
+       font-weight: 700;
+       background: #fffdf4;
+       border: var(--ink-line) solid var(--ink);
+       color: var(--ink);
+       cursor: pointer;
+       display: flex;
+       justify-content: center;
+       align-items: center;
+       user-select: none;
+       box-shadow: var(--shadow-sketch);
+       transition: all .14s var(--ease-snap);
+       position: relative;
+     }
 
-    .key-btn:hover {
-      transform: translate(-1px, -1px);
-      box-shadow: 4px 4px 0 var(--ink);
-      background: #fffdf0
-    }
+     .key-btn::before {
+       content: '';
+       position: absolute;
+       top: 4px;
+       left: 6px;
+       width: 8px;
+       height: 2px;
+       background: var(--teal-mark);
+       transform: rotate(-20deg);
+       opacity: .5;
+       border-radius: 2px;
+     }
 
-    .key-btn:active,
-    .key-btn.active {
-      transform: translate(3px, 3px);
-      box-shadow: 0 0 0 var(--ink);
-      background: var(--teal-100);
-    }
+     .key-btn:hover {
+       transform: translate(-2px, -2px);
+       box-shadow: 5px 5px 0 var(--ink);
+       background: #fffdf0
+     }
+
+     .key-btn:active,
+     .key-btn.active {
+       transform: translate(3px, 3px);
+       box-shadow: 0 0 0 var(--ink);
+       background: var(--teal-200);
+       color: var(--ink);
+     }
 
     .key-btn:focus-visible {
       outline: none;
@@ -1133,25 +1256,40 @@
       line-height: 1
     }
 
-    .race-progress-bar {
-      height: 18px;
-      background: #fff;
-      border: 2px solid var(--ink);
-      border-radius: var(--radius-full);
-      overflow: hidden;
-      box-shadow: inset 1px 1px 0 rgba(0, 0, 0, .1);
-    }
+.race-progress-bar {
+       height: 20px;
+       background: #fff;
+       border: 2px solid var(--ink);
+       border-radius: var(--radius-full);
+       overflow: hidden;
+       box-shadow: inset 1px 1px 0 rgba(0, 0, 0, .1);
+       position: relative;
+     }
 
-    .race-progress-fill {
-      height: 100%;
-      background: var(--teal-300);
-      transition: width .4s var(--ease-snap);
-      border-radius: var(--radius-full)
-    }
+     .race-progress-fill {
+       height: 100%;
+       background: linear-gradient(90deg, var(--teal-300), var(--teal-400));
+       transition: width .5s cubic-bezier(.4, 0, .2, 1);
+       border-radius: var(--radius-full);
+       position: relative;
+       box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .08);
+     }
 
-    #raceOppBar.race-progress-fill {
-      background: var(--blue-500)
-    }
+     .race-progress-fill::after {
+       content: '';
+       position: absolute;
+       top: 2px;
+       left: 4px;
+       right: 4px;
+       height: 3px;
+       background: linear-gradient(90deg, rgba(255, 255, 255, .6), rgba(255, 255, 255, 0));
+       border-radius: var(--radius-full);
+       opacity: .5;
+     }
+
+     #raceOppBar.race-progress-fill {
+       background: linear-gradient(90deg, var(--blue-500), #4a85e8);
+     }
 
     #raceQuestionArea {
       display: flex;
@@ -1227,7 +1365,7 @@
       font-weight: 700;
       color: var(--ink);
       cursor: pointer;
-      z-index: 50;
+      z-index: 150;
       transition: transform .12s var(--ease-snap), box-shadow .12s var(--ease-snap), background .2s;
       user-select: none;
     }
@@ -1257,11 +1395,11 @@
       align-items: center;
       justify-content: center;
       padding: 20px;
-      animation: helpFadeIn .2s var(--ease-snap);
+      opacity: 1;
     }
 
     .help-modal.open {
-      display: flex
+      display: flex;
     }
 
     @keyframes helpFadeIn {
@@ -1274,175 +1412,187 @@
       }
     }
 
-    .help-modal-card {
-      background: #fffdf4;
-      border: var(--ink-line) solid var(--ink);
-      border-radius: 18px 22px 18px 22px;
-      box-shadow: var(--shadow-sketch-lg);
-      max-width: 520px;
-      width: 100%;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-      transform: rotate(-.3deg);
-      animation: helpPopIn .3s var(--ease-bounce);
-    }
+.help-modal-card {
+       background: #fffdf4;
+       border: var(--ink-line) solid var(--ink);
+       border-radius: 20px 24px 20px 24px;
+       box-shadow: var(--shadow-sketch-lg);
+       max-width: 540px;
+       width: 100%;
+       max-height: 80vh;
+       display: flex;
+       flex-direction: column;
+       transform: rotate(-.3deg);
+       animation: helpPopIn .35s var(--ease-bounce);
+       overflow: hidden;
+     }
 
-    @keyframes helpPopIn {
-      from {
-        transform: scale(.85) rotate(-3deg);
-        opacity: 0
-      }
+     @keyframes helpPopIn {
+       from {
+         transform: scale(.88) rotate(-3deg);
+         opacity: 0
+       }
 
-      to {
-        transform: scale(1) rotate(-.3deg);
-        opacity: 1
-      }
-    }
+       to {
+         transform: scale(1) rotate(-.3deg);
+         opacity: 1
+       }
+     }
 
-    .help-modal-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 18px 20px 12px 20px;
-      border-bottom: 2px dashed var(--ink-soft);
-    }
+     .help-modal-header {
+       display: flex;
+       align-items: center;
+       gap: 12px;
+       padding: 20px 22px 14px 22px;
+       border-bottom: 2px dashed rgba(31, 26, 20, .25);
+       background: linear-gradient(180deg, rgba(241, 185, 69, .12), transparent);
+     }
 
-    .help-modal-title {
-      font-family: 'Caveat', 'Marker Felt', cursive;
-      font-size: 30px;
-      font-weight: 700;
-      color: var(--ink);
-      flex: 1;
-      line-height: 1;
-    }
+     .help-modal-title {
+       font-family: 'Caveat', 'Marker Felt', cursive;
+       font-size: clamp(26px, 4vw, 32px);
+       font-weight: 700;
+       color: var(--ink);
+       flex: 1;
+       line-height: 1.1;
+     }
 
-    .help-modal-close {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      border: var(--ink-line) solid var(--ink);
-      background: #fff;
-      color: var(--ink);
-      font-size: 22px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: var(--shadow-sketch-sm);
-      font-family: inherit;
-      font-weight: 700;
-      transition: transform .12s, box-shadow .12s, background .15s;
-    }
+     .help-modal-close {
+       width: 40px;
+       height: 40px;
+       border-radius: 11px;
+       border: var(--ink-line) solid var(--ink);
+       background: #fff;
+       color: var(--ink);
+       font-size: 22px;
+       line-height: 1;
+       cursor: pointer;
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       box-shadow: var(--shadow-sketch-sm);
+       font-family: inherit;
+       font-weight: 700;
+       transition: transform .12s, box-shadow .12s, background .15s;
+       flex-shrink: 0;
+     }
 
-    .help-modal-close:hover {
-      background: #fbd2d2;
-      transform: translate(-1px, -1px);
-      box-shadow: 3px 3px 0 var(--ink)
-    }
+     .help-modal-close:hover {
+       background: #fbd2d2;
+       transform: translate(-2px, -2px);
+       box-shadow: 4px 4px 0 var(--ink)
+     }
 
-    .help-modal-close:active {
-      transform: translate(2px, 2px);
-      box-shadow: 0 0 0 var(--ink)
-    }
+     .help-modal-close:active {
+       transform: translate(2px, 2px);
+       box-shadow: 0 0 0 var(--ink)
+     }
 
-    .help-modal-body {
-      padding: 14px 20px 20px 20px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+     .help-modal-body {
+       padding: 16px 22px 24px 22px;
+       overflow-y: auto;
+       display: flex;
+       flex-direction: column;
+       gap: 10px;
+     }
 
-    .step {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      transition: background .2s var(--ease-snap), opacity .2s var(--ease-snap);
-    }
+.step {
+       display: flex;
+       align-items: flex-start;
+       gap: 12px;
+       padding: 10px 12px;
+       border-radius: 10px;
+       transition: background .2s var(--ease-snap), opacity .2s var(--ease-snap), transform .15s var(--ease-snap);
+     }
 
-    .step-num {
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      border: 2px solid var(--ink);
-      background: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Caveat', cursive;
-      font-size: 17px;
-      font-weight: 700;
-      color: var(--ink);
-      flex-shrink: 0;
-    }
+     .step-num {
+       width: 32px;
+       height: 32px;
+       border-radius: 50%;
+       border: 2px solid var(--ink);
+       background: #fff;
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       font-family: 'Caveat', cursive;
+       font-size: 18px;
+       font-weight: 700;
+       color: var(--ink);
+       flex-shrink: 0;
+       box-shadow: 2px 2px 0 var(--ink);
+       transition: background .2s var(--ease-snap), color .2s var(--ease-snap), border-color .2s var(--ease-snap), box-shadow .2s var(--ease-snap);
+     }
 
-    .step-body {
-      flex: 1;
-      min-width: 0
-    }
+     .step-body {
+       flex: 1;
+       min-width: 0;
+       padding-top: 4px;
+     }
 
-    .step-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--ink);
-      line-height: 1.3
-    }
+     .step-title {
+       font-size: clamp(14px, 1.8vw, 16px);
+       font-weight: 700;
+       color: var(--ink);
+       line-height: 1.3;
+       font-family: 'Patrick Hand', 'Caveat', cursive;
+     }
 
-    .step-detail {
-      font-size: 14px;
-      color: var(--ink-mute);
-      margin-top: 3px;
-      line-height: 1.4
-    }
+     .step-detail {
+       font-size: clamp(12px, 1.5vw, 14px);
+       color: var(--ink-mute);
+       margin-top: 4px;
+       line-height: 1.45;
+     }
 
-    .step.active {
-      background: var(--accent-soft, #eaf3ff)
-    }
+     .step.active {
+       background: var(--accent-soft, #eaf3ff);
+       transform: translateX(2px);
+     }
 
-    .step.active .step-num {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent)
-    }
+     .step.active .step-num {
+       background: var(--accent, #178f76);
+       color: #fff;
+       border-color: var(--accent, #178f76);
+       box-shadow: 2px 2px 0 rgba(0, 0, 0, .25);
+     }
 
-    .step.done {
-      opacity: .55
-    }
+     .step.done {
+       opacity: .6;
+     }
 
-    .step.done .step-num {
-      background: var(--good, #1ea36b);
-      color: #fff;
-      border-color: var(--good, #1ea36b)
-    }
+     .step.done .step-num {
+       background: var(--good, #1ea36b);
+       color: #fff;
+       border-color: var(--good, #1ea36b);
+       box-shadow: 1.5px 1.5px 0 rgba(0, 0, 0, .2);
+     }
 
-    .step.pending {
-      opacity: .45
-    }
+     .step.pending {
+       opacity: .5;
+     }
 
-    .steps-detail-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 6px
-    }
+     .steps-detail-chips {
+       display: flex;
+       flex-wrap: wrap;
+       gap: 6px;
+       margin-top: 6px
+     }
 
-    .steps-detail-chip {
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
-      border: 2px solid var(--ink);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Caveat', cursive;
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--ink);
-      background: #fff;
-    }
+     .steps-detail-chip {
+       width: 30px;
+       height: 30px;
+       border-radius: 7px;
+       border: 2px solid var(--ink);
+       display: inline-flex;
+       align-items: center;
+       justify-content: center;
+       font-family: 'Caveat', cursive;
+       font-size: 16px;
+       font-weight: 700;
+       color: var(--ink);
+       background: #fff;
+       box-shadow: 1.5px 1.5px 0 var(--ink);
+     }
 
     /* =========================================================
        QUIZ-RESULT MODAL (eigener Screen nach Abschluss)
@@ -2289,24 +2439,16 @@
     }
 
      /* =========================================================
-        SLALOM LAYOUT (100vh, kein Scroll-Container)
+        SLALOM LAYOUT (scrollbar wie Code-Bausteine, damit alle
+        Bausteine sichtbar und auswaehlbar sind)
         ========================================================= */
      #view-slalom .game-body {
-       padding: 14px 18px 14px;
+       padding: 14px 18px 40px;
        max-width: 1300px;
-       height: calc(100vh - 64px);  /* game-header ist 64px hoch */
-       display: flex;
-       flex-direction: column;
-       overflow: hidden;
      }
 
      #view-slalom .arena {
-       flex: 1;
-       display: flex;
-       flex-direction: column;
        padding: 16px 22px 16px;
-       overflow: hidden;
-       min-height: 0;  /* wichtig: erlaubt flex-Children zu schrumpfen */
      }
 
      #view-slalom .game-title {
@@ -2323,37 +2465,13 @@
      #view-slalom .arena.compact .game-desc { display: none; }
      #view-slalom .arena.compact .game-title { display: none; }
 
-     /* Slalom-Bereiche: Stack-Container unter dem Header, je nach Phase sichtbar */
-     #view-slalom .slalom-section {
-       flex: 1;
-       display: flex;
-       flex-direction: column;
-       min-height: 0;
-       overflow: hidden;
-     }
-
-     #slalomActiveArea, #slalomSetupArea, #slalomCountdownArea {
-       flex-shrink: 0;
-     }
-
-     /* Wenn der Editor aktiv ist, soll er den verfuegbaren Platz nutzen */
      #slalomActiveArea {
        display: none;
-       flex: 1;
-       flex-direction: column;
-       min-height: 0;
-       overflow: hidden;
      }
      #slalomActiveArea.shown { display: flex !important; }
 
-     #slalomActiveArea .prog-cols {
-       flex: 1;
-       min-height: 0;
-       overflow: hidden;
-     }
      #slalomActiveArea .prog-strip {
-       flex: 1;
-       min-height: 80px;
+       min-height: 120px;
        overflow-y: auto;
      }
 
@@ -2587,39 +2705,34 @@
 <body>
   <div class="app-shell">
 
-    <!-- Anleitungs-Modal (wird per JS gefuellt) -->
-    <div class="help-modal" id="helpModal" onclick="if(event.target===this)closeHelp()">
-      <div class="help-modal-card" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
-        <div class="help-modal-header">
-          <div class="help-modal-title" id="helpModalTitle">Anleitung</div>
-          <button type="button" class="help-modal-close" onclick="closeHelp()" aria-label="Schliessen">×</button>
-        </div>
-        <div class="help-modal-body" id="helpModalBody"></div>
-      </div>
-    </div>
-
-    <!-- Kalibrierungs-Assistent (Wizard) Modal -->
-    <div class="help-modal" id="calWizardModal" onclick="if(event.target===this)closeCalWizard()">
-      <div class="help-modal-card" style="max-width:540px;" role="dialog" aria-modal="true">
-        <div class="help-modal-header">
-          <div class="help-modal-title" id="calWizardTitle">Farb-Assistent</div>
-          <button type="button" class="help-modal-close" onclick="closeCalWizard()" aria-label="Schliessen">×</button>
-        </div>
-        <div class="help-modal-body" id="calWizardBody" style="gap:14px;padding:20px;"></div>
-      </div>
-    </div>
-
-    <!-- DASHBOARD -->
+  <!-- DASHBOARD -->
     <div id="view-dashboard" class="view active">
-      <div class="header">
-        <div class="header-l"><span class="header-l-text"><span>Edu</span>Bot</span></div>
+<div class="header">
+        <div class="header-l">
+          <div class="header-logo" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1f1a14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="8" width="16" height="11" rx="2" />
+              <circle cx="9" cy="13" r="1.4" fill="#1f1a14" />
+              <circle cx="15" cy="13" r="1.4" fill="#1f1a14" />
+              <path d="M2 11h2M20 11h2M12 5v3" />
+              <circle cx="12" cy="4" r="1" fill="#1f1a14" />
+            </svg>
+          </div>
+          <span class="header-l-text"><span>Edu</span>Bot</span>
+        </div>
         <div class="header-r">
-          <div class="conn-badge" id="irBadge" title="IR-Sensor auf Pin D8" style="background:rgba(255,255,255,.05);">
-            <span style="font-size:11px;opacity:.75;">IR</span>
-            <span id="irStatus" style="font-family:'Patrick Hand',monospace;min-width:14px;display:inline-block;">–</span>
+          <div class="conn-badge" id="irBadge" title="IR-Sensor auf Pin D8">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5.5 5.5l2 2M16.5 16.5l2 2M5.5 18.5l2-2M16.5 7.5l2-2" />
+            </svg>
+            <span class="conn-badge-label">IR</span>
+            <span id="irStatus" style="font-family:'Patrick Hand',monospace;min-width:14px;display:inline-block;font-weight:700;">–</span>
           </div>
           <div class="conn-badge">
-            <div class="conn-dot" id="statusDot"></div><span id="statusText">Getrennt</span>
+            <div class="conn-dot" id="statusDot"></div>
+            <span class="conn-badge-label">BT</span>
+            <span id="statusText">Getrennt</span>
           </div>
           <button class="btn btn-primary btn-sm" id="btnConnect">Verbinden</button>
           <button class="btn btn-danger btn-sm" id="btnEmergencyStop">STOP</button>
@@ -2646,7 +2759,7 @@
               <div class="tile-ttl">Frei Fahren</div>
               <div class="tile-desc">Steuern mit WASD oder Touch</div>
             </div>
-          </div>
+        </div>
           <div class="cat-header" data-cat="prog"><span>Programmieren</span></div>
           <div class="tile" data-view="prog" data-cat="prog">
             <div class="tile-ic" style="background:#fbe6b3;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -2659,7 +2772,7 @@
               <div class="tile-ttl">Code-Bausteine</div>
               <div class="tile-desc">Roboter mit Blöcken programmieren</div>
             </div>
-          </div>
+        </div>
           <div class="cat-header" data-cat="games"><span>Autonom &amp; Multiplayer</span></div>
           <div class="tile" data-view="line" data-cat="games">
             <div class="tile-ic" style="background:#eafbe9;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -2672,7 +2785,7 @@
               <div class="tile-ttl">Linie Folgen</div>
               <div class="tile-desc">Folgt einer schwarzen Linie automatisch</div>
             </div>
-          </div>
+        </div>
           <div class="tile" data-view="mathrace" data-cat="games">
             <div class="tile-ic" style="background:#e6f0fb;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
                 stroke="#1f4d99" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -2682,7 +2795,7 @@
               <div class="tile-ttl">Mathe-Rennen</div>
               <div class="tile-desc">Rechne gegen einen anderen Roboter</div>
             </div>
-          </div>
+        </div>
           <div class="tile" data-view="slalom" data-cat="games">
             <div class="tile-ic" style="background:#fdf3df;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
                 stroke="#b8860b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -2694,7 +2807,7 @@
               <div class="tile-ttl">Farben-Slalom</div>
               <div class="tile-desc">Programmiere &amp; erreiche die Farbe</div>
             </div>
-          </div>
+        </div>
           <div class="cat-header" data-cat="games"><span>Knobeln &amp; Lernen</span></div>
           <div class="tile" data-view="knobeln" data-cat="games">
             <div class="tile-ic" style="background:#f3eeff;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -2705,7 +2818,7 @@
               <div class="tile-ttl">Pfeil-Knobeln</div>
               <div class="tile-desc">Folge wird länger - Roboter faehrt sie ab</div>
             </div>
-          </div>
+        </div>
           <div class="tile" data-view="colorquiz" data-cat="games">
             <div class="tile-ic" style="background:#effbf8;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
                 stroke="#0e6f5b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -2716,7 +2829,7 @@
               <div class="tile-ttl">Korrigieren</div>
               <div class="tile-desc">Quiz - Lege Plättchen, Roboter prüft</div>
             </div>
-          </div>
+        </div>
           <div class="tile" data-view="memory" data-cat="games">
             <div class="tile-ic" style="background:#f3eeff;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
                 stroke="#5e2dc8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -2727,7 +2840,7 @@
               <div class="tile-ttl">Memory</div>
               <div class="tile-desc">Bewegungen merken und nachfahren</div>
             </div>
-          </div>
+        </div>
           <div class="cat-header" data-cat="setup"><span>Kalibrierung &amp; Setup</span></div>
           <div class="tile" onclick="openCalWizard()" data-cat="setup">
             <div class="tile-ic" style="background:#fdecec;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -2739,7 +2852,7 @@
               <div class="tile-ttl">Farb-Kalibrierungs-Assistent</div>
               <div class="tile-desc">Schritt für Schritt Schwarz, Weiß und Farben kalibrieren</div>
             </div>
-          </div>
+        </div>
         </div>
       </div>
     </div>
@@ -2759,7 +2872,7 @@
               <div class="color-preview-label">Farb-Sensor</div>
               <div id="driveColorName">--</div>
             </div>
-          </div>
+        </div>
           <div class="key-grid">
             <div class="key-empty"></div>
             <button class="key-btn" data-key="w">W</button>
@@ -2767,13 +2880,12 @@
             <button class="key-btn" data-key="a">A</button>
             <button class="key-btn" data-key="s">S</button>
             <button class="key-btn" data-key="d">D</button>
-          </div>
+        </div>
           <button class="btn btn-danger" id="btnStop">STOP</button>
           <div class="feedback-msg" id="driveFeedback"></div>
-        </div>
-      </div>
-      <button type="button" class="help-fab" onclick="openHelp('driveSteps')" title="Anleitung">?</button>
-    </div>
+       </div>
+     </div>
+   </div>
 
     <!-- LINIE FOLGEN -->
     <div id="view-line" class="view game-view">
@@ -2790,17 +2902,16 @@
               <div class="color-preview-label">Farb-Sensor</div>
               <div id="lineColorName">--</div>
             </div>
-          </div>
+        </div>
           <div class="mem-status" id="lineStatus">Bereit - Roboter auf die Linie setzen.</div>
           <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0;">
             <button class="btn btn-lg btn-primary" id="btnLineStart">Start</button>
             <button class="btn btn-lg btn-danger" id="btnLineStop">STOP</button>
-          </div>
+        </div>
           <div class="feedback-msg" id="lineFeedback"></div>
         </div>
       </div>
-      <button type="button" class="help-fab" onclick="openHelp('lineSteps')" title="Anleitung">?</button>
-    </div>
+        </div>
 
     <!-- MATHE-RENNEN -->
     <div id="view-mathrace" class="view game-view">
@@ -2846,7 +2957,7 @@
                 <button class="btn btn-sm btn-grey" id="btnTime90">90 Sek</button>
               </div>
             </div>
-          </div>
+        </div>
 
           <div id="raceCountdownArea">3</div>
 
@@ -2874,11 +2985,11 @@
                 <button class="btn btn-lg btn-success" id="btnRaceAnswer">Prüfen</button>
               </div>
             </div>
-          </div>
+        </div>
 
           <div id="raceStartBtnArea">
             <button class="btn btn-lg btn-primary" id="btnRaceStart">Rennen starten</button>
-          </div>
+        </div>
 
           <div class="feedback-msg" id="raceFeedback"></div>
           <div id="raceWinnerMsg"></div>
@@ -2904,18 +3015,17 @@
             <button class="btn btn-lg btn-primary" id="btnCqStart">Quiz starten</button>
             <button class="btn btn-lg btn-success" id="btnCqNext" style="display:none;">Nächste Aufgabe</button>
             <button class="btn btn-lg btn-danger" id="btnCqCheck" style="display:none;">Korrektur starten</button>
-          </div>
+        </div>
           <div style="margin-top:18px;">
             <div
               style="font-family:'Caveat',cursive;font-size:20px;font-weight:700;color:var(--ink-mute);margin-bottom:10px;">
               Deine Antworten:</div>
             <div id="cqAnswerList"></div>
-          </div>
+        </div>
           <div class="feedback-msg" id="cqFeedback"></div>
         </div>
       </div>
-      <button type="button" class="help-fab" onclick="openHelp('cqSteps')" title="Anleitung">?</button>
-    </div>
+        </div>
 
     <!-- QUIZ-RESULT MODAL (eigener Screen nach Abschluss) -->
     <div class="result-modal" id="cqResultModal" onclick="if(event.target===this)closeCqResult()">
@@ -2948,17 +3058,16 @@
             <button class="kn-add" data-arrow="1">&rarr;</button>
             <button class="kn-add" data-arrow="2">&darr;</button>
             <button class="kn-add" data-arrow="3">&larr;</button>
-          </div>
+        </div>
           <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
             <button class="btn btn-grey btn-lg" id="btnKnClear">Leeren</button>
             <button class="btn btn-danger btn-lg" id="btnKnStop">STOP</button>
             <button class="btn btn-primary btn-lg" id="btnKnRun">Roboter starten!</button>
-          </div>
+        </div>
           <div class="feedback-msg" id="knFeedback"></div>
         </div>
       </div>
-      <button type="button" class="help-fab" onclick="openHelp('knSteps')" title="Anleitung">?</button>
-    </div>
+        </div>
 
     <!-- MEMORY (Bewegungs-Sequenz merken) -->
     <div id="view-memory" class="view game-view">
@@ -2981,16 +3090,15 @@
               <button class="mem-btn" data-move="1" disabled>↓</button>
               <button class="mem-btn" data-move="3" disabled>→</button>
             </div>
-          </div>
+        </div>
           <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0;">
             <button class="btn btn-lg btn-primary" id="btnMemStart">Start</button>
             <button class="btn btn-lg btn-danger" id="btnMemStop">STOP</button>
-          </div>
+        </div>
           <div class="feedback-msg" id="memFeedback"></div>
         </div>
       </div>
-      <button type="button" class="help-fab" onclick="openHelp('memorySteps')" title="Anleitung">?</button>
-    </div>
+        </div>
 
     <!-- FARBFARBEN-SLALOM (Multiplayer) -->
     <div id="view-slalom" class="view game-view">
@@ -3004,7 +3112,7 @@
           <div class="game-desc">
             <b>Zufällige Zielfarbe</b> – wer sie zuerst stabil erreicht, gewinnt sofort!<br>
             Niemand getroffen? Dann verbessere dein Programm und versuch's nochmal.
-          </div>
+        </div>
 
           <div id="slalomSetupArea">
             <div class="mesh-section" style="margin-bottom:18px;">
@@ -3027,13 +3135,13 @@
               <div style="font-size:16px;color:var(--ink);font-weight:700;">⏳ Warte auf Host...</div>
               <div style="font-size:13px;color:var(--ink-mute);margin-top:4px;">Der andere Spieler startet das Match.</div>
             </div>
-          </div>
+        </div>
 
           <div id="slalomTargetDisplay" style="display:none;text-align:center;margin:24px 0;padding:24px;background:linear-gradient(135deg,#fff8e1,#ffe082);border:4px solid var(--ink);border-radius:20px;box-shadow:0 6px 0 var(--ink);">
             <div style="font-size:18px;color:var(--ink-mute);font-weight:700;letter-spacing:2px;">🎯 ZIELFARBE</div>
             <div id="slalomTargetName" style="font-family:'Caveat','Marker Felt',cursive;font-size:96px;font-weight:700;margin-top:8px;line-height:1;text-shadow:4px 4px 0 rgba(0,0,0,0.15);"></div>
             <div id="slalomTargetHint" style="font-size:14px;color:var(--ink-mute);font-weight:700;margin-top:10px;">Baue jetzt dein Programm und drücke Bereit!</div>
-          </div>
+        </div>
 
           <div id="slalomCountdownArea" style="display:none;font-family:'Caveat','Marker Felt',cursive;font-size:120px;font-weight:700;color:var(--teal-mark);margin:40px 0;animation:pulseCount 1s infinite;line-height:1;text-shadow:4px 4px 0 var(--ink);">3</div>
 
@@ -3053,19 +3161,18 @@
                 </div>
               </div>
             </div>
-          </div>
+        </div>
 
           <div id="slalomReadyArea" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0;">
             <button class="btn btn-lg btn-success" id="btnSlalomReady" style="display:none;">✓ Bereit!</button>
-          </div>
+        </div>
 
           <div id="slalomStatus" style="text-align:center;font-size:15px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;"></div>
           <div class="feedback-msg" id="slalomFeedback"></div>
           <div id="slalomWinnerMsg" style="font-family:'Caveat',cursive;font-size:36px;font-weight:700;margin-top:18px;text-align:center;"></div>
         </div>
       </div>
-      <button type="button" class="help-fab" onclick="openHelp('slalomSteps')" title="Anleitung">?</button>
-    </div>
+        </div>
 
     <!-- SLALOM EINLADUNGS-POP-UP -->
     <div id="slalomInvitePopup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
@@ -3100,7 +3207,7 @@
               <div class="color-preview-label">Farb-Sensor</div>
               <div id="progColorName">--</div>
             </div>
-          </div>
+        </div>
           <div class="prog-cols">
             <div class="prog-col prog-col-palette">
               <div class="prog-section-label">Bausteine<span class="prog-hint">zurück = löschen</span></div>
@@ -3115,12 +3222,36 @@
                 <button class="btn btn-primary btn-lg" id="btnProgRun">&#9654; Start</button>
               </div>
             </div>
-          </div>
+        </div>
           <div class="feedback-msg" id="progFeedback"></div>
         </div>
       </div>
-      <button type="button" class="help-fab" onclick="openHelp('progSteps')" title="Anleitung">?</button>
     </div>
+
+    <button type="button" class="help-fab" id="globalHelpBtn" title="Anleitung">?</button>
+  </div>
+
+  <!-- Anleitungs-Modal (AUSSERHALB von .app-shell, damit es immer ueber allen Views liegt) -->
+  <div class="help-modal" id="helpModal" onclick="if(event.target===this)closeHelp()">
+    <div class="help-modal-card" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
+      <div class="help-modal-header">
+        <div class="help-modal-title" id="helpModalTitle">Anleitung</div>
+        <button type="button" class="help-modal-close" onclick="closeHelp()" aria-label="Schliessen">×</button>
+      </div>
+      <div class="help-modal-body" id="helpModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Kalibrierungs-Assistent (Wizard) Modal -->
+  <div class="help-modal" id="calWizardModal" onclick="if(event.target===this)closeCalWizard()">
+    <div class="help-modal-card" style="max-width:540px;" role="dialog" aria-modal="true">
+      <div class="help-modal-header">
+        <div class="help-modal-title" id="calWizardTitle">Farb-Assistent</div>
+        <button type="button" class="help-modal-close" onclick="closeCalWizard()" aria-label="Schliessen">×</button>
+      </div>
+      <div class="help-modal-body" id="calWizardBody" style="gap:14px;padding:20px;"></div>
+    </div>
+  </div>
 
     <script>
       // ==========================================
@@ -3661,6 +3792,29 @@ function updateConnectionUI(isConn, text) {
         document.getElementById('helpModalBody').innerHTML = buildStepList(steps, safeIdx);
         document.getElementById('helpModal').classList.add('open');
       }
+
+      function getActiveHelpId() {
+        const activeView = document.querySelector('.view.active');
+        if (!activeView) return null;
+        const map = {
+          'view-drive': 'driveSteps',
+          'view-line': 'lineSteps',
+          'view-mathrace': 'raceSteps',
+          'view-colorquiz': 'cqSteps',
+          'view-knobeln': 'knSteps',
+          'view-memory': 'memorySteps',
+          'view-slalom': 'slalomSteps',
+          'view-prog': 'progSteps'
+        };
+        return map[activeView.id] || null;
+      }
+
+      function openGlobalHelp() {
+        const boxId = getActiveHelpId();
+        if (boxId) openHelp(boxId);
+      }
+
+      document.getElementById('globalHelpBtn').addEventListener('click', openGlobalHelp);
       function closeHelp() {
         document.getElementById('helpModal').classList.remove('open');
       }
@@ -4782,6 +4936,9 @@ function slalomRefreshUi() {
             return;
           }
           slalomState.targetColor = color;
+          slalomState.myReady = false;
+          slalomState.oppReady = false;
+          slalomState.racing = false;
           setSlalomPhase(SLALOM_PHASE.BUILD);
           if (slalomState.targetAnimTimer) {
             clearTimeout(slalomState.targetAnimTimer);
@@ -4843,6 +5000,11 @@ function slalomRefreshUi() {
         } else if (msg.startsWith('SLALOM:FINISH:')) {
           const color = msg.substring(14);
           showFeedback('slalomFeedback', 'success', '🏁 Du hast ' + color + ' erreicht!');
+        } else if (msg === 'SLALOM:DONE') {
+          // Programm ohne Treffer beendet - auf Gegner-Ergebnis warten
+          showFeedback('slalomFeedback', 'warning', 'Dein Programm ist fertig — warte auf den Gegner...');
+        } else if (msg === 'SLALOM:NONE') {
+          showFeedback('slalomFeedback', 'error', 'Kein Programm — füge zuerst Bausteine hinzu!');
         } else if (msg === 'SLALOM:MATCH_STARTED') {
           showFeedback('slalomFeedback', 'success', '🎮 Spiel gestartet!');
           // Setup-Bereiche weg - Zielfarbe folgt gleich
@@ -5043,6 +5205,20 @@ function slalomRefreshUi() {
         { name: 'IR-HIGH', bg: '#8a2f2f' },
         { name: 'IR-LOW', bg: '#2f6b4a' }
       ];
+      // LED-Block: Farben + "AUS" (nur die 4 Farben, kein IR)
+      const LED_COLORS = [
+        { name: 'ROT', bg: '#d63a3a' },
+        { name: 'GELB', bg: '#e89c1e' },
+        { name: 'GRUEN', bg: '#1ea36b' },
+        { name: 'BLAU', bg: '#2c6dd2' },
+        { name: 'AUS', bg: '#4a4a4a' }
+      ];
+      // Tempo-Block: 3 Stufen (muss mit Firmware PROG_SPEED_LEVELS uebereinstimmen)
+      const TEMPO_LEVELS = [
+        { name: 'langsam', val: 1, bg: '#9fb8d0' },
+        { name: 'mittel',  val: 2, bg: '#f0c24b' },
+        { name: 'schnell', val: 3, bg: '#e0765c' }
+      ];
       const PROG_DEFS = {
         F: { ic: '\u2191', label: 'Vorwärts', unit: 'cm', def: 10, min: 1, max: 50, loop: false, slot: 'num' },
         B: { ic: '\u2193', label: 'Rückwärts', unit: 'cm', def: 10, min: 1, max: 50, loop: false, slot: 'num' },
@@ -5052,7 +5228,9 @@ function slalomRefreshUi() {
         U: { ic: '\u21BB', label: 'Wiederhole', unit: 'mal', def: 2, min: 1, max: 10, loop: true, slot: 'bool' },
         C: { ic: '\u2691', label: 'Wiederhole bis', unit: '', def: 0, min: 0, max: 0, loop: true, slot: 'color' },
         // Wert-Block: kann in num/bool-Slots gezogen werden
-        E: { ic: '\u2261', label: 'bis', unit: '', def: 0, min: 0, max: 5, loop: false, slot: null, isValue: true, color: true }
+        E: { ic: '\u2261', label: 'bis', unit: '', def: 0, min: 0, max: 5, loop: false, slot: null, isValue: true, color: true },
+        S: { ic: '\u26A1', label: 'Tempo', unit: '', def: 2, min: 1, max: 3, loop: false, slot: null },
+        G: { ic: '\uD83D\uDCA1', label: 'Leuchte', unit: '', def: 0, min: 0, max: 4, loop: false, slot: null }
       };
       const PROG_MAX_STEPS = 20;
       const PROG_LOOP_MAX = 8;
@@ -5063,6 +5241,8 @@ function slalomRefreshUi() {
       let progRunStep = -1, progRunSub = -1;
       let progPaletteEColor = 0;   // persistente Farbe des E-Blocks in der Palette
       let progPaletteCColor = 0;   // persistente Farbe des C-Blocks in der Palette
+      let progPaletteGColor = 0;   // persistente Farbe des G-Blocks (LED)
+      let progPaletteSLevel = 2;   // persistente Stufe des S-Blocks (Tempo)
 
       // --- Shared DnD context: 'prog' or 'slalom' ---
       let dndMode = 'prog';
@@ -5259,6 +5439,45 @@ function slalomRefreshUi() {
           cn.className = 'prog-unit';
           cn.textContent = PROG_COLORS[b.color].name;
           head.appendChild(cn);
+        } else if (b.op === 'S') {
+          // Tempo-Block: klickbare Stufen-Pille (langsam/mittel/schnell)
+          const isPalette = (ctx.where === 'palette');
+          if (isPalette) b.val = progPaletteSLevel;
+          const chip = document.createElement('span');
+          chip.className = 'prog-num-static';
+          chip.style.cursor = 'pointer';
+          chip.style.minWidth = '74px';
+          chip.style.background = TEMPO_LEVELS[b.val - 1].bg;
+          chip.textContent = TEMPO_LEVELS[b.val - 1].name;
+          chip.addEventListener('pointerdown', e => e.stopPropagation());
+          chip.addEventListener('click', e => {
+            e.stopPropagation();
+            if (progRunning) return;
+            b.val = (b.val % 3) + 1;   // 1 -> 2 -> 3 -> 1
+            if (isPalette) progPaletteSLevel = b.val;
+            progRender();
+          });
+          head.appendChild(chip);
+        } else if (b.op === 'G') {
+          // LED-Block: Farb-Chip (ROT/GELB/GRUEN/BLAU/AUS)
+          const isPalette = (ctx.where === 'palette');
+          if (isPalette) b.color = progPaletteGColor;
+          const chip = document.createElement('span');
+          chip.className = 'prog-chip';
+          chip.style.background = LED_COLORS[b.color].bg;
+          chip.addEventListener('pointerdown', e => e.stopPropagation());
+          chip.addEventListener('click', e => {
+            e.stopPropagation();
+            if (progRunning) return;
+            b.color = (b.color + 1) % LED_COLORS.length;
+            if (isPalette) progPaletteGColor = b.color;
+            progRender();
+          });
+          head.appendChild(chip);
+          const cn = document.createElement('span');
+          cn.className = 'prog-unit';
+          cn.textContent = LED_COLORS[b.color].name;
+          head.appendChild(cn);
         } else if (def.slot) {
           // Wert-Slot (num/bool)
           head.appendChild(progBuildSlot(b, def.slot, ctx));
@@ -5347,7 +5566,7 @@ function slalomRefreshUi() {
         // Slalom nutzt jetzt DIESELBEN Bausteine wie der Programmier-Modus
         // (F, B, L, R, W, U/Wiederhole, C/Wiederhole-bis, E-Wertblock). Die
         // Firmware (progRunSlalom) versteht alle diese Operationen.
-        const ops = ['F', 'B', 'L', 'R', 'W', 'U', 'C', 'E'];
+        const ops = ['F', 'B', 'L', 'R', 'W', 'U', 'C', 'E', 'S', 'G'];
         ops.forEach(op => {
           const def = PROG_DEFS[op];
           const b = { op: op, val: def.def, color: 0, body: [] };
@@ -5591,6 +5810,7 @@ function slalomRefreshUi() {
             data.body = d.body || [];
           } else {
             data.val = d.val;
+            if (d.op === 'G') data.color = d.color;
           }
           if (d.from.where === 'prog') {
             blocks.splice(d.from.idx, 1);
@@ -5642,6 +5862,7 @@ function slalomRefreshUi() {
           return 'U' + slot + '(' + (b.body || []).map(progEncodeBlock).join(',') + ')';
         }
         if (b.op === 'C') return 'C' + b.color + '(' + (b.body || []).map(progEncodeBlock).join(',') + ')';
+        if (b.op === 'G') return 'G' + b.color;
         if (b.op === 'W' || b.op === 'F' || b.op === 'B') {
           return b.embedded ? (b.op + 'E' + b.embedded.color) : (b.op + b.val);
         }
@@ -5832,7 +6053,7 @@ function slalomRefreshUi() {
             <div style="font-size:20px;font-weight:700;margin-bottom:8px;">Kalibrierung abgeschlossen!</div>
             <p style="color:var(--ink-mute);margin-bottom:16px;">Alle Werte wurden erfolgreich im NVS des Roboters gespeichert.</p>
             <button class="btn btn-primary" onclick="closeCalWizard()">Fertig</button>
-          </div>
+        </div>
         `;
           return;
         }
