@@ -5216,12 +5216,6 @@ function slalomRefreshUi() {
         { name: 'BLAU', bg: '#2c6dd2' },
         { name: 'AUS', bg: '#4a4a4a' }
       ];
-      // Tempo-Block: 3 Stufen (muss mit Firmware PROG_SPEED_LEVELS uebereinstimmen)
-      const TEMPO_LEVELS = [
-        { name: 'langsam', val: 1, bg: '#9fb8d0' },
-        { name: 'mittel',  val: 2, bg: '#f0c24b' },
-        { name: 'schnell', val: 3, bg: '#e0765c' }
-      ];
       const PROG_DEFS = {
         F: { ic: '\u2191', label: 'Vorwärts', unit: 'cm', def: 10, min: 1, max: 50, loop: false, slot: 'num' },
         B: { ic: '\u2193', label: 'Rückwärts', unit: 'cm', def: 10, min: 1, max: 50, loop: false, slot: 'num' },
@@ -5232,7 +5226,6 @@ function slalomRefreshUi() {
         C: { ic: '\u2691', label: 'Wiederhole bis', unit: '', def: 0, min: 0, max: 0, loop: true, slot: 'color' },
         // Wert-Block: kann in num/bool-Slots gezogen werden
         E: { ic: '\u2261', label: 'bis', unit: '', def: 0, min: 0, max: 5, loop: false, slot: null, isValue: true, color: true },
-        S: { ic: '\u26A1', label: 'Tempo', unit: '', def: 2, min: 1, max: 3, loop: false, slot: null },
         G: { ic: '\uD83D\uDCA1', label: 'Leuchte', unit: '', def: 0, min: 0, max: 4, loop: false, slot: null }
       };
       const PROG_MAX_STEPS = 20;
@@ -5245,7 +5238,6 @@ function slalomRefreshUi() {
       let progPaletteEColor = 0;   // persistente Farbe des E-Blocks in der Palette
       let progPaletteCColor = 0;   // persistente Farbe des C-Blocks in der Palette
       let progPaletteGColor = 0;   // persistente Farbe des G-Blocks (LED)
-      let progPaletteSLevel = 2;   // persistente Stufe des S-Blocks (Tempo)
 
       // --- Shared DnD context: 'prog' or 'slalom' ---
       let dndMode = 'prog';
@@ -5442,25 +5434,6 @@ function slalomRefreshUi() {
           cn.className = 'prog-unit';
           cn.textContent = PROG_COLORS[b.color].name;
           head.appendChild(cn);
-        } else if (b.op === 'S') {
-          // Tempo-Block: klickbare Stufen-Pille (langsam/mittel/schnell)
-          const isPalette = (ctx.where === 'palette');
-          if (isPalette) b.val = progPaletteSLevel;
-          const chip = document.createElement('span');
-          chip.className = 'prog-num-static';
-          chip.style.cursor = 'pointer';
-          chip.style.minWidth = '74px';
-          chip.style.background = TEMPO_LEVELS[b.val - 1].bg;
-          chip.textContent = TEMPO_LEVELS[b.val - 1].name;
-          chip.addEventListener('pointerdown', e => e.stopPropagation());
-          chip.addEventListener('click', e => {
-            e.stopPropagation();
-            if (progRunning) return;
-            b.val = (b.val % 3) + 1;   // 1 -> 2 -> 3 -> 1
-            if (isPalette) progPaletteSLevel = b.val;
-            progRender();
-          });
-          head.appendChild(chip);
         } else if (b.op === 'G') {
           // LED-Block: Farb-Chip (ROT/GELB/GRUEN/BLAU/AUS)
           const isPalette = (ctx.where === 'palette');
@@ -5569,7 +5542,7 @@ function slalomRefreshUi() {
         // Slalom nutzt jetzt DIESELBEN Bausteine wie der Programmier-Modus
         // (F, B, L, R, W, U/Wiederhole, C/Wiederhole-bis, E-Wertblock). Die
         // Firmware (progRunSlalom) versteht alle diese Operationen.
-        const ops = ['F', 'B', 'L', 'R', 'W', 'U', 'C', 'E', 'S', 'G'];
+        const ops = ['F', 'B', 'L', 'R', 'W', 'U', 'C', 'E', 'G'];
         ops.forEach(op => {
           const def = PROG_DEFS[op];
           const b = { op: op, val: def.def, color: 0, body: [] };
