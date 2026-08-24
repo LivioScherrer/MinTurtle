@@ -882,6 +882,23 @@ void handleCommand(const char* cmdStr) {
     return;
   }
 
+  if (cmd == "SAT?") {
+    char msg[32];
+    snprintf(msg, sizeof(msg), "SAT=%.2f", config.minColorSaturation);
+    sendStatus(msg);
+    return;
+  }
+  if (cmd.startsWith("SAT:")) {
+    float v = cmd.substring(4).toFloat();
+    if (v < 0.0f || v > 1.0f) { sendStatus("SAT:BAD"); return; }
+    config.minColorSaturation = v;
+    configSaveField("minSat", v);
+    char msg[32];
+    snprintf(msg, sizeof(msg), "SAT=%.2f", v);
+    sendStatus(msg);
+    return;
+  }
+
   if (cmd == "CAL:BLACK") {
     if (colorSem && xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) == pdTRUE) {
       config.blackR = rawSensorR; config.blackG = rawSensorG; config.blackB = rawSensorB;

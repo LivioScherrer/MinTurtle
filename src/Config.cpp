@@ -14,6 +14,7 @@ void configLoad() {
   config.whiteR        = prefs.getUShort("whiteR", 4143);
   config.whiteG        = prefs.getUShort("whiteG", 4258);
   config.whiteB        = prefs.getUShort("whiteB", 3036);
+  config.minColorSaturation = prefs.getFloat("minSat", 0.40f);
   config.calRot.r      = prefs.getUChar("calRotR", 0);
   config.calRot.g      = prefs.getUChar("calRotG", 0);
   config.calRot.b      = prefs.getUChar("calRotB", 0);
@@ -54,6 +55,10 @@ void configValidate() {
     config.whiteR = 4143; config.whiteG = 4258; config.whiteB = 3036;
     changed = true;
   }
+  if (config.minColorSaturation < 0.0f || config.minColorSaturation > 1.0f) {
+    config.minColorSaturation = 0.40f;
+    changed = true;
+  }
   if (changed) {
     prefs.begin("edubot", false);
     prefs.putUShort("blackR", config.blackR);
@@ -62,6 +67,7 @@ void configValidate() {
     prefs.putUShort("whiteR", config.whiteR);
     prefs.putUShort("whiteG", config.whiteG);
     prefs.putUShort("whiteB", config.whiteB);
+    prefs.putFloat("minSat", config.minColorSaturation);
     prefs.end();
     Serial.println("[NVS] Invalid config corrected");
   }

@@ -60,6 +60,12 @@ const char* detectColorName(int r, int g, int b) {
   HSV cur = toHsv(r, g, b);
   if (cur.v < 0.15f) return "SCHWARZ";
   if (cur.s < 0.15f && cur.v > 0.6f) return "WEISS";
+  // Boden-Differenzierung: Der Holzboden wirkt gelblich/braun (warme Farbe)
+  // und ist matt. Nur warme Farbtoene brauchen eine Mindest-Saettigung, um
+  // nicht mit dem Boden verwechselt zu werden. Kalte Farben (Gruen/Blau)
+  // kommen immer durch. Schwelle per SAT:-Befehl einstellbar.
+  bool warm = (cur.h < 70.0f) || (cur.h >= 340.0f);
+  if (warm && cur.s < config.minColorSaturation) return "UNBEKANNT";
 
   struct Cand { const char* name; const ColorRef* ref; };
   const Cand cands[] = {

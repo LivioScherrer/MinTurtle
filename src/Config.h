@@ -21,6 +21,10 @@ struct Config {
   int32_t quizTurnSteps     = 88;    // Schritte pro 90-Grad-Drehung (354/4 empirisch, je Rad)
   uint16_t blackR = 152, blackG = 137, blackB = 98;
   uint16_t whiteR = 4143, whiteG = 4258, whiteB = 3036;
+  // Mindest-Saettigung fuer warme Farbtoene (Boden-Differenzierung):
+  // unterhalb gilt die Messung als zu blass (Holzboden wirkt gelblich)
+  // -> UNBEKANNT. Per SAT:-Befehl einstellbar.
+  float minColorSaturation = 0.40f;
   ColorRef calRot;
   ColorRef calGelb;
   ColorRef calGruen;
