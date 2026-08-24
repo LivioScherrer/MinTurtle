@@ -7,7 +7,6 @@
 // Aktueller Spiel-Modus (gesetzt von handleCommand, rueckgesetzt wenn Spiel endet)
 enum GameMode : uint8_t {
   GAME_NONE = 0,
-  GAME_KNOBELN,
   GAME_KORRIGIEREN,
   GAME_RENNEN,
   GAME_MEMORY,

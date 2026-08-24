@@ -1670,85 +1670,6 @@
     }
 
     /* =========================================================
-       KNOBELN
-       ========================================================= */
-    .kn-meta {
-      font-family: 'Caveat', cursive;
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--ink-mute);
-      margin-bottom: 8px
-    }
-
-    #knSeq {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      flex-wrap: wrap;
-      min-height: 58px;
-      margin-bottom: 18px
-    }
-
-    .mem-arrow {
-      font-family: 'Caveat', 'Marker Felt', cursive;
-      font-size: 46px;
-      padding: 8px 14px;
-      display: inline-block;
-      transition: .15s;
-      opacity: .55;
-      background: #fff;
-      border: 2.5px solid var(--ink);
-      border-radius: 10px;
-      color: var(--ink-soft);
-      box-shadow: 2px 2px 0 var(--ink);
-    }
-
-    .mem-arrow.flash {
-      opacity: 1;
-      transform: scale(1.15) rotate(-3deg);
-      color: var(--ink);
-      background: var(--amber-200);
-      box-shadow: 3px 3px 0 var(--ink);
-    }
-
-    .kn-add {
-      width: 60px;
-      height: 60px;
-      border-radius: 12px;
-      font-family: 'Caveat', 'Marker Felt', cursive;
-      font-size: 32px;
-      font-weight: 700;
-      background: #fff;
-      border: var(--ink-line) solid var(--ink);
-      color: var(--ink);
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: var(--shadow-sketch);
-      user-select: none;
-      transition: all .12s;
-    }
-
-    .kn-add:hover {
-      transform: translate(-1px, -1px);
-      box-shadow: 4px 4px 0 var(--ink);
-      background: var(--violet-50)
-    }
-
-    .kn-add:active {
-      transform: translate(3px, 3px);
-      box-shadow: 0 0 0 var(--ink);
-      background: var(--violet-500);
-      color: #fff
-    }
-
-    .kn-add:focus-visible {
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(125, 78, 234, .35)
-    }
-
-    /* =========================================================
        MISC
        ========================================================= */
     .mesh-section {
@@ -2458,7 +2379,7 @@
 
     .mem-input-grid {
       display: grid;
-      grid-template-columns: repeat(2, 80px);
+      grid-template-columns: repeat(3, 80px);
       gap: 14px;
       justify-content: center;
       margin: 22px 0;
@@ -2661,18 +2582,6 @@
             </div>
           </div>
           <div class="cat-header" data-cat="games"><span>Autonom &amp; Multiplayer</span></div>
-          <div class="tile" data-view="line" data-cat="games">
-            <div class="tile-ic" style="background:#eafbe9;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-                stroke="#1f7a2f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 4c0 8 8 8 8 16M20 4c-4 4-12 4-12 0" stroke-linecap="round" />
-                <circle cx="4" cy="4" r="1.6" fill="#1f7a2f" />
-                <circle cx="20" cy="20" r="1.6" fill="#1f7a2f" />
-              </svg></div>
-            <div>
-              <div class="tile-ttl">Linie Folgen</div>
-              <div class="tile-desc">Folgt einer schwarzen Linie automatisch</div>
-            </div>
-          </div>
           <div class="tile" data-view="mathrace" data-cat="games">
             <div class="tile-ic" style="background:#e6f0fb;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
                 stroke="#1f4d99" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -2695,17 +2604,7 @@
               <div class="tile-desc">Programmiere &amp; erreiche die Farbe</div>
             </div>
           </div>
-          <div class="cat-header" data-cat="games"><span>Knobeln &amp; Lernen</span></div>
-          <div class="tile" data-view="knobeln" data-cat="games">
-            <div class="tile-ic" style="background:#f3eeff;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-                stroke="#5e2dc8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3v18M5 10l7-7 7 7M5 14l7 7 7-7" />
-              </svg></div>
-            <div>
-              <div class="tile-ttl">Pfeil-Knobeln</div>
-              <div class="tile-desc">Folge wird länger - Roboter faehrt sie ab</div>
-            </div>
-          </div>
+          <div class="cat-header" data-cat="games"><span>Lernen</span></div>
           <div class="tile" data-view="colorquiz" data-cat="games">
             <div class="tile-ic" style="background:#effbf8;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
                 stroke="#0e6f5b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -2930,34 +2829,6 @@
           <button class="btn btn-lg" id="cqResultClose" style="background:#fff;">Zurück</button>
         </div>
       </div>
-    </div>
-
-    <!-- KNOBELN (Pfeil-Sequenz) -->
-    <div id="view-knobeln" class="view game-view">
-      <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
-        <div class="gv-title">Pfeil-Knobeln</div>
-        <div class="conn-dot" id="knConnDot"></div>
-      </div>
-      <div class="game-body">
-        <div class="arena">
-          <div class="game-title">Pfeil-Knobeln</div>
-          <div class="kn-meta">Folge (max 12)</div>
-          <div id="knSeq"></div>
-          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:18px;">
-            <button class="kn-add" data-arrow="0">&uarr;</button>
-            <button class="kn-add" data-arrow="1">&rarr;</button>
-            <button class="kn-add" data-arrow="2">&darr;</button>
-            <button class="kn-add" data-arrow="3">&larr;</button>
-          </div>
-          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-            <button class="btn btn-grey btn-lg" id="btnKnClear">Leeren</button>
-            <button class="btn btn-danger btn-lg" id="btnKnStop">STOP</button>
-            <button class="btn btn-primary btn-lg" id="btnKnRun">Roboter starten!</button>
-          </div>
-          <div class="feedback-msg" id="knFeedback"></div>
-        </div>
-      </div>
-      <button type="button" class="help-fab" onclick="openHelp('knSteps')" title="Anleitung">?</button>
     </div>
 
     <!-- MEMORY (Bewegungs-Sequenz merken) -->
@@ -3225,8 +3096,6 @@ function updateConnectionUI(isConn, text) {
           handleRaceMessage(msg);
         } else if (msg.startsWith('QUIZ:')) {
           handleQuizMessage(msg);
-        } else if (msg.startsWith('KNOBELN:')) {
-          handleKnobelnMessage(msg);
         } else if (msg.startsWith('MEMORY:')) {
           handleMemoryMessage(msg);
         } else if (msg.startsWith('PROG:')) {
@@ -3256,32 +3125,6 @@ function updateConnectionUI(isConn, text) {
               irEl.textContent = v;
             }
           }
-        }
-      }
-
-      function handleKnobelnMessage(msg) {
-        if (msg === 'KNOBELN:RUNNING') {
-          showFeedback('knFeedback', 'success', 'Roboter startet...');
-          setStep('knSteps', 1);
-        } else if (msg.startsWith('KNOBELN:READY:')) {
-          const n = msg.substring(14);
-          showFeedback('knFeedback', 'success', 'Folge geladen: ' + n + ' Pfeile');
-        } else if (msg === 'KNOBELN:DONE') {
-          showFeedback('knFeedback', 'success', 'Fertig!');
-          setStep('knSteps', 2);
-          setStepsVisible('knSteps', true);
-        } else if (msg === 'KNOBELN:ABORT') {
-          showFeedback('knFeedback', 'error', 'Abgebrochen!');
-          setStep('knSteps', 2);
-          setStepsVisible('knSteps', true);
-        } else if (msg === 'KNOBELN:STOPPED') {
-          showFeedback('knFeedback', 'error', 'Gestoppt!');
-          setStep('knSteps', 2);
-          setStepsVisible('knSteps', true);
-        } else if (msg === 'KNOBELN:BADLEN' || msg === 'KNOBELN:BADARROW') {
-          showFeedback('knFeedback', 'error', 'Ungültige Folge!');
-        } else if (msg === 'KNOBELN:NONE') {
-          showFeedback('knFeedback', 'error', 'Keine Folge gesetzt!');
         }
       }
 
@@ -3496,7 +3339,7 @@ function updateConnectionUI(isConn, text) {
       // Zentraler Write-Puffer: alle GATT-Writes laufen nacheinander.
       // Web Bluetooth erlaubt KEINE parallelen Operationen auf derselben
       // Characteristic -> sonst "GATT operation already in progress" und
-      // Befehle (z.B. KNOBELN:RUN, PROG:RUN) gehen verloren.
+      // Befehle (z.B. PROG:RUN) gehen verloren.
       // Befehle werden per FIFO nie verworfen; KEYS: kollabiert auf den
       // letzten Stand (nur der aktuelle Tastenzustand zaehlt).
       async function sendNext() {
@@ -3555,7 +3398,7 @@ function updateConnectionUI(isConn, text) {
         const el = document.getElementById('view-' + viewId);
         if (el) el.classList.add('active');
         // Step-State auf 0 zuruecksetzen, falls die View eine Anleitung hat
-         const viewToSteps = { drive: 'driveSteps', mathrace: 'raceSteps', colorquiz: 'cqSteps', knobeln: 'knSteps', memory: 'memorySteps', line: 'lineSteps', prog: 'progSteps', slalom: 'slalomSteps' };
+          const viewToSteps = { drive: 'driveSteps', mathrace: 'raceSteps', colorquiz: 'cqSteps', memory: 'memorySteps', line: 'lineSteps', prog: 'progSteps', slalom: 'slalomSteps' };
         if (viewToSteps[viewId]) STEP_STATE[viewToSteps[viewId]] = 0;
         if (viewId === 'memory') memReset();
         if (viewId !== 'prog' && progRunning) { sendCommand('PROG:STOP'); }
@@ -3614,13 +3457,12 @@ function updateConnectionUI(isConn, text) {
       // HELP-ICON (FAB) + ANLEITUNGS-MODAL
       // ==========================================
       const STEP_STATE = {
-         driveSteps: 0, raceSteps: 0, cqSteps: 0, knSteps: 0, memorySteps: 0, lineSteps: 0, progSteps: 0, slalomSteps: 0
+         driveSteps: 0, raceSteps: 0, cqSteps: 0, memorySteps: 0, lineSteps: 0, progSteps: 0, slalomSteps: 0
       };
       const STEP_TITLES = {
         driveSteps: 'Frei Fahren',
         raceSteps: 'Mathe-Rennen',
         cqSteps: 'Korrigieren',
-        knSteps: 'Pfeil-Knobeln',
         memorySteps: 'Memory',
         lineSteps: 'Linie Folgen',
          progSteps: 'Code-Bausteine',
@@ -3675,7 +3517,7 @@ function updateConnectionUI(isConn, text) {
       }
       // setStepsVisible ist jetzt ein no-op (Anleitung ist immer ueber FAB erreichbar)
       function setStepsVisible(boxId, visible) { /* deprecated */ }
-      // Re-Render des offenen Modals (z.B. fuer Live-Chip-Updates im Knobeln)
+      // Re-Render des offenen Modals (z.B. fuer Live-Chip-Updates)
       function refreshHelp(boxId) {
         const modal = document.getElementById('helpModal');
         if (!modal || !modal.classList.contains('open')) return;
@@ -3703,11 +3545,6 @@ function updateConnectionUI(isConn, text) {
           { title: 'Plättchen auslegen', chips: [] },
           { title: 'Roboter prüfen' },
           { title: 'Ergebnis' }
-        ],
-        knSteps: [
-          { title: 'Pfeile tippen' },
-          { title: 'Roboter starten' },
-          { title: 'Fertig' }
         ],
         memorySteps: [
           { title: 'Start drücken' },
@@ -4329,63 +4166,6 @@ function updateConnectionUI(isConn, text) {
           setStepsVisible('cqSteps', true);
         }
       }
-
-      // ==========================================
-      // KNOBELN (Pfeil-Sequenz)
-      // ==========================================
-      const KNOBELN_MAX = 12;
-      const KN_ARROWS = ['\u2191', '\u2192', '\u2193', '\u2190'];
-      let knSequence = [];
-      function knRender() {
-        const strip = document.getElementById('knSeq');
-        strip.innerHTML = '';
-        knSequence.forEach((a, i) => {
-          const span = document.createElement('span');
-          span.className = 'mem-arrow';
-          span.textContent = KN_ARROWS[a];
-          span.title = (i + 1) + '. ' + KN_ARROWS[a];
-          strip.appendChild(span);
-        });
-      }
-      document.querySelectorAll('.kn-add').forEach(btn => {
-        btn.addEventListener('click', () => {
-          if (knSequence.length >= KNOBELN_MAX) {
-            showFeedback('knFeedback', 'error', 'Max ' + KNOBELN_MAX + ' Pfeile!');
-            return;
-          }
-          knSequence.push(parseInt(btn.dataset.arrow));
-          knRender();
-          // Schritt 1 bleibt aktiv, aber die Folge sichtbar als Chips im Header
-          const chips = knSequence.map((a, i) => ({ label: KN_ARROWS[a], bg: '#fff', idx: i + 1 }));
-          STEPS.knSteps[0].chips = chips;
-          refreshHelp('knSteps');
-        });
-      });
-      document.getElementById('btnKnClear').addEventListener('click', () => {
-        knSequence = []; knRender();
-        showFeedback('knFeedback', 'success', 'Folge geleert');
-        STEPS.knSteps[0].chips = [];
-        setStepsVisible('knSteps', true);
-        setStep('knSteps', 0);
-      });
-      document.getElementById('btnKnStop').addEventListener('click', () => {
-        sendCommand('KNOBELN:STOP');
-        showFeedback('knFeedback', 'error', 'Stop!');
-        setStep('knSteps', 2);
-        setStepsVisible('knSteps', true);
-      });
-      document.getElementById('btnKnRun').addEventListener('click', () => {
-        if (knSequence.length === 0) {
-          showFeedback('knFeedback', 'error', 'Erst Pfeile hinzufuegen!');
-          return;
-        }
-        sendCommand('KNOBELN:SET:' + knSequence.length + ':' + knSequence.join(','));
-        showFeedback('knFeedback', 'success', 'Folge gesendet - starte Roboter...');
-        setStep('knSteps', 1);
-        setTimeout(() => sendCommand('KNOBELN:RUN'), 400);
-        // Anleitung ausblenden, sobald der Roboter faehrt
-        setTimeout(() => setStepsVisible('knSteps', false), 1200);
-      });
 
       // ==========================================
       // FARBFARBEN-SLALOM (Multiplayer)

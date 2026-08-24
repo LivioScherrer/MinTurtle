@@ -43,7 +43,7 @@ bool driveLockedByGame() { return currentGame != GAME_NONE; }
 // =====================================================
 // SPIEL-BEWEGUNGS-ENGINE (blockierend)
 // =====================================================
-// Einheitliche Zeiten: jedes Spiel (Knobeln, Memory, Quiz, Rennen) nutzt
+// Einheitliche Zeiten: jedes Spiel (Memory, Quiz, Rennen) nutzt
 // dieselbe Vor/Zurueck- und Drehdauer -> konsistenter Bewegungsablauf.
 // Beschleunigung/Bremsen uebernimmt AccelStepper (kein Wheelie, kein Schraeglauf).
 constexpr float GAME_DRIVE_GAIN   = 1.0f;
@@ -208,32 +208,6 @@ void testTurnSteps(int32_t steps) {
   if (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
     stepperL.stop(); stepperR.stop();
   }
-}
-
-// =====================================================
-// KNOBELN (Pfeil-Sequenz abfahren)
-// =====================================================
-constexpr uint8_t KNOBELN_MAX = 32;
-uint8_t knobelnSeq[KNOBELN_MAX];
-uint8_t knobelnLen = 0;
-
-void knobelnExecute() {
-  if (knobelnLen == 0) { sendStatus("KNOBELN:NONE"); return; }
-  currentGame = GAME_KNOBELN;
-  sendStatus("KNOBELN:RUNNING");
-  for (uint8_t i = 0; i < knobelnLen; i++) {
-    if (currentGame != GAME_KNOBELN) { sendStatus("KNOBELN:ABORT"); return; }
-    switch (knobelnSeq[i]) {
-      case 0: gameDriveForward(GAME_MOVE_MS); break;
-      case 1: gameTurnRightSteps(config.quizTurnSteps); break;
-      case 2: gameDriveBackward(GAME_MOVE_MS); break;
-      case 3: gameTurnLeftSteps(config.quizTurnSteps); break;
-    }
-    bleProcessEvents();
-    vTaskDelay(pdMS_TO_TICKS(80));
-  }
-  currentGame = GAME_NONE;
-  sendStatus("KNOBELN:DONE");
 }
 
 // =====================================================
@@ -776,7 +750,6 @@ void onBleDisconnected() {
    raceActive = false;
   quizActive = false;
   currentGame = GAME_NONE;
-  knobelnLen = 0;
   korrigierenLen = 0;
   korrigierenRunning = false;
   slalomResetRuntime();
@@ -804,7 +777,6 @@ void hardStop() {
   speedL = 0.0; speedR = 0.0;
   stopMotors();
   currentGame = GAME_NONE;
-  knobelnLen = 0;
   korrigierenLen = 0;
   korrigierenRunning = false;
    raceActive = false;
@@ -965,39 +937,6 @@ void handleCommand(const char* cmdStr) {
       config.calGruen.calibrated ? "*" : "-", config.calGruen.r, config.calGruen.g, config.calGruen.b,
       config.calBlau.calibrated  ? "*" : "-", config.calBlau.r,  config.calBlau.g,  config.calBlau.b);
     sendStatus(msg);
-    return;
-  }
-
-  // KNOBELN
-  if (cmd.startsWith("KNOBELN:")) {
-    String sub = cmd.substring(8);
-    if (sub.startsWith("SET:")) {
-      String rest = sub.substring(4);
-      int colon = rest.indexOf(':');
-      if (colon < 0) return;
-      uint8_t len = (uint8_t)rest.substring(0, colon).toInt();
-      String arr = rest.substring(colon + 1);
-      if (len == 0 || len > KNOBELN_MAX) { sendStatus("KNOBELN:BADLEN"); return; }
-      knobelnLen = 0;
-      int start = 0;
-      while (knobelnLen < len) {
-        int comma = arr.indexOf(',', start);
-        String part = (comma < 0) ? arr.substring(start) : arr.substring(start, comma);
-        int v = part.toInt();
-        if (v < 0 || v > 3) { sendStatus("KNOBELN:BADARROW"); return; }
-        knobelnSeq[knobelnLen++] = (uint8_t)v;
-        if (comma < 0) break;
-        start = comma + 1;
-      }
-      snprintf(buf, sizeof(buf), "KNOBELN:READY:%u", knobelnLen);
-      sendStatus(buf);
-    } else if (sub == "RUN") {
-      knobelnExecute();
-    } else if (sub == "STOP") {
-      currentGame = GAME_NONE;
-      stopMotors();
-      sendStatus("KNOBELN:STOPPED");
-    }
     return;
   }
 
