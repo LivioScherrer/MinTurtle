@@ -1197,6 +1197,7 @@ void setup() {
 
   initSteppers();
   Serial.println("[MOTOR] AccelStepper initialisiert (Beschleunigung aktiv)");
+  startupSpin();
 
   pinMode(IR_PIN, INPUT);  // D8 = IR-Sensor (digital)
   Serial.println("[IR] Sensor auf D8 (GPIO7, INPUT) initialisiert");

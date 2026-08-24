@@ -27,6 +27,25 @@ void initSteppers() {
   digitalWrite(PIN_DIR_R, LOW);
 }
 
+// Start-Signal: nach dem Booten drehen beide Motoren kurz (2000 steps/s, 500ms).
+// Wichtig: setSpeed() wird intern auf setMaxSpeed() begrenzt - deshalb hier
+// vorher setMaxSpeed hochsetzen und danach wieder auf FIXED_DRIVE_SPEED zurueck.
+void startupSpin() {
+  stepperL.setMaxSpeed(2000.0f);
+  stepperR.setMaxSpeed(2000.0f);
+  stepperL.setSpeed(2000.0f);
+  stepperR.setSpeed(2000.0f);
+  uint32_t start = millis();
+  while (millis() - start < 500) {
+    stepperL.runSpeed();
+    stepperR.runSpeed();
+  }
+  stepperL.setSpeed(0.0f);
+  stepperR.setSpeed(0.0f);
+  stepperL.setMaxSpeed(FIXED_DRIVE_SPEED);
+  stepperR.setMaxSpeed(FIXED_DRIVE_SPEED);
+}
+
 // Geschwindigkeit: Richtung ueber Vorzeichen, Betrag immer FIXED_DRIVE_SPEED.
 // Vorzeichen-Korrektur ueber config.leftSign/rightSign (manche Motoren sind verkehrt).
 // speed == 0.0f bedeutet explizit STOPP (Motor bleibt stehen).

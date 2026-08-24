@@ -34,3 +34,5 @@ void motorRun();
 void prepPositionMove(AccelStepper& s, long physicalSteps, float speed);
 // Initialisierung (Pins + Stepper-Defaults, feste Geschwindigkeit)
 void initSteppers();
+// Start-Signal nach dem Booten: beide Motoren drehen kurz (2000 steps/s, 500ms)
+void startupSpin();
