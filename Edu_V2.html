@@ -2639,6 +2639,17 @@
               <div class="tile-desc">Schritt für Schritt Schwarz, Weiß und Farben kalibrieren</div>
             </div>
           </div>
+          <div class="tile" data-view="motor" data-cat="setup">
+            <div class="tile-ic" style="background:#e8eef5;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#2f6db3" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3.2" />
+                <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" />
+              </svg></div>
+            <div>
+              <div class="tile-ttl">Motor &amp; TMC</div>
+              <div class="tile-desc">Strom, Microsteps, Modus einstellen + Motor testen</div>
+            </div>
+          </div>
           <div class="tile" data-view="dist" data-cat="setup">
             <div class="tile-ic" style="background:#e9f4ec;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
                 stroke="#2f6b4a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -3004,7 +3015,77 @@
           <button type="button" class="help-fab" onclick="openHelp('progSteps')" title="Anleitung">?</button>
     </div>
 
+    <!-- MOTOR & TMC -->
+    <div id="view-motor" class="view game-view">
+      <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
+        <div class="gv-title">Motor &amp; TMC2209</div>
+        <div class="conn-dot" id="motorConnDot"></div>
+      </div>
+      <div class="game-body">
+        <div class="arena">
+          <div class="game-title">Motor &amp; TMC2209</div>
+          <div class="game-desc">Strom, Microsteps und Modus einstellen (wird im Roboter gespeichert) + Motoren testen.
+            Nach Microsteps-&Auml;nderung bitte STEPS/ANG neu kalibrieren!</div>
+          <div class="mem-status" id="motorStatus">Noch nicht abgefragt.</div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:14px 0;">
+            <button class="btn btn-grey" onclick="sendCommand('TMC?')">Status abfragen</button>
+            <button class="btn btn-grey" onclick="sendCommand('TMC:INIT')">Neu initialisieren</button>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
+            <span style="font-weight:700;min-width:110px;">Strom (mA):</span>
+            <input type="number" id="motorCurrent" class="quiz-input" style="max-width:130px;min-width:0;" min="100" max="800" step="10" value="200">
+            <button class="btn btn-primary" onclick="motorSetCurrent()">Setzen</button>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
+            <span style="font-weight:700;min-width:110px;">Hold (0-31):</span>
+            <input type="number" id="motorHold" class="quiz-input" style="max-width:130px;min-width:0;" min="0" max="31" step="1" value="31">
+            <button class="btn btn-primary" onclick="motorSetHold()">Setzen</button>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
+            <span style="font-weight:700;min-width:110px;">Microsteps:</span>
+            <select id="motorMS" class="quiz-input" style="max-width:150px;min-width:0;">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+              <option value="16" selected>16</option>
+              <option value="32">32</option>
+              <option value="64">64</option>
+              <option value="128">128</option>
+              <option value="256">256</option>
+            </select>
+            <button class="btn btn-primary" onclick="motorSetMS()">Setzen</button>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
+            <span style="font-weight:700;min-width:110px;">Modus:</span>
+            <span id="motorMode" style="font-weight:700;">SpreadCycle</span>
+            <button class="btn btn-grey btn-sm" onclick="motorSetMode(true)">SpreadCycle</button>
+            <button class="btn btn-grey btn-sm" onclick="motorSetMode(false)">StealthChop</button>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
+            <span style="font-weight:700;min-width:110px;">Treiber:</span>
+            <button class="btn btn-grey btn-sm" onclick="motorSetEn(true)">EIN</button>
+            <button class="btn btn-grey btn-sm" onclick="motorSetEn(false)">AUS</button>
+          </div>
+          <div class="game-title" style="margin-top:8px;">Motor testen</div>
+          <div class="game-desc">Faehrt 400ms in die Richtung (beide Motoren).</div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:14px 0;">
+            <button class="btn btn-lg btn-primary" onclick="motorTestPress('w')">Vor</button>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:14px 0;">
+            <button class="btn btn-lg btn-primary" onclick="motorTestPress('a')">Links</button>
+            <button class="btn btn-lg btn-primary" onclick="motorTestPress('s')">Zur&uuml;ck</button>
+            <button class="btn btn-lg btn-primary" onclick="motorTestPress('d')">Rechts</button>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;margin:14px 0;">
+            <button class="btn btn-lg btn-danger" onclick="motorStop()">STOP</button>
+          </div>
+          <div class="feedback-msg" id="motorFeedback"></div>
+        </div>
+      </div>
+    </div>
 
+    <!-- DISTANZ-SENSOR -->
     <div id="view-dist" class="view game-view">
       <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
         <div class="gv-title">Distanz-Sensor</div>
@@ -3241,9 +3322,107 @@ function updateConnectionUI(isConn, text) {
           distFeedback('Fehlgeschlagen: weisses Ziel im Ziel-Abstand ruhig halten (dunkle Umgebung hilft).');
         } else if (msg === 'DISTCAL:BAD') {
           distFeedback('Ziel muss zwischen 50 und 500 mm liegen.');
+        } else if (msg.startsWith('TMC:') || msg.startsWith('UART:') || msg.startsWith('NETZ:')) {
+          handleMotorMessage(msg);
         }
       }
 
+      // ==========================================
+      // MOTOR & TMC (Einstellungen + Test)
+      // ==========================================
+      let motorTestTimer = null;
+      function motorSetVal(id, v) {
+        const el = document.getElementById(id);
+        if (el && v !== undefined && v !== null && v !== '') el.value = v;
+      }
+      function motorFeedback(t) {
+        const el = document.getElementById('motorFeedback');
+        if (el) { el.textContent = t; el.style.display = 'block'; }
+      }
+      function motorSetCurrent() {
+        const v = parseInt(document.getElementById('motorCurrent').value, 10);
+        if (isNaN(v) || v < 100 || v > 800) { motorFeedback('Strom muss zwischen 100 und 800 mA liegen.'); return; }
+        sendCommand('TMC:CURRENT:' + v);
+        motorFeedback('Sende TMC:CURRENT:' + v + ' ...');
+      }
+      function motorSetHold() {
+        const v = parseInt(document.getElementById('motorHold').value, 10);
+        if (isNaN(v) || v < 0 || v > 31) { motorFeedback('Hold muss zwischen 0 und 31 liegen.'); return; }
+        sendCommand('TMC:HOLD:' + v);
+        motorFeedback('Sende TMC:HOLD:' + v + ' ...');
+      }
+      function motorSetMS() {
+        const v = document.getElementById('motorMS').value;
+        sendCommand('TMC:MS:' + v);
+        motorFeedback('Sende TMC:MS:' + v + ' ...');
+      }
+      function motorSetMode(spread) {
+        sendCommand(spread ? 'TMC:MODE:SPREAD' : 'TMC:MODE:STEALTH');
+        motorFeedback('Sende Modus ...');
+      }
+      function motorSetEn(on) {
+        sendCommand(on ? 'TMC:EN:1' : 'TMC:EN:0');
+        motorFeedback(on ? 'Treiber EIN ...' : 'Treiber AUS ...');
+      }
+      function motorTestPress(dir) {
+        if (!connected) { motorFeedback('Nicht verbunden!'); return; }
+        keys.w = dir === 'w' ? 1 : 0;
+        keys.a = dir === 'a' ? 1 : 0;
+        keys.s = dir === 's' ? 1 : 0;
+        keys.d = dir === 'd' ? 1 : 0;
+        sendKeys(true);
+        motorFeedback('Test laeuft (400ms) ...');
+        if (motorTestTimer) clearTimeout(motorTestTimer);
+        motorTestTimer = setTimeout(() => {
+          keys.w = keys.a = keys.s = keys.d = 0;
+          sendKeys(true);
+          motorFeedback('Test fertig.');
+        }, 400);
+      }
+      function motorStop() {
+        resetKeys();
+        sendCommand('STOP');
+        motorFeedback('STOP gesendet.');
+      }
+      function handleMotorMessage(msg) {
+        // TMC:STAT:okL,okR,verL,verR,mA,ms,spread,en
+        if (msg.startsWith('TMC:STAT:')) {
+          const p = msg.substring(9).split(',');
+          if (p.length >= 8) {
+            const stEl = document.getElementById('motorStatus');
+            if (stEl) {
+              stEl.textContent = 'L:' + (p[0] === '1' ? 'OK' : 'FEHLER') +
+                ' R:' + (p[1] === '1' ? 'OK' : 'FEHLER') +
+                ' | ' + p[4] + 'mA | ' + p[5] + 'uSteps | ' +
+                (p[6] === '1' ? 'Spread' : 'Stealth') +
+                ' | EN ' + (p[7] === '1' ? 'EIN' : 'AUS');
+            }
+            motorSetVal('motorCurrent', p[4]);
+            motorSetVal('motorMS', p[5]);
+            const modeEl = document.getElementById('motorMode');
+            if (modeEl) modeEl.textContent = p[6] === '1' ? 'SpreadCycle' : 'StealthChop';
+          }
+          return;
+        }
+        if (msg.startsWith('TMC:CURRENT=')) { motorSetVal('motorCurrent', msg.substring(12)); motorFeedback('Strom: ' + msg.substring(12) + ' mA (gespeichert)'); return; }
+        if (msg.startsWith('TMC:HOLD=')) { motorSetVal('motorHold', msg.substring(9)); motorFeedback('Hold: ' + msg.substring(9) + ' (gespeichert)'); return; }
+        if (msg.startsWith('TMC:MS=')) { motorSetVal('motorMS', msg.substring(7)); motorFeedback('Microsteps: ' + msg.substring(7) + ' (gespeichert - STEPS/ANG neu kalibrieren!)'); return; }
+        if (msg.startsWith('TMC:MODE=')) {
+          const modeEl = document.getElementById('motorMode');
+          if (modeEl) modeEl.textContent = msg.substring(9) === 'SPREAD' ? 'SpreadCycle' : 'StealthChop';
+          motorFeedback('Modus: ' + msg.substring(9) + ' (gespeichert)');
+          return;
+        }
+        if (msg === 'TMC:EN=1' || msg === 'TMC:EN=0') { motorFeedback(msg === 'TMC:EN=1' ? 'Treiber EIN.' : 'Treiber AUS.'); return; }
+        if (msg === 'TMC:INIT_DONE') { motorFeedback('Neu initialisiert.'); sendCommand('TMC?'); return; }
+        if (msg === 'TMC:LOGGED') { motorFeedback('Status empfangen.'); return; }
+        if (msg === 'UART:DIAG_DONE' || msg === 'NETZ:DIAG_DONE') { motorFeedback('Diagnose fertig (Details im Serial-Monitor).'); return; }
+        if (msg.startsWith('TMC:BAD') || msg.startsWith('UNKNOWN:')) { motorFeedback('Fehler: ' + msg); return; }
+      }
+
+      // ==========================================
+      // DISTANZ-SENSOR (Stopp-/Frei-Schwellen)
+      // ==========================================
       function distSetVal(id, v) {
         const el = document.getElementById(id);
         if (el && v !== undefined && v !== null && v !== '') el.value = v;
@@ -3604,6 +3783,8 @@ function updateConnectionUI(isConn, text) {
           const viewToSteps = { drive: 'driveSteps', mathrace: 'raceSteps', colorquiz: 'cqSteps', memory: 'memorySteps', line: 'lineSteps', prog: 'progSteps', slalom: 'slalomSteps' };
         if (viewToSteps[viewId]) STEP_STATE[viewToSteps[viewId]] = 0;
         if (viewId === 'memory') memReset();
+        if (viewId === 'motor') { sendCommand('TMC?'); }
+        if (viewId === 'dist') { sendCommand('OBSDIST?'); sendCommand('OBSREL?'); }
         if (viewId !== 'prog' && progRunning) { sendCommand('PROG:STOP'); }
         if (viewId === 'line') {
           // Beim Verlassen des Linie-Views: aktiven Lauf stoppen
