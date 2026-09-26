@@ -1,4 +1,4 @@
-﻿// EduBot V2 - Distanzsensor-Modul (VL53L0X, I2C an J3/J4)
+// EduBot V2 - Distanzsensor-Modul (VL53L0X, I2C an J3/J4)
 // Verdrahtung Edu_V2: SDA=GPIO5, SCL=GPIO6 (gemeinsamer Bus mit TCS34725).
 //
 // ------------------------------------------------------------------
@@ -115,12 +115,15 @@ void distClearOffset();
 // messbereit. Rueckgabe: 0 = erfolgreich, sonst ST-Fehlercode.
 //
 // ACHTUNG: blockiert sekundenlang und haelt den I2C-Bus. Nicht direkt aus
-// dem Kommando-Pfad rufen - dort distRefSpadRequest() benutzen.
+// dem Kommando-Pfad rufen - dort distRefSpadRequest() benutzen. Grund ist
+// nicht der Watchdog (esp_task_wdt_init(10000,...) sind 10000 SEKUNDEN,
+// kein 10-Sekunden-Timeout), sondern die responsiveness: waehrend der
+// Kalibrierung laufen Motorschritte und Spiel-Logik nicht weiter.
 int distRefSpadCalibrate();
 
 // DISTREF asynchron anstossen. Die Kalibrierung dauert mehrere Sekunden;
-// direkt aus handleCommand() aufgerufen wuerde den Loop-Task fuer laenger
-// als die Task-WDT-Grenze (10 s) blockieren und einen Panic ausloesen.
+// direkt aus handleCommand() aufgerufen wuerde den Loop-Task fuer diese
+// Zeit vollstaendig blockieren (Motorschritte, Spiel-Logik, BLE-Events).
 // Stattdessen startet distRefSpadRequest() einen eigenen Task und kehrt
 // sofort zurueck. distRefSpadService() (in loop() aufrufen) meldet das
 // Ergebnis per sendStatus, sobald es fertig ist.

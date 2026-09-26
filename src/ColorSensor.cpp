@@ -71,14 +71,20 @@ void colorSetup() {
   if (colorSem) xSemaphoreGive(colorSem);
 }
 
-void resetI2CBus() {
-  // Sperre MUSS halten: nine Clock-Pulse und das Wire.begin() wuerden
+bool resetI2CBus() {
+  // Sperre MUSS halten: neun Clock-Pulse und das Wire.begin() wuerden
   // sonst mitten in einer VL53L0X-Transaktion den Bus umbauen. Ohne
   // Sperre zu arbeiten (Rueckgabewert ignorieren) ist genau der Fehler,
-  // den I2CBus eigentlich verhindern soll - und ausgerechnet dann, wenn
-  // der Distanzsensor den Bus laenger haelt, wird er praktisch.
+  // den I2CBus eigentlich verhindern soll.
+  //
+  // Rueckgabe false = Bus war belegt, es wurde NICHHT angefasst. Der
+  // Aufrufer darf das nicht als Fehlversuch werten: der Distanzsensor
+  // haelt den Bus waehrend seiner Kalibrierung sekundenlang, und drei
+  // vergebliche Wartezeiten wuerden das Recovery-Budget erschoepfen und
+  // den Farbsensor dauerhaft stilllegen.
   if (!i2cBusLock(200)) {
-    return;
+    Serial.println("[SENSOR] resetI2CBus: I2C-Bus belegt -> Bus nicht angefasst");
+    return false;
   }
   pinMode(SDA_PIN, OUTPUT);
   pinMode(SCL_PIN, OUTPUT);
@@ -91,6 +97,7 @@ void resetI2CBus() {
   pinMode(SCL_PIN, INPUT);
   Wire.begin(SDA_PIN, SCL_PIN);
   i2cBusUnlock();
+  return true;
 }
 
 void getCurrentColorName(char* out, size_t outLen) {
@@ -147,9 +154,17 @@ void colorSensorTask(void* parameter) {
         }
       }
     } else if (recoveries < COLOR_RECOVERY_TRIES) {
+      // Erst den Bus wirklich freigeraeumen, dann den Versuch zaehlen.
+      // Sonst verbraucht ein belegter Bus (Distanzsensor kalibriert) das
+      // Recovery-Budget, ohne dass ueberhaupt etwas versucht wurde.
+      if (!resetI2CBus()) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        lastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&lastWakeTime, period);
+        continue;
+      }
       recoveries++;
       Serial.printf("[SENSOR] Recovery-Versuch %d/%d\n", recoveries, COLOR_RECOVERY_TRIES);
-      resetI2CBus();
       if (i2cBusLock(50)) {
         colorSensorOk = tcs.begin();
         i2cBusUnlock();

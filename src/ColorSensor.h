@@ -27,7 +27,10 @@ void colorSetup();
 // FreeRTOS-Task
 void colorSensorTask(void* parameter);
 // I2C-Bus-Recovery (9-clock-Toggle)
-void resetI2CBus();
+// I2C-Bus per 9 Clock-Pulsen zuruecksetzen und neu initialisieren.
+// false = Bus war belegt, es wurde NICHT angefasst (Aufrufer soll den
+// Versuch nicht als Fehlversuch werten).
+bool resetI2CBus();
 // Aktuellen Farbnamen lesen (blocking, mit Timeout)
 void getCurrentColorName(char* out, size_t outLen);
 // Kalibrierung helper

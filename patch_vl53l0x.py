@@ -33,11 +33,13 @@
 # PROBLEM 2 - Ref-SPAD-Kalibrierung nicht aufrufbar
 # Ist die NVM-Ref-SPAD-Karte unbrauchbar, ruft begin() selbst die
 # Ref-SPAD-Kalibrierung auf - und genau die schreibt die NVM-Daten neu.
-# Sie scheitert ohne geeignetes Ziel, dann bleibt der Sensor dauerhaft
-# unbrauchbar und begin() gibt false zurueck. pMyDevice ist aber private,
-# also von aussen nicht erreichbar. Deshalb wird eine schmale oeffentliche
-# Wrapper-Methode ergaenzt, damit die Kalibrierung gezielt erneut laufen
-# kann (DISTREF), ohne den Sensor neu zu kaufen.
+# Sie scheitert dann mit -50, begin() gibt false zurueck, und der Aufrufer
+# kommt an die Kalibrierung nie heran: der Sensor bleibt unbrauchbar und
+# begin() kann das auch nicht wiederholen, weil es bei -50 immer wieder
+# false liefert. pMyDevice ist aber private, also von aussen nicht
+# erreichbar. Deshalb wird eine schmale oeffentliche Methode ergaenzt, die
+# DataInit und StaticInit selbst nachholt und die Kalibrierung danach
+# erneut ausfuehrt (DISTREF) - ohne Loeten, ohne Tausch.
 #
 # Beide Aenderungen sind minimal und idempotent und brechen den Build ab,
 # falls sich die Library geaendert hat (nicht stillschweigend weiterbauen).
@@ -104,6 +106,10 @@ H_ANCHOR = " private:\n  VL53L0X_Dev_t MyDevice;"
 # Bekannte Vorversionen des Header-Blocks (Signatur-Fehler in der ersten
 # Fassung: der Count ist uint32_t*, nicht uint8_t*). Muss entfernt werden,
 # sonst stuende die Methode zweimal.
+#
+# ZWEITE Vorversion: die urspruengliche Fassung rief die Kalibrierung direkt
+# auf, ohne DataInit/StaticInit davorzuschalten, und liest damit nicht den
+# Zustand zurueck, den begin() hergestellt hat.
 H_PREVIOUS = ["""  // [EduV2-Patch] Ref-SPAD-Kalibrierung von aussen ausloesbar. Siehe
   // patch_vl53l0x.py. begin() startet sie selbst, scheitert aber ohne
   // geeignetes Ziel mit -50 und laesst den Sensor dann unbrauchbar zurueck.
@@ -124,9 +130,9 @@ H_PREVIOUS = ["""  // [EduV2-Patch] Ref-SPAD-Kalibrierung von aussen ausloesbar.
   }
 
  private:
-  VL53L0X_Dev_t MyDevice;"""]
+  VL53L0X_Dev_t MyDevice;""",
 
-H_NEW = """  // [EduV2-Patch] Ref-SPAD-Kalibrierung von aussen ausloesbar. Siehe
+"""  // [EduV2-Patch] Ref-SPAD-Kalibrierung von aussen ausloesbar. Siehe
   // patch_vl53l0x.py. begin() startet sie selbst, scheitert aber ohne
   // geeignetes Ziel mit -50 und laesst den Sensor dann unbrauchbar zurueck.
   // Voraussetzung: DataInit ist gelaufen (begin() hat es getan, StaticInit
@@ -136,6 +142,47 @@ H_NEW = """  // [EduV2-Patch] Ref-SPAD-Kalibrierung von aussen ausloesbar. Siehe
     uint8_t aperture = 0;
     VL53L0X_Error st = VL53L0X_PerformRefSpadManagement(pMyDevice, &count,
                                                         &aperture);
+    if (outCount) {
+      *outCount = count;
+    }
+    if (outAperture) {
+      *outAperture = aperture;
+    }
+    return (int)st;
+  }
+
+ private:
+  VL53L0X_Dev_t MyDevice;"""]
+
+H_NEW = """  // [EduV2-Patch] Ref-SPAD-Kalibrierung erneut ausfuehren, auch wenn
+  // begin() genau daran gescheitert ist. Siehe patch_vl53l0x.py.
+  //
+  // Die Reihenfolge ist der ganze Punkt und darf nicht vereinfacht werden:
+  //   DataInit -> StaticInit -> NUR DANN Ref-SPAD-Kalibrierung
+  // StaticInit laedt ueber VL53L0X_load_tuning_settings die
+  // Skalierungsparameter. Schlaegt StaticInit fehl, sind die 0 und jede
+  // Messfunktion teilt durch sie (IntegerDivideByZero) - dann wird hier
+  // abgebrochen und es wird nicht gemessen.
+  //
+  // Warum das den einzigen Rettungsweg ist: -50 (REF_SPAD_INIT) liefert
+  // ausschliesslich VL53L0X_perform_ref_spad_management, und das laeuft in
+  // begin() NACH StaticInit. Ein begin()-Fehler mit -50 bedeutet daher:
+  // Tuning-Daten sind vorhanden, nur die Ref-SPAD-Karte im NVM ist
+  // unbrauchbar. Die genau diese Karte neu schreibt - ohne Loeten, ohne
+  // Tausch. Ein Aufruf von begin() alone koennte das nicht: es liefert bei
+  // -50 false und der Aufrufer wuerde die Kalibrierung nie erreichen.
+  int eduRefSpadRecalibrate(uint32_t* outCount, uint8_t* outAperture) {
+    VL53L0X_Error st = VL53L0X_DataInit(pMyDevice);
+    if (st != VL53L0X_ERROR_NONE) {
+      return (int)st;
+    }
+    st = VL53L0X_StaticInit(pMyDevice);
+    if (st != VL53L0X_ERROR_NONE) {
+      return (int)st;  // Skalierungsparameter unbrauchbar -> nicht messen
+    }
+    uint32_t count = 0;
+    uint8_t aperture = 0;
+    st = VL53L0X_PerformRefSpadManagement(pMyDevice, &count, &aperture);
     if (outCount) {
       *outCount = count;
     }
@@ -239,7 +286,7 @@ if H_NEW in content:
 elif H_ANCHOR in content:
     content = content.replace(H_ANCHOR, H_NEW, 1)
     write(SRC_H, content)
-    print("[patch-vl53l0x] H: Wrapper eduRefSpadCalibration() ergaenzt")
+    print("[patch-vl53l0x] H: Wrapper eduRefSpadRecalibrate() ergaenzt")
 else:
     fail("H-Ankerzeile nicht gefunden - hat sich die Library geaendert?")
 

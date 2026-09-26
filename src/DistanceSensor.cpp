@@ -1,4 +1,4 @@
-﻿// EduBot V2 - Distanzsensor-Implementierung (VL53L0X)
+// EduBot V2 - Distanzsensor-Implementierung (VL53L0X)
 #include "DistanceSensor.h"
 #include "Config.h"       // obsDistMM / obsRelMM / obsOffsetMM (NVS-persistent)
 #include "ColorSensor.h"  // SDA_PIN / SCL_PIN
@@ -27,10 +27,6 @@ static char s_bootScan[96] = "";
 static unsigned long s_bootMs = 0;
 static bool s_bootHad29 = false;
 static bool s_bootHad30 = false;
-// true = 0x29 gehoert exklusiv dem VL53L0X, Initialisierung dort ist sauber.
-// Beim Boot: 0x29 war frei. Wird true, sobald der Sensor erfolgreich auf
-// 0x29 zurueckgeschoben wurde (dann ist der TCS34725 dort nicht).
-static bool s_ownDefaultAddr = false;
 // Diagnose-Zaehler (nur lesend ueber distDiag(), kein Verhaltenseinfluss)
 static uint32_t s_statRead = 0;      // erfolgreiche Range-Auswertungen
 static uint32_t s_statNotReady = 0;  // isRangeComplete() == false
@@ -100,6 +96,10 @@ static void loxResetInstance() {
 // Der Library-Standard (33 ms) wird stattdessen verwendet.
 static void distProbeModes() {
   uint8_t contOk = 0, singleOk = 0;
+  // Skips zaehlen: sonst ist "0/5 gueltige Messungen" nicht von einem
+  // toten Sensor zu unterscheiden, und der Modus wird dauerhaft falsch
+  // gewaehlt, weil die Gegenprobe nie stattfand.
+  int contSkip = 0, singleSkip = 0;
 
   // --- Continuous ---
   // Nur den Start/Stop des Messbetriebs unter der Sperre halten. Die
@@ -108,10 +108,12 @@ static void distProbeModes() {
   if (i2cBusLock(300)) {
     lox.startRangeContinuous(100);
     i2cBusUnlock();
+  } else {
+    contSkip = 5;
   }
   for (int i = 0; i < 5; i++) {
     vTaskDelay(pdMS_TO_TICKS(200));
-    if (!i2cBusLock(DIST_SINGLE_LOCK_MS)) continue;
+    if (!i2cBusLock(DIST_SINGLE_LOCK_MS)) { contSkip++; continue; }
     bool ready = lox.isRangeComplete();
     uint16_t mm = ready ? lox.readRangeResult() : 0;
     uint8_t st = lox.readRangeStatus();
@@ -119,18 +121,22 @@ static void distProbeModes() {
     if (ready && st == 0 && mm > 0 && mm < 2000) contOk++;
   }
   if (i2cBusLock(300)) { lox.stopRangeContinuous(); i2cBusUnlock(); }
-  Serial.printf("[DIST] Modustest Continuous: %u/5 gueltige Messungen\n", (unsigned)contOk);
+  Serial.printf("[DIST] Modustest Continuous: %u/5 gueltige Messungen", (unsigned)contOk);
+  if (contSkip) Serial.printf("  (%d uebersprungen: I2C-Bus belegt)", contSkip);
+  Serial.println();
 
   // --- Single-Shot ---
   for (int i = 0; i < 5; i++) {
     vTaskDelay(pdMS_TO_TICKS(60));
-    if (!i2cBusLock(DIST_SINGLE_LOCK_MS)) continue;
+    if (!i2cBusLock(DIST_SINGLE_LOCK_MS)) { singleSkip++; continue; }
     uint16_t mm = lox.readRange();
     uint8_t st = lox.readRangeStatus();
     i2cBusUnlock();
     if (st == 0 && mm > 0 && mm < 2000) singleOk++;
   }
-  Serial.printf("[DIST] Modustest Single-Shot: %u/5 gueltige Messungen\n", (unsigned)singleOk);
+  Serial.printf("[DIST] Modustest Single-Shot: %u/5 gueltige Messungen", (unsigned)singleOk);
+  if (singleSkip) Serial.printf("  (%d uebersprungen: I2C-Bus belegt)", singleSkip);
+  Serial.println();
 
   s_continuous = (contOk >= 2);
   if (s_continuous) {
@@ -303,9 +309,9 @@ void distSetup() {
                 s_bootHad29 ? "Init laeuft trotzdem ueber 0x30 (Patch)"
                             : "Init ueber 0x30, 0x29 waere auch sauber");
 
-  // Faellt beim Boot NICHTS auf 0x29, gehoert die Adresse exklusiv dem
-  // VL53L0X (der Farbsensor ist dann nicht angeschlossen bzw. antwortet nicht).
-  s_ownDefaultAddr = !s_bootHad29;
+  // Die Belegung von 0x29 ist jetzt reine Information (haengt der
+  // Farbsensor?) und keine Vorbedingung mehr: der Patch laesst den
+  // kompletten Init auf 0x30 laufen, wo der VL53L0X allein antwortet.
 
   // =============================================================
   // ADRESSWECHSEL AUF 0x30 - erledigt begin(0x30) selbst
@@ -414,32 +420,42 @@ void distDebugInit() {
     // KEIN Timing-Budget setzen: der Aufruf schreibt die Phasenkalibrierung
     // ins NVM des Sensors und ist die wahrscheinlichste Ursache fuer
     // Range-Status 4 (PhaseFail). Library-Standard (33 ms) verwenden.
+    bool started = false;
     if (!i2cBusLock(300)) {
-      Serial.println("  I2C-Bus belegt -> Messreihe uebersprungen");
+      Serial.println("  I2C-Bus belegt -> Messstart und Messreihe uebersprungen");
     } else {
-      bool started = lox.startRangeContinuous(100);
+      started = lox.startRangeContinuous(100);
       i2cBusUnlock();
       Serial.printf("  startRangeContinuous(100) -> %s  (Budget: Library-Standard)\n",
                     started ? "OK" : "FEHLER");
     }
-    // Messreihe bewusst OHNE Bus-Sperre: pro Iteration nur kurz sperren.
-    for (int i = 0; i < 6; i++) {
-      vTaskDelay(pdMS_TO_TICKS(300));
-      if (!i2cBusLock(50)) {
-        Serial.printf("    isRangeComplete=?  rangeStatus=?  mm=?  (Bus belegt)\n");
-        continue;
+    if (started) {
+      // Messreihe bewusst OHNE Bus-Sperre: pro Iteration nur kurz sperren.
+      for (int i = 0; i < 6; i++) {
+        vTaskDelay(pdMS_TO_TICKS(300));
+        if (!i2cBusLock(50)) {
+          Serial.printf("    isRangeComplete=?  rangeStatus=?  mm=?  (Bus belegt)\n");
+          continue;
+        }
+        bool ready = lox.isRangeComplete();
+        uint16_t mm = ready ? lox.readRangeResult() : 0xffff;
+        uint8_t st = lox.readRangeStatus();
+        i2cBusUnlock();
+        Serial.printf("    isRangeComplete=%d  rangeStatus=%u  mm=%u\n",
+                      (int)ready, (unsigned)st, (unsigned)mm);
       }
-      bool ready = lox.isRangeComplete();
-      uint16_t mm = ready ? lox.readRangeResult() : 0xffff;
-      uint8_t st = lox.readRangeStatus();
-      i2cBusUnlock();
-      Serial.printf("    isRangeComplete=%d  rangeStatus=%u  mm=%u\n",
-                    (int)ready, (unsigned)st, (unsigned)mm);
+      // Der Sensor misst tatsaechlich: Zustand setzen, damit distTick()
+      // nach einem erfolgreichen DISTDEBUG weiterarbeitet.
+      s_ok = true;
+      s_continuous = true;
+    } else {
+      // Messbetrieb laeuft nicht. s_ok=true waere der "bereit ohne Messung"-
+      // Zustand: isRangeComplete() bliebe immer false, es kaeme kein
+      // DIST:<mm> mehr, und distBlocked() liefe dauerhaft auf "frei".
+      Serial.println("  Messbetrieb nicht gestartet -> Sensor bleibt deaktiviert");
+      Serial.println("  (alternativ DISTREF fuer die Ref-SPAD-Kalibrierung)");
+      distInvalidate();
     }
-    // Der Sensor ist messbereit: Zustand wieder setzen, damit distTick()
-    // nach einem erfolgreichen DISTDEBUG weiterarbeitet.
-    s_ok = true;
-    s_continuous = true;
   } else {
     // StaticInit ist gescheitert. Es wird hier BEWUSST NICHT gemessen:
     // nach fehlgeschlagener Ref-SPAD-Kalibrierung sind die Skalierungs-
@@ -520,44 +536,39 @@ int distRefSpadCalibrate() {
     return -99;
   }
 
-  // DataInit muss gelaufen sein, damit der Geraet-Zustand stimmt. begin()
-  // scheitert hoechstens danach (StaticInit), DataInit ist also bereits erledigt.
-  // loxResetInstance() sorgt fuer eine frische Instanz - nach einem Fehlschlag
-  // ist der interne Zustand unbrauchbar (Self-Pointer zeigt sonst ins Leere).
+  // Frische Instanz: get_info_from_device() liest die NVM-Daten nur EIN MAL
+  // pro Objekt. loxResetInstance() baut das Objekt korrekt neu auf (eine
+  // Zuweisung wuerde den Self-Pointer mitkopieren - Crash, siehe dort).
   loxResetInstance();
-  bool begun = lox.begin(DIST_I2C_ADDR, false, &Wire);
-  if (!begun) {
-    //begin() ist genau hier an StaticInit gescheitert. Die
-    // Ref-SPAD-Kalibrierung darf dann NICHT trotzdem laufen: sie fuehrt
-    // intern echte Messungen aus, und die Skalierungsparameter des
-    // Treibers sind nach fehlgeschlagenem StaticInit noch 0
-    // (IntegerDivideByZero). Ohne belastbares StaticInit gibt es hier
-    // nichts zu retten - der Sensor braucht eine neue
-    // Ref-SPAD-Kalibrierung, fuer die es hier keinen Einstieg gibt.
-    i2cBusUnlock();
-    Serial.println("[DIST] begin() schlug fehl (StaticInit, meist -50).");
-    Serial.println("[DIST] -> Kalibrierung NICHT ausfuehren: der Treiber haette");
-    Serial.println("[DIST]    weiterhin Skalierungsparameter 0, jede Messung");
-    Serial.println("[DIST]    wuerde durch Null teilen.");
-    Serial.println("[DIST]    Ursache meist: kein geeignetes Ziel (weisse matte");
-    Serial.println("[DIST]    Flaeche auf ~20 cm, nicht in direkter Sonne) oder");
-    Serial.println("[DIST]    beschaedigte NVM-Daten.");
-    Serial.println("[DIST]    Abhilfe: Ziel herrichten, dann DISTREF erneut.");
-    s_calibrating = false;
-    return -50;
-  }
 
   uint32_t count = 0;
   uint8_t aperture = 0;
   Serial.println("[DIST] Kalibrierung laeuft (schreibt die NVM-Daten neu)...");
-  int st = lox.eduRefSpadCalibration(&count, &aperture);
+  // eduRefSpadRecalibrate() holt DataInit und StaticInit selbst nach und
+  // fuehrt die Ref-SPAD-Kalibrierung danach erneut aus. Das ist der
+  // entscheidende Punkt: begin() wuerde bei -50 false liefern und die
+  // Kalibrierung damit unerreichbar machen - obwohl genau -50 der Fall ist,
+  // den diese Funktion retten soll. -50 entsteht in
+  // perform_ref_spad_management, laeuft also NACH StaticInit; die
+  // Skalierungsparameter sind in diesem Fall gueltig.
+  int st = lox.eduRefSpadRecalibrate(&count, &aperture);
   Serial.printf("[DIST] Ergebnis: Status=%d  refSpadCount=%u  isApertureSpads=%u\n",
                 st, (unsigned)count, (unsigned)aperture);
   i2cBusUnlock();
 
   if (st != 0) {
-    Serial.println("[DIST] -> FEHLGESCHLAGEN. Ziel pruefen (Abstand, Flaeche, Licht)");
-    Serial.println("[DIST]    und DISTREF erneut senden. -50 = Ziel ungeeignet.");
+    Serial.println("[DIST] -> FEHLGESCHLAGEN.");
+    if (st == -50) {
+      Serial.println("[DIST]    -50 = Ziel unbrauchbar: weisse matte Flaeche auf");
+      Serial.println("[DIST]    ~20-30 cm, nicht in direkter Sonne, Sensor still.");
+      Serial.println("[DIST]    DISTREF erneut senden, Ziel ist jetzt richtig.");
+    } else {
+      Serial.println("[DIST]    Kalibrierung konnte nicht durchlaufen (Ziel oder");
+      Serial.println("[DIST]    Sensorzustand). DISTDEBUG zeigt den NVM-Rohwert.");
+    }
+    // Der Sensor bleibt deaktiviert (s_ok=false von distInvalidate oben).
+    // Das ist korrekt: nach fehlgeschlagener Ref-SPAD-Kalibrierung sind die
+    // Skalierungsparameter nicht vertrauenswuerdig.
     s_calibrating = false;
     return st;
   }
@@ -584,7 +595,7 @@ int distRefSpadCalibrate() {
 
 // --- Asynchroner DISTREF-Weg (siehe distRefSpadRequest) -------------------
 // Die Ref-SPAD-Kalibrierung dauert mehrere Sekunden und wuerde den
-// Loop-Task laenger als die Task-WDT-Grenze blockieren. Sie laeuft deshalb
+// Loop-Task laenger als der Loop mit blockiert werden. Sie laeuft deshalb
 // in einem eigenen Task; loop() bleibt responsiv und fuettert den WDT.
 static volatile int  s_refResult = INT32_MIN;  // INT32_MIN = kein Lauf/kein Ergebnis
 static volatile bool s_refBusy = false;
@@ -650,9 +661,11 @@ bool distOk() { return s_ok; }
 // RUECKGABE: ein Wert >= 0 ist eine Messung. Bei ausbleibender neuer
 // Messung wird bewusst der GESTEIGERTE Wert s_lastRaw geliefert (kein
 // "--"): ein gehaltenes Ergebnis ist fuer den Betrieb besser als eine
-// Luecke. Wer echte Frische braucht, muss das unterscheiden - siehe
-// distCalibrateOffset(), das genau das tut.
-static int16_t readRawMM() {
+// Luecke. *fresh (optional) unterscheidet die beiden Faelle - die
+// Offset-Kalibrierung braucht das, denn ein gehaltener Wert darf nicht als
+// eigene Probe in den Mittelwert eingehen.
+static int16_t readRawMM(bool* fresh = nullptr) {
+  if (fresh) *fresh = false;
   if (!s_ok) return -1;
 
   if (s_continuous) {
@@ -671,6 +684,7 @@ static int16_t readRawMM() {
     if (mm == 0 || mm > 2000) { s_statRangeErr++; return -1; }
     s_statRead++;
     s_lastRaw = (int16_t)mm;
+    if (fresh) *fresh = true;
     return s_lastRaw;
   }
 
@@ -702,12 +716,23 @@ static int16_t readRawMM() {
   if (mm == 0 || mm > 2000) { s_statRangeErr++; return -1; }
   s_statRead++;
   s_lastRaw = (int16_t)mm;
+  if (fresh) *fresh = true;   // hier wurde tatsaechlich gemessen
   return s_lastRaw;
 }
 
 int16_t distMeasureMM() {
   int16_t raw = readRawMM();
-  if (raw < 0) return -1;
+  if (raw < 0) {
+    // Keine gueltige Messung: den Cache loeschen. Sonst bewertet
+    // distBlocked() weiter den letzten Wert, waehrend die WebUI beim
+    // zugehoerigen "DIST:--" den Badge auf frei schaltet - Firmware und
+    // Anzeige wuerden auseinanderlaufen. readRawMM() haelt den Wert fuer
+    // den Normalbetrieb bewusst (s_lastRaw bleibt), aber die *korrigierte*
+    // Anzeige muss "kein Wert" sagen, sonst gilt die dokumentierte Regel
+    // "kein Messwert = frei" nie.
+    s_last = -1;
+    return -1;
+  }
   int16_t c = raw - config.obsOffsetMM;
   if (c < 0) c = 0;
   s_last = c;
@@ -726,23 +751,26 @@ bool distCalibrateOffset(int16_t trueMM) {
   // readRawMM() liefert bewusst auch den GESTEIGERTEN Wert s_lastRaw zurueck,
   // wenn keine neue Messung vorliegt (Continuous: isRangeComplete()==false,
   // Single-Shot: innerhalb von DIST_SINGLE_PERIOD_MS). Fuer den Normalbetrieb
-  // ist das richtig - ein gehaltenes Messergebnis ist besser als "--". Fuer die
-  // Kalibrierung waere es ein Fehler: derselbe Wert wuerde bis zu 10x als
-  // unabhaengige Probe gezaehlt, und der Mittelwert waere in Wahrheit der
-  // allererste Messwert. Deshalb wird nur gezaehlt, was sich gegenueber dem
-  // zuletzt gezaehlten Wert geaendert hat.
-  int16_t prevCounted = -1;
+  // ist das richtig - ein gehaltenes Messergebnis ist besser als "--". Fuer
+  // die Kalibrierung waere es ein Fehler: derselbe Wert wuerde bis zu 10x
+  // als unabhaengige Probe gezaehlt und der Mittelwert waere in Wahrheit
+  // der allererste Messwert. Deshalb ueber den fresh-Ausgangsparameter nur
+  // Proben zaehlen, bei denen wirklich neu gemessen wurde. Wichtig: nicht
+  // ueber "Wert unveraendert" filtern - ein stabiles Ziel liefert
+  // zu Recht dieselbe Zahl, und das ist eine echte Messung.
   uint32_t start = millis();
   while (n < 10 && millis() - start < 8000) {
-    int16_t r = readRawMM();
-    if (r > 0 && r != prevCounted) { sum += r; n++; prevCounted = r; }
+    bool fresh = false;
+    int16_t r = readRawMM(&fresh);
+    if (fresh && r > 0) { sum += r; n++; }
     bleProcessEvents();
     espNowProcessEvents();
     esp_task_wdt_reset();
     vTaskDelay(pdMS_TO_TICKS(120));
   }
   if (n < 5) {
-    Serial.printf("[DIST] Offset-Kalibrierung: zu wenige eigenstaendige Messungen (%d/5)\n", n);
+    Serial.printf("[DIST] Offset-Kalibrierung: zu wenige neue Messungen (%d/5)\n", n);
+    Serial.println("[DIST]    Sensor liefert keine neuen Werte? Abstand/Ziel pruefen.");
     return false;
   }
   int16_t avg = (int16_t)(sum / n);
@@ -842,14 +870,13 @@ void distDiagPrint() {
 
   Serial.println("---- VL53L0X Diagnose ----");
   Serial.printf("  s_ok           : %s\n", s_ok ? "ja" : "NEIN");
-  // Nicht die Konstante gegen sich selbst ausgeben - das kann nie zeigen,
-  // dass der Sensor auf der falschen Adresse haengt, und genau das ist hier
-  // die interessierende Abweichung. Also den PROBEWERT drucken.
-  Serial.printf("  I2C-Adresse    : 0x%02X (soll 0x%02X) %s\n", DIST_I2C_ADDR, DIST_I2C_ADDR,
-                probeAddrLocked(DIST_I2C_ADDR) ? "-> antwortet" : "-> ANTWORTET NICHT");
+  // Nur das, was tatsaechlich gemessen wurde. Ein "0x30 (soll 0x30)" waere
+  // eine Konstante gegen sich selbst und koennte nie zeigen, dass der
+  // Sensor auf der falschen Adresse haengt - genau das waere hier die
+  // interessante Abweichung.
   Serial.printf("  0x29 antwortet : %s (TCS34725 erwartet)\n",
                 probeAddrLocked(0x29) ? "ja" : "nein");
-  Serial.printf("  0x30 antwortet : %s (VL53L0X erwartet)\n",
+  Serial.printf("  0x30 antwortet : %s (VL53L0X erwartet, IST die Zieladresse)\n",
                 probeAddrLocked(DIST_I2C_ADDR) ? "ja" : "nein");
   Serial.printf("  Modus          : %s\n", s_continuous
                 ? "CONTINUOUS_TIMED_RANGING (non-blocking)"
