@@ -1,10 +1,11 @@
-// EduBot V1.3 - Farbsensor-Implementierung
+// EduBot V2 - Farbsensor-Implementierung
+// Stand: exakte Funktionsweise aus Edu V1.3 (hat funktioniert).
 #include "ColorSensor.h"
 #include "Config.h"
+#include "I2CBus.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <semphr.h>
-#include <math.h>
 
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(
   TCS34725_INTEGRATIONTIME_50MS,
@@ -28,89 +29,50 @@ int calibrateColor(uint16_t raw, uint16_t blackVal, uint16_t whiteVal) {
 }
 
 const char* detectColorName(int r, int g, int b) {
+  // Erst pruefen ob ueberhaupt eine Farbe erkannt wird (sehr dunkel)
   int total = r + g + b;
   if (total < 60) return "SCHWARZ";
-
-  struct HSV { float h; float s; float v; };
-  auto toHsv = [](int ri, int gi, int bi) -> HSV {
-    float rf = ri / 255.0f, gf = gi / 255.0f, bf = bi / 255.0f;
-    float cmax = rf > gf ? (rf > bf ? rf : bf) : (gf > bf ? gf : bf);
-    float cmin = rf < gf ? (rf < bf ? rf : bf) : (gf < bf ? gf : bf);
-    float delta = cmax - cmin;
-    HSV o;
-    o.v = cmax;
-    o.s = (cmax > 0.0001f) ? (delta / cmax) : 0.0f;
-    if (delta < 0.0001f) { o.h = 0.0f; return o; }
-    if (cmax == rf) {
-      o.h = 60.0f * fmodf((gf - bf) / delta, 6.0f);
-      if (o.h < 0) o.h += 360.0f;
-    } else if (cmax == gf) {
-      o.h = 60.0f * ((bf - rf) / delta + 2.0f);
-    } else {
-      o.h = 60.0f * ((rf - gf) / delta + 4.0f);
-    }
-    return o;
-  };
-  auto hueDist = [](float a, float b) -> float {
-    float d = fabsf(a - b);
-    if (d > 180.0f) d = 360.0f - d;
-    return d;
-  };
-
-  HSV cur = toHsv(r, g, b);
-  if (cur.v < 0.15f) return "SCHWARZ";
-  if (cur.s < 0.15f && cur.v > 0.6f) return "WEISS";
-  // Boden-Differenzierung: Der Holzboden wirkt gelblich/braun (warme Farbe)
-  // und ist matt. Nur warme Farbtoene brauchen eine Mindest-Saettigung, um
-  // nicht mit dem Boden verwechselt zu werden. Kalte Farben (Gruen/Blau)
-  // kommen immer durch. Schwelle per SAT:-Befehl einstellbar.
-  bool warm = (cur.h < 70.0f) || (cur.h >= 340.0f);
-  if (warm && cur.s < config.minColorSaturation) return "UNBEKANNT";
-
-  struct Cand { const char* name; const ColorRef* ref; };
-  const Cand cands[] = {
-    { "ROT",   &config.calRot   },
-    { "GELB",  &config.calGelb  },
-    { "GRUEN", &config.calGruen },
-    { "BLAU",  &config.calBlau  },
-  };
-  const char* bestName = nullptr;
-  float      bestDist  = 1e9f;
-  for (const auto& c : cands) {
-    if (!c.ref->calibrated) continue;
-    HSV ref = toHsv(c.ref->r, c.ref->g, c.ref->b);
-    if (ref.s < 0.10f) continue;
-    float d = hueDist(cur.h, ref.h) + 0.3f * fabsf(cur.s - ref.s) * 50.0f;
-    if (d < bestDist) { bestDist = d; bestName = c.name; }
+  // WEISS: alle drei Kanaele hell und annaehernd gleich
+  if (r > COLOR_HIGH && g > COLOR_HIGH && b > COLOR_HIGH &&
+      abs(r - g) < 60 && abs(g - b) < 60 && abs(r - b) < 60) {
+    return "WEISS";
   }
+  // dominant channel
+  int maxC = r > g ? (r > b ? r : b) : (g > b ? g : b);
+  if (maxC < 50) return "UNBEKANNT";  // zu dunkel fuer echte Farbe
 
-  if (bestName) {
-    if (bestDist > 35.0f) return "UNBEKANNT";
-    return bestName;
-  }
+  // GELB: rot und gruen hoch, blau deutlich niedriger
+  if (r > 100 && g > 100 && b < 80 && r > b * 1.4f && g > b * 1.4f) return "GELB";
 
-  // Keine Farbe kalibriert -> Default-Hue-Heuristik als Fallback.
-  float h = cur.h;
-  if (h < 15.0f || h >= 345.0f) return "ROT";
-  if (h < 70.0f)  return "GELB";
-  if (h < 170.0f) return "GRUEN";
-  if (h < 260.0f) return "BLAU";
+  if (r > g * RATIO_RED && r > b * RATIO_RED) return "ROT";
+  if (g > r * RATIO_GB && g > b * RATIO_GB) return "GRUEN";
+  if (b > r * RATIO_GB && b > g * RATIO_GB) return "BLAU";
   return "UNBEKANNT";
 }
 
 void colorSetup() {
+  // Bus-Mutex zuerst: colorSetup() und distSetup() teilen sich denselben Bus.
+  i2cBusInit();
   Wire.begin(SDA_PIN, SCL_PIN);
+  if (!i2cBusLock(100)) {
+    Serial.println("[SENSOR] I2C-Bus belegt -> colorSetup übersprungen");
+    colorSem = xSemaphoreCreateBinary();
+    if (colorSem) xSemaphoreGive(colorSem);
+    return;
+  }
   colorSensorOk = tcs.begin();
+  i2cBusUnlock();
   if (colorSensorOk) {
     Serial.println("[SENSOR] TCS34725 gefunden");
   } else {
     Serial.println("[SENSOR] TCS34725 NICHT gefunden! (Trotzdem gestartet)");
   }
-  colorSem = xSemaphoreCreateMutex();
+  colorSem = xSemaphoreCreateBinary();
   if (colorSem) xSemaphoreGive(colorSem);
 }
 
 void resetI2CBus() {
+  i2cBusLock(200);
   pinMode(SDA_PIN, OUTPUT);
   pinMode(SCL_PIN, OUTPUT);
   for (int i = 0; i < 9; i++) {
@@ -121,6 +83,7 @@ void resetI2CBus() {
   pinMode(SDA_PIN, INPUT);
   pinMode(SCL_PIN, INPUT);
   Wire.begin(SDA_PIN, SCL_PIN);
+  i2cBusUnlock();
 }
 
 void getCurrentColorName(char* out, size_t outLen) {
@@ -132,33 +95,42 @@ void getCurrentColorName(char* out, size_t outLen) {
   }
 }
 
+// Anzahl der Recovery-Versuche, danach ruht der Sensor (kein Log-Spam und
+// kein wiederholtes resetI2CBus(), das den VL53L0X mit zerstoeren wuerde).
+static constexpr uint8_t COLOR_RECOVERY_TRIES = 3;
+
 void colorSensorTask(void* parameter) {
   TickType_t lastWakeTime = xTaskGetTickCount();
   const TickType_t period = pdMS_TO_TICKS(150);
   int failCount = 0;
+  uint8_t recoveries = 0;
 
   while (true) {
     if (colorSensorOk) {
       uint16_t rawR = 0, rawG = 0, rawB = 0, rawC = 0;
+      // I2C-Sequenz gegen den VL53L0X (Core 1) absichern.
+      if (!i2cBusLock(30)) { vTaskDelayUntil(&lastWakeTime, period); continue; }
       tcs.getRawData(&rawR, &rawG, &rawB, &rawC);
-      // rawSensor* sind volatile (gelesen ausserhalb des Tasks ohne Semaphore)
-      // -> atomar ueber Mutex setzen
-      if (xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) == pdTRUE) {
-        rawSensorR = rawR; rawSensorG = rawG; rawSensorB = rawB; rawSensorC = rawC;
-        xSemaphoreGive(colorSem);
-      }
+      i2cBusUnlock();
+
+      rawSensorR = rawR; rawSensorG = rawG; rawSensorB = rawB; rawSensorC = rawC;
 
       if (rawR == 0 && rawG == 0 && rawB == 0 && rawC == 0) {
         failCount++;
         if (failCount >= 3) {
           colorSensorOk = false;
+          Serial.println("[SENSOR] Farbsensor liefert 0-Werte -> Recovery");
         }
       } else {
         failCount = 0;
+
         int r = calibrateColor(rawR, config.blackR, config.whiteR);
         int g = calibrateColor(rawG, config.blackG, config.whiteG);
         int b = calibrateColor(rawB, config.blackB, config.whiteB);
+
         const char* detected = detectColorName(r, g, b);
+
+        // Timeout statt portMAX_DELAY - verhindert Task-Hang
         if (xSemaphoreTake(colorSem, pdMS_TO_TICKS(100)) == pdTRUE) {
           sensorR = r;
           sensorG = g;
@@ -167,15 +139,25 @@ void colorSensorTask(void* parameter) {
           xSemaphoreGive(colorSem);
         }
       }
-    } else {
-      Serial.println("[SENSOR] Recovery attempt...");
+    } else if (recoveries < COLOR_RECOVERY_TRIES) {
+      recoveries++;
+      Serial.printf("[SENSOR] Recovery-Versuch %d/%d\n", recoveries, COLOR_RECOVERY_TRIES);
       resetI2CBus();
-      colorSensorOk = tcs.begin();
+      if (i2cBusLock(50)) {
+        colorSensorOk = tcs.begin();
+        i2cBusUnlock();
+      }
       if (colorSensorOk) {
         Serial.println("[SENSOR] Recovered!");
         failCount = 0;
+        recoveries = 0;
       }
-      vTaskDelay(pdMS_TO_TICKS(5000));
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      lastWakeTime = xTaskGetTickCount();
+    } else {
+      // Recovery erschoepft: nicht weiter den Bus anfassen. Der
+      // Distanzsensor bleibt so ueber lebensfaehig.
+      vTaskDelay(pdMS_TO_TICKS(2000));
       lastWakeTime = xTaskGetTickCount();
     }
     vTaskDelayUntil(&lastWakeTime, period);

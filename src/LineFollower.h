@@ -1,4 +1,4 @@
-// EduBot V1.3 - Linienfolge-Modul (Follow-Line via TCS34725 Schwarz-Erkennung)
+// EduBot V2 - Linienfolge-Modul (Follow-Line via TCS34725 Schwarz-Erkennung)
 #pragma once
 
 #include <Arduino.h>

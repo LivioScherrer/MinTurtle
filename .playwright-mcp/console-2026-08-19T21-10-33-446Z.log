@@ -1,8 +1,0 @@
-[     236ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8772/favicon.ico:0
-[   41122ms] [LOG] [SLALOM] UI-Phase IDLE -> PAIRED @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[   41122ms] [LOG] [SLALOM] UI-Phase PAIRED -> BUILD @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[   54618ms] [LOG] [SLALOM] UI-Phase BUILD -> COUNTDOWN @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[   59040ms] [LOG] [SLALOM] UI-Phase COUNTDOWN -> RACE @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[   59041ms] [LOG] [SLALOM] UI-Phase RACE -> DONE @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[   66642ms] [LOG] [SLALOM] UI-Phase DONE -> BUILD @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[   66643ms] [LOG] [SLALOM] UI-Phase BUILD -> PAIRED @ http://127.0.0.1:8772/Edu_V1.3.html:3174

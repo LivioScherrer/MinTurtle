@@ -1,7 +1,0 @@
-[    7506ms] [LOG] [SLALOM] UI-Phase IDLE -> PAIRED @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[    7506ms] [LOG] [SLALOM] UI-Phase PAIRED -> BUILD @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[    9616ms] [LOG] [SLALOM] UI-Phase BUILD -> COUNTDOWN @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[    9616ms] [LOG] [SLALOM] UI-Phase COUNTDOWN -> RACE @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[    9616ms] [LOG] [SLALOM] UI-Phase RACE -> BUILD @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[    9616ms] [LOG] [SLALOM] UI-Phase BUILD -> DONE @ http://127.0.0.1:8772/Edu_V1.3.html:3174
-[    9617ms] [LOG] [SLALOM] UI-Phase DONE -> BUILD @ http://127.0.0.1:8772/Edu_V1.3.html:3174

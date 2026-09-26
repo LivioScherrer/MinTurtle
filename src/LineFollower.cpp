@@ -1,11 +1,11 @@
-// EduBot V1.3 - Linienfolge-Implementierung
+// EduBot V2 - Linienfolge-Implementierung
 // Folgt einer farbigen Linie (alles ausser WEISS) auf hellem Untergrund mit dem TCS34725.
 // Da nur ein einzelner Farbsensor vorhanden ist, wird eine Such-Strategie
 // verwendet: fahre geradeaus solange Linie erkannt wird; beim Verlust
 // der Linie: kurzes Stoppen, dann abwechselnd rechts/links Such-Drehungen.
 // Laeuft nicht-blockierend ueber lineFollowerTick() in der Main-Loop.
-// Beschleunigung/Bremsen uebernimmt AccelStepper (GLOBAL_ACCEL_RATE) ->
-// kein Wheelie, kein Schraeglauf, beide Stepper bleiben synchron.
+// Feste Geschwindigkeit ohne Beschleunigung: die Pulse erzeugt der Motor-Task
+// auf Core 0 selbststaendig, hier werden nur Ziel-Geschwindigkeiten gesetzt.
 #include "LineFollower.h"
 #include "Motor.h"
 #include "ColorSensor.h"
@@ -59,7 +59,7 @@ namespace {
     return true;
   }
 
-  // Setzt nur die Ziel-Geschwindigkeiten. AccelStepper macht die Rampe intern.
+  // Setzt nur die Ziel-Geschwindigkeiten. Die Pulse macht der Motor-Task.
   void motorsForward(float v) {
     setMotorSpeed(0, v);
     setMotorSpeed(1, v);
@@ -91,13 +91,12 @@ void lineFollowerStart() {
 
 void lineFollowerStop() {
   if (!lineFollowerActive) return;
-  // Sanft herunter rampen (AccelStepper), blockierend max 800ms
+  // Motoren stoppen, kurz warten bis der Motor-Task alles verarbeitet (max 800ms)
   motorsOff();
   uint32_t start = millis();
-  while ((stepperL.isRunning() || stepperR.isRunning()) && millis() - start < 800) {
-    motorRun();
+  while (motorStillRunning() && millis() - start < 800) {
     bleProcessEvents();
-    delay(10);
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
   lineFollowerActive = false;
   lsState = LS_IDLE;
@@ -187,7 +186,4 @@ void lineFollowerTick() {
       break;
     }
   }
-
-  // Stepper ausfuehren (ein Schritt wenn faellig, mit Rampe)
-  motorRun();
 }

@@ -22,13 +22,13 @@ enum ProgOp : uint8_t {
   OP_UNTIL      // C<c>(body)  Body wiederholen bis Farbe c sichtbar
 };
 
-// Sensor-Indizes fuer E/C-Slots: 0-3 Farben, 4 = IR-Sensor blockiert (High), 5 = IR-Sensor frei (Low)
+// Sensor-Indizes fuer E/C-Slots: 0-3 Farben, 4 = Distanz NAH (blockiert), 5 = Distanz FREI
 constexpr uint8_t PROG_COLOR_ROT   = 0;
 constexpr uint8_t PROG_COLOR_GELB  = 1;
 constexpr uint8_t PROG_COLOR_GRUEN = 2;
 constexpr uint8_t PROG_COLOR_BLAU  = 3;
-constexpr uint8_t PROG_SENSOR_IR_HIGH = 4;  // Hindernis erkannt
-constexpr uint8_t PROG_SENSOR_IR_LOW  = 5;  // Weg frei
+constexpr uint8_t PROG_SENSOR_IR_HIGH = 4;  // Hindernis erkannt (DIST < OBSTACLE_DIST_MM)
+constexpr uint8_t PROG_SENSOR_IR_LOW  = 5;  // Weg frei (DIST >= Schwelle / kein Wert)
 
 // Einfacher Baustein (auch Loop-Body: keine verschachtelten Loops)
 struct ProgBodyStep {

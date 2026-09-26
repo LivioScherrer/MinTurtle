@@ -1,4 +1,4 @@
-// EduBot V1.3 - BLE Manager Implementierung 
+// EduBot V2 - BLE Manager Implementierung 
 #include "BLEManager.h"
 #include "ColorSensor.h"
 #include <stdarg.h>
@@ -54,7 +54,7 @@ void bleSetup() {
     BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
   );
   statusChar->addDescriptor(new BLE2902());
-  statusChar->setValue("EduBot V1.3");
+  statusChar->setValue("EduBot V2");
 
   service->start();
 
@@ -63,6 +63,27 @@ void bleSetup() {
   advertising->setScanResponse(true);
   advertising->start();
   Serial.println("[BLE] Werbung gestartet (EduBot)");
+}
+
+// USB Serial Monitor: gleiche Befehle wie per BLE (non-blocking,
+// daher auch in blockierenden Spiel-Moves sicher aufrufbar).
+static void serialPoll() {
+  static char buf[256];
+  static size_t len = 0;
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (len > 0) {
+        buf[len] = '\0';
+        handleCommand(buf);
+        len = 0;
+      }
+    } else if (len < sizeof(buf) - 1) {
+      buf[len++] = c;
+    } else {
+      len = 0;  // Ueberlauf: Zeile verwerfen
+    }
+  }
 }
 
 void bleProcessEvents() {
@@ -84,6 +105,9 @@ void bleProcessEvents() {
         break;
     }
   }
+
+  // Befehle vom Serial Monitor (USB) – gleiche Syntax wie per BLE
+  serialPoll();
 }
 
 void sendStatus(const char* msg) {

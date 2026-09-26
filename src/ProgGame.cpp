@@ -8,6 +8,7 @@
 #include "Drive.h"
 #include "ColorSensor.h"
 #include "EspNow.h"
+#include "DistanceSensor.h"
 #include <esp_task_wdt.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -22,12 +23,12 @@ constexpr uint32_t PROG_STEP_GAP_MS = 120;  // Pause zwischen Top-Level-Bloecken
 constexpr uint32_t PROG_LOOP_GAP_MS = 100;  // Pause zwischen Loop-Durchlaeufen
 constexpr uint32_t SLALOM_TARGET_HOLD_MS = 250;  // Zielfarbe stabil sehen, bevor der Slalom stoppt
 
-static const char* const PROG_COLOR_NAMES[6] = { "ROT", "GELB", "GRUEN", "BLAU", "IR-HIGH", "IR-LOW" };
+static const char* const PROG_COLOR_NAMES[6] = { "ROT", "GELB", "GRUEN", "BLAU", "NAH", "FREI" };
 
-// IR-Sensor lesen: LM393-Modul ist aktiv-low (OUT = LOW bei Hindernis)
-// -> irBlocked() = true bedeutet: Hindernis erkannt (wie IR:1 im Web-UI)
+// Distanz-Hindernis: VL53L0X-Messwert < OBSTACLE_DIST_MM (siehe DistanceSensor.h).
+// -> distBlocked() = true bedeutet: Hindernis erkannt (wie NAH im Web-UI)
 static inline bool irBlocked() {
-  return !digitalRead(IR_PIN);
+  return distBlocked();
 }
 
 // =====================================================
@@ -44,10 +45,10 @@ static int8_t   colQuickIdx   = -1;
 static void colorPollReset() { colMatchStart = 0; colMatchIdx = -1; }
 static void colorQuickReset() { colQuickStart = 0; colQuickIdx = -1; }
 
-// true wenn die Sensor-Bedingung (Farbe 0-3 oder IR 4/5) erfuellt ist.
+// true wenn die Sensor-Bedingung (Farbe 0-3 oder Distanz 4/5) erfuellt ist.
 // Farbe: seit >= 40ms stabil sichtbar (kurze Haltezeit, damit selbst kurze
 // Fahrten im Bis-Modus genug Zeit haben zum Erkennen).
-// IR: direkter digitaler Read (keine Haltezeit noetig).
+// Distanz: letzter VL53L0X-Wert gegen OBSTACLE_DIST_MM (keine Haltezeit noetig).
 static bool sensorPoll(uint8_t idx) {
   if (idx >= PROG_SENSOR_IR_HIGH) return (irBlocked() == (idx == PROG_SENSOR_IR_HIGH));
   if (!colorSensorOk) return false;
@@ -61,7 +62,7 @@ static bool sensorPoll(uint8_t idx) {
 // Sofort-Check ohne Haltezeit: 1x Lesung reicht.
 // Genutzt fuer Sensor-Bedingung waehrend der Bewegung (Sensor muss MOTOREN
 // stoppen BEVOR der Roboter darueber hinausfaehrt -> Haltezeit sei 0.
-// IR: direkter digitaler Read.
+// Distanz: letzter VL53L0X-Wert.
 static bool sensorHitImmediate(uint8_t idx) {
   if (idx >= PROG_SENSOR_IR_HIGH) return (irBlocked() == (idx == PROG_SENSOR_IR_HIGH));
   if (!colorSensorOk) return false;
@@ -154,8 +155,9 @@ static int32_t degToSteps(int16_t deg) {
 // Rueckgabe: true wenn die Ziel-Farbe die Fahrt beendet hat ODER ROT gesehn.
 // =====================================================
 static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
-  prepPositionMove(stepperL, sL * (int32_t)config.leftSign, speed);
-  prepPositionMove(stepperR, sR * (int32_t)config.rightSign, speed);
+  (void)speed;   // Feste Geschwindigkeit - der Motor-Task faehrt immer FIXED_DRIVE_SPEED.
+  prepPositionMove(0, sL * (long)config.leftSign);
+  prepPositionMove(1, sR * (long)config.rightSign);
   // Slalom: merken, ob wir schon AUF der Zielfarbe starten. Dann erst nach
   // einem Weg-Gang wieder triggern (Flanken-Logik, siehe slalomHitPoll).
   if (colorCheck >= 0 && colorCheck < (int8_t)PROG_SENSOR_IR_HIGH) {
@@ -167,9 +169,9 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
   }
   uint32_t lastPoll = 0;
   bool colorHit = false;
-  while (stepperL.distanceToGo() != 0 || stepperR.distanceToGo() != 0) {
+  while (motorStillRunning()) {   // Pulse erzeugt der Motor-Task auf Core 0
     esp_task_wdt_reset();
-    if (!gameAllowsMotorRun()) { stepperL.stop(); stepperR.stop(); break; }
+    if (!gameAllowsMotorRun()) { stopMotors(); break; }
     if (millis() - lastPoll >= 20) {
       lastPoll = millis();
       // Globaler ROT-Stop: NUR im Solo-Programmiermodus (GAME_PROG).
@@ -180,8 +182,7 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
       // Treffer (slalomFinished=false) abbrechen.
       if (currentGame != GAME_SLALOM && colorPollQuick(PROG_COLOR_ROT)) {
         colorHit = true;
-        stepperL.stop();
-        stepperR.stop();
+        stopMotors();
         // Programm komplett abbrechen
         progActive = false;
         currentGame = GAME_NONE;
@@ -201,24 +202,11 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
         if (hit) {
           Serial.printf("[PROG] sensorHit %s -> STOP\n", PROG_COLOR_NAMES[(uint8_t)colorCheck]);
           colorHit = true;
-          stepperL.stop();
-          stepperR.stop();
+          stopMotors();
           break;
         }
       }
     }
-    stepperL.run();
-    stepperR.run();
-    bleProcessEvents();
-    espNowProcessEvents();
-    vTaskDelay(pdMS_TO_TICKS(5));
-  }
-  // sanft auslaufen lassen
-  uint32_t stop = millis();
-  while ((stepperL.isRunning() || stepperR.isRunning()) && millis() - stop < 800) {
-    esp_task_wdt_reset();
-    stepperL.run();
-    stepperR.run();
     bleProcessEvents();
     espNowProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(5));
@@ -247,7 +235,7 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
       return false;
     case OP_WAIT: {
       if (val < 0) {
-        // Bedingtes Warten: bis Sensor == target (|val|-1), Farbe oder IR (4/5)
+        // Bedingtes Warten: bis Sensor == target (|val|-1), Farbe oder Distanz (4/5)
         uint8_t target = (uint8_t)(-(int)val - 1);
         colorPollReset();
         uint32_t start = millis();
@@ -276,7 +264,7 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
 }
 
 // Prueft ob der Sensor-Wert-Slot erfuellt ist (1) oder nicht (0).
-// Wird fuer OP_REPEAT im Sensor-Modus genutzt. IR: 4=blockiert, 5=frei.
+// Wird fuer OP_REPEAT im Sensor-Modus genutzt. Distanz: 4=NAH/blockiert, 5=FREI.
 static bool sensorMatches(uint8_t idx) {
   if (idx >= PROG_SENSOR_IR_HIGH) return (irBlocked() == (idx == PROG_SENSOR_IR_HIGH));
   if (!colorSensorOk) return false;

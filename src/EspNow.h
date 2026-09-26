@@ -1,4 +1,4 @@
-// EduBot V1.3 - ESP-NOW (Multiplayer Rennen)
+// EduBot V2 - ESP-NOW (Multiplayer Rennen)
 #pragma once
 
 #include <Arduino.h>

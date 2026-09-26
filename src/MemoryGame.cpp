@@ -1,4 +1,4 @@
-// EduBot V1.3 - Memory-Spiel Implementierung
+// EduBot V2 - Memory-Spiel Implementierung
 // Nutzt dieselben blockierenden Bewegungen wie Pfeil-Knobeln (gameDriveForward/Backward/TurnLeft/TurnRight)
 #include "MemoryGame.h"
 #include "GameEngine.h"

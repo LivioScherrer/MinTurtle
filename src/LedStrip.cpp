@@ -1,4 +1,5 @@
-// EduBot V1.3 - LED-Streifen-Modul (WS2812, 7 LEDs an GPIO 44)
+// EduBot V2 - LED-Streifen-Modul (WS2812, 7 LEDs an GPIO 8, siehe LedStrip.h)
+// PCB Edu_V2.2: Net D9 = GPIO8.
 // Boot-Pattern, Status-LEDs und Zielfarben-Anzeige
 #include "LedStrip.h"
 
@@ -25,7 +26,7 @@ void ledStripSetup() {
   ledStrip.begin();
   ledStrip.setBrightness(40);
   ledStrip.show();
-  Serial.println("[LED] WS2812 auf GPIO 44 initialisiert (7 LEDs)");
+  Serial.println("[LED] WS2812 auf GPIO 8 initialisiert (7 LEDs)");
 
   // Boot-Pattern: Regenbogen-Durchlauf
   const uint8_t bootColors[7][3] = {

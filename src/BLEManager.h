@@ -1,4 +1,4 @@
-// EduBot V1.3 - BLE Manager
+// EduBot V2 - BLE Manager
 // GATT Server + Status-Notify + Command-Queue
 #pragma once
 

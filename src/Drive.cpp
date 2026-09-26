@@ -1,8 +1,9 @@
-// EduBot V1.3 - Drive-Implementierung (WASD / Touch)
+// EduBot V2 - Drive-Implementierung (WASD / Touch)
 // Feste Geschwindigkeit aus Motor.h - keine Einstellung moeglich.
 #include "Drive.h"
 #include "Motor.h"
 #include "Config.h"
+#include "GameEngine.h"  // driveLockedByGame()
 
 bool keyW = false;
 bool keyA = false;
@@ -23,9 +24,6 @@ void driveHardStop() {
   speedL = 0.0;
   speedR = 0.0;
   stopMotors();
-}
-
-void driveResetDt() {
 }
 
 void driveUpdate() {
@@ -64,6 +62,4 @@ void driveUpdate() {
   setMotorSpeed(1, targetR);
   speedL = targetL;
   speedR = targetR;
-
-  motorRun();
 }

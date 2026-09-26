@@ -1,4 +1,4 @@
-// EduBot V1.3 - ESP-NOW Implementierung
+// EduBot V2 - ESP-NOW Implementierung
 // Wi-Fi-Callbacks duerfen KEINE BLE-APIs oder blockierenden Lib-Aufrufe
 // enthalten (Stack-Overflow / Guru Meditation). Alle Aktionen werden in
 // eine FreeRTOS-Queue gepostet und in der Main-Loop thread-sicher ausgefuehrt.

@@ -1,4 +1,4 @@
-// EduBot V1.3 - Farbsensor-Modul (TCS34725)
+// EduBot V2 - Farbsensor-Modul (TCS34725)
 #pragma once
 
 #include <Arduino.h>

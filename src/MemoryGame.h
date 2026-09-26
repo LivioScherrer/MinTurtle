@@ -1,4 +1,4 @@
-// EduBot V1.3 - Memory-Spiel (A1)
+// EduBot V2 - Memory-Spiel (A1)
 // Roboter zeigt Sequenz aus Bewegungen (gleich wie Pfeil-Knobeln), User wiederholt per Web-Buttons
 #pragma once
 
