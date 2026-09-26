@@ -2,32 +2,39 @@
 // Verdrahtung Edu_V2: SDA=GPIO5, SCL=GPIO6 (gemeinsamer Bus mit TCS34725).
 //
 // ------------------------------------------------------------------
-// WARUM DAS MODUL SO VORSICHTIG INITIALISIERT (auf Hardware erklaert)
+// WARUM DAS MODUL SO VORSICHTIG INITIALISIERT WIRD
 // ------------------------------------------------------------------
 // TCS34725 und VL53L0X haben BEIDE die Default-I2C-Adresse 0x29. Der
-// Adafruit-Treiber initialisiert den VL53L0X so:
-//     begin(TARGET):  DataInit @ 0x29 (im Treiber hart kodiert)
-//                     -> setAddress(TARGET)
+// Adafruit-Treiber wertet seinen Adressparameter aber zu spaet aus:
+//     begin(TARGET):  DataInit @ 0x29
+//                     -> setAddress(TARGET)          <- erst HIER wird umgezogen
 //                     -> GetDeviceInfo @ TARGET
-//                     -> StaticInit @ TARGET   <- liest die NVM-Daten
-// Der NVM-Zugriff in StaticInit (ReferenceSpadCount, Good-SPAD-Map) laeuft also
-// auf TARGET. Antwortet dort der TCS34725 ebenfalls, sind die I2C-Reads
-// verfaelscht (zwei Geraete auf einer Adresse). Folge:
+//                     -> StaticInit @ TARGET
+// DataInit ist der Teil, der die NVM-Kalibrierdaten AUSLESET. Laeuft das
+// noch auf 0x29, antwortet dort der TCS34725 mit und die Reads kommen
+// verfaelscht zurueck. Folge:
 //   * ReferenceSpadCount wird ungueltig (real: 0x7FFFFF77, also "alle Bits")
 //   * StaticInit startet die optische Ref-SPAD-Kalibrierung und scheitert
 //     mit -50 (VL53L0X_ERROR_REF_SPAD_INIT)
 //   * die Phasenkalibrierung wird nie ausgefuehrt
 //   * danach meldet jede Messung Range-Status 4 (PhaseFail)
 //
-// ZWEI REGELN DARAUS (beide muessen eingehalten werden):
-//  1. Waehrend der Initialisierung darf 0x29 dem VL53L0X allein gehoeren.
-//     distSetup() prueft das und nimmt je nach Lage den 0x29- oder den
-//     0x30-Pfad (siehe distInitAtTarget).
-//  2. setMeasurementTimingBudgetMicroSeconds() darf NICHT aufgerufen werden:
+// LOESUNG (siehe patch_vl53l0x.py): der Patch verschiebt den Adresswechsel
+// VOR DataInit. Damit laeuft der komplette Init einschliesslich aller
+// NVM-Zugriffe auf 0x30, wo der VL53L0X allein antwortet. Der TCS34725
+// bleibt unangetastet auf 0x29. Ein Umstecken oder I2C-Multiplexer ist
+// dafuer nicht noetig.
+//
+// ZWEI WEITERE REGELN:
+//  1. setMeasurementTimingBudgetMicroSeconds() darf NICHT aufgerufen werden:
 //     die Funktion fuehrt intern perform_phase_calibration() aus und SCHREIBT
-//     das Ergebnis ins NVM. Mit verdraechtigen Ausgangsdaten wird damit
-//     dauerhaft eine kaputte Phasenkalibrierung abgelegt. Der Standardwert
-//     der Library (33 ms) ist zu verwenden.
+//     das Ergebnis ins NVM. Der Standardwert der Library (33 ms) ist zu
+//     verwenden.
+//  2. Nach fehlgeschlagenem StaticInit darf NICHT gemessen werden: die
+//     Skalierungsparameter des Treibers sind dann 0 und die Messfunktionen
+//     teilen durch sie (Guru Meditation / IntegerDivideByZero). Deshalb
+//     setzen distInvalidate() und die Pflicht von s_ok false jeden Zustand,
+//     in dem lox ohne gueltiges StaticInit weiterlaueft.
 //
 // ZUSAETZLICH: lox ist ein statisches Objekt, und get_info_from_device() liest
 // die NVM-Daten nur EIN MAL pro Instanz (ReadDataFromDeviceDone). Ein einmal
@@ -36,10 +43,9 @@
 // (loxResetInstance() - dort steht auch, warum keine Zuweisung erlaubt ist).
 //
 // ZUSTAENDIG (auf dem Geraet verifiziert):
-//   Farbsensor ausgesteckt -> 0x29 exklusiv -> Init erfolgreich,
-//   Continuous-Modus, 46/46 gueltige Messungen, 191-198 mm bei 20 cm Ziel.
-//   Farbsensor angesteckt -> 0x29 doppelt belegt -> nur Notpfad, ~10 % Ausbeute
-//   (siehe README: I2C-Multiplexer oder getrennte Busse noetig).
+//   Init erfolgreich ueber 0x30, Continuous-Modus, 46/46 gueltige Messungen,
+//   191-198 mm bei 20 cm Ziel, Farbsensor gleichzeitig an 0x29 aktiv.
+//   Sollte begin() mit -50 scheitern (NVM beschaedigt), DISTREF senden.
 #pragma once
 
 #include <Arduino.h>
@@ -51,9 +57,11 @@
 // Intervall fuer automatische Web-Meldungen (DIST:<mm>)
 constexpr uint32_t DIST_NOTIFY_MS = 500;
 
-// Defaults (aktuelle Werte stehen in config.obsDistMM/obsRelMM, NVS-persistent).
-constexpr int16_t OBSTACLE_DIST_MM = 100;
-constexpr int16_t OBSTACLE_RELEASE_MM = 130;
+// Die Hindernisschwellen liegen NICHT hier, sondern in
+// config.obsDistMM / config.obsRelMM (NVS-persistent, per OBSDIST:/OBSREL:)
+// - siehe Config.h und distBlocked(). Frueher standen hier zwei Konstanten
+// (OBSTACLE_DIST_MM / OBSTACLE_RELEASE_MM), die aber nirgends ausgewertet
+// wurden: wer sie aenderte, aenderte nichts.
 
 // ACHTUNG: KEIN setMeasurementTimingBudgetMicroSeconds() aufrufen.
 // Diese Adafruit/ST-Funktion fuehrt intern VL53L0X_perform_phase_calibration()
@@ -96,6 +104,34 @@ bool distCalibrateOffset(int16_t trueMM);
 // Aktueller Offset / zuruecksetzen
 int16_t distOffsetMM();
 void distClearOffset();
+
+// Ref-SPAD-Kalibrierung gezielt erneut ausfuehren (Befehl DISTREF).
+//
+// Noetig, wenn begin() an -50 (REF_SPAD_INIT) scheitert: die NVM-Ref-SPAD-
+// Daten sind dann unbrauchbar, und genau diese Kalibrierung schreibt sie neu.
+// Sie braucht ein geeignetes Ziel - weisse, matte Flaeche auf ~20-30 cm,
+// nicht in direkter Sonne - und dauert einige Sekunden. War sie erfolgreich,
+// wird der Sensor danach vollstaendig neu initialisiert und ist wieder
+// messbereit. Rueckgabe: 0 = erfolgreich, sonst ST-Fehlercode.
+//
+// ACHTUNG: blockiert sekundenlang und haelt den I2C-Bus. Nicht direkt aus
+// dem Kommando-Pfad rufen - dort distRefSpadRequest() benutzen.
+int distRefSpadCalibrate();
+
+// DISTREF asynchron anstossen. Die Kalibrierung dauert mehrere Sekunden;
+// direkt aus handleCommand() aufgerufen wuerde den Loop-Task fuer laenger
+// als die Task-WDT-Grenze (10 s) blockieren und einen Panic ausloesen.
+// Stattdessen startet distRefSpadRequest() einen eigenen Task und kehrt
+// sofort zurueck. distRefSpadService() (in loop() aufrufen) meldet das
+// Ergebnis per sendStatus, sobald es fertig ist.
+// Rueckgabe: false, wenn bereits eine Kalibrierung laeuft.
+bool distRefSpadRequest();
+
+// Ergebnis einer per distRefSpadRequest() angestossenen Kalibrierung
+// auswerten und per sendStatus melden. Blockiert nicht.
+void distRefSpadService();
+
+
 
 // Letzter gueltiger Messwert (Cache aus distTick), -1 = kein Wert
 int16_t distLastMM();

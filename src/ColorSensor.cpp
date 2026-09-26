@@ -72,7 +72,14 @@ void colorSetup() {
 }
 
 void resetI2CBus() {
-  i2cBusLock(200);
+  // Sperre MUSS halten: nine Clock-Pulse und das Wire.begin() wuerden
+  // sonst mitten in einer VL53L0X-Transaktion den Bus umbauen. Ohne
+  // Sperre zu arbeiten (Rueckgabewert ignorieren) ist genau der Fehler,
+  // den I2CBus eigentlich verhindern soll - und ausgerechnet dann, wenn
+  // der Distanzsensor den Bus laenger haelt, wird er praktisch.
+  if (!i2cBusLock(200)) {
+    return;
+  }
   pinMode(SDA_PIN, OUTPUT);
   pinMode(SCL_PIN, OUTPUT);
   for (int i = 0; i < 9; i++) {
