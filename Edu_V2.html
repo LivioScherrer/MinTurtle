@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>EduBot V1.3</title>
+  <title>EduBot V2</title>
   <style>
     /* =========================================================
        TOKENS - hand-drawn / sketch style
@@ -523,7 +523,7 @@
       transform: rotate(45deg);
     }
 
-    /* IR-Sensor Badge: faerbt sich je nach Zustand (0=frei, 1=Hindernis) */
+    /* DIST-Badge (VL53L0X): gruen=frei (>=100mm), rot=Hindernis (<100mm) */
     #irBadge {
       transition: background .15s var(--ease-snap), color .15s var(--ease-snap);
     }
@@ -2535,8 +2535,8 @@
       <div class="header">
         <div class="header-l"><span class="header-l-text"><span>Edu</span>Bot</span></div>
         <div class="header-r">
-          <div class="conn-badge" id="irBadge" title="IR-Sensor auf Pin D8" style="background:rgba(255,255,255,.05);">
-            <span style="font-size:11px;opacity:.75;">IR</span>
+          <div class="conn-badge" id="irBadge" title="VL53L0X Distanz (mm), Hindernis < 100mm" style="background:rgba(255,255,255,.05);">
+            <span style="font-size:11px;opacity:.75;">DIST</span>
             <span id="irStatus" style="font-family:'Patrick Hand',monospace;min-width:14px;display:inline-block;">–</span>
           </div>
           <div class="conn-badge">
@@ -2637,6 +2637,17 @@
             <div>
               <div class="tile-ttl">Farb-Kalibrierungs-Assistent</div>
               <div class="tile-desc">Schritt für Schritt Schwarz, Weiß und Farben kalibrieren</div>
+            </div>
+          </div>
+          <div class="tile" data-view="dist" data-cat="setup">
+            <div class="tile-ic" style="background:#e9f4ec;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#2f6b4a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12h18M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" />
+                <path d="M7 5v14M17 5v14" />
+              </svg></div>
+            <div>
+              <div class="tile-ttl">Distanz-Sensor</div>
+              <div class="tile-desc">Stopp-/Frei-Abstand einstellen (VL53L0X)</div>
             </div>
           </div>
         </div>
@@ -2990,7 +3001,47 @@
           <div class="feedback-msg" id="progFeedback"></div>
         </div>
       </div>
-      <button type="button" class="help-fab" onclick="openHelp('progSteps')" title="Anleitung">?</button>
+          <button type="button" class="help-fab" onclick="openHelp('progSteps')" title="Anleitung">?</button>
+    </div>
+
+
+    <div id="view-dist" class="view game-view">
+      <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
+        <div class="gv-title">Distanz-Sensor</div>
+        <div class="conn-dot" id="distConnDot"></div>
+      </div>
+      <div class="game-body">
+        <div class="arena">
+          <div class="game-title">Distanz-Sensor (VL53L0X)</div>
+          <div class="game-desc">Aktuell: <b id="distLive">--</b> &nbsp;|&nbsp; NAH = Roboter stoppt / wartet (Code-Bausteine E4/E5).</div>
+          <div class="mem-status" id="distStatus">Noch nicht abgefragt.</div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
+            <span style="font-weight:700;min-width:140px;">Stopp unter (mm):</span>
+            <input type="number" id="distStop" class="quiz-input" style="max-width:130px;min-width:0;" min="50" max="1200" step="10" value="100">
+            <button class="btn btn-primary" onclick="distSetStop()">Setzen</button>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
+            <span style="font-weight:700;min-width:140px;">Frei ab (mm):</span>
+            <input type="number" id="distFree" class="quiz-input" style="max-width:130px;min-width:0;" min="50" max="1200" step="10" value="130">
+            <button class="btn btn-primary" onclick="distSetFree()">Setzen</button>
+          </div>
+          <div class="game-desc">Frei-Abstand muss ueber Stopp-Abstand liegen (Hysterese gegen Flackern). Wird im Roboter gespeichert. Unter ~50 mm ist der Sensor blind — Schwellen bitte darueber.</div>
+          <div class="game-title" style="margin-top:8px;">Offset kalibrieren</div>
+          <div class="game-desc">Weisses Blatt exakt im Ziel-Abstand ruhig vor den Sensor halten, dann Kalibrieren. Gleicht Bauteil-Streuung aus (Datenblatt-Verfahren).</div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
+            <span style="font-weight:700;min-width:140px;">Ziel-Abstand (mm):</span>
+            <input type="number" id="distCalTarget" class="quiz-input" style="max-width:130px;min-width:0;" min="50" max="500" step="10" value="100">
+            <button class="btn btn-primary" onclick="distCalibrate()">Kalibrieren</button>
+          </div>
+          <div class="game-title" style="margin-top:8px;">Diagnose</div>
+          <div class="game-desc">Prueft Sensor-Adresse, Modus, Range-Status und Fehlerzaehler. Bei "DIST:--" hier klicken und die Ausgabe im seriellen Monitor (115200) lesen.</div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
+            <button class="btn btn-primary" onclick="distDiag()">Diagnose abfragen</button>
+          </div>
+          <div class="feedback-msg" id="distDiagOut" style="text-align:left;white-space:pre-wrap;font-family:monospace;font-size:12px;"></div>
+          <div class="feedback-msg" id="distFeedback"></div>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -3073,6 +3124,8 @@ function updateConnectionUI(isConn, text) {
         document.querySelectorAll('.key-btn').forEach(b => b.classList.remove('active'));
       }
 
+      // DIST-Schwellen mit Hysterese, per OBSDIST=/OBSREL= vom Roboter gelernt.
+      let distStopMM = 100, distFreeMM = 130;
       function handleStatusMessage(msg) {
         if (msg.startsWith('COLOR:')) {
           const d = msg.substring(6).split(',');
@@ -3104,28 +3157,178 @@ function updateConnectionUI(isConn, text) {
           handleLineMessage(msg);
         } else if (msg.startsWith('SLALOM:')) {
           handleSlalomMessage(msg);
-        } else if (msg.startsWith('IR:')) {
-          // IR:0 = kein Hindernis (LOW), IR:1 = Hindernis erkannt (HIGH)
-          // IR:HB:x = periodischer Heartbeat (zeigt aktuellen Wert, auch wenn stabil)
-          const v = msg.includes('HB:') ? msg.substring(6) : msg.substring(3);
+        } else if (msg.startsWith('DIST:DIAG:')) {
+          // MUSS vor dem generischen 'DIST:'-Zweig stehen: 'DIST:DIAG:...'
+          // erfuellt 'startsWith("DIST:")' ebenfalls und wuerde dort
+          // als Messwert geparst (parseInt -> NaN -> Badge faelschlich frei).
+          // Praefix 'DIST:DIAG:' ist 10 Zeichen lang, die Nutzlast beginnt
+          // also bei Index 10.
+          renderDistDiag(msg.substring(10));
+        } else if (msg === 'DIST:DEBUG_DONE') {
+          distFeedback('Init-Debug beendet - Details im Serial-Monitor (115200).');
+        } else if (msg === 'DIST:SCAN_DONE') {
+          distFeedback('Bus-Scan beendet - Details im Serial-Monitor (115200).');
+        } else if (msg === 'DISTREF:RUN') {
+          distFeedback('Ref-SPAD-Kalibrierung laeuft - weisse Flaeche auf 20-30 cm ruhig halten, dauert einige Sekunden.');
+        } else if (msg === 'DISTREF:BUSY') {
+          distFeedback('Kalibrierung laeuft bereits.');
+        } else if (msg.startsWith('DISTREF:')) {
+          if (msg === 'DISTREF:OK') {
+            distFeedback('Ref-SPAD-Kalibrierung erfolgreich - Sensor wieder messbereit.');
+          } else {
+            distFeedback('Ref-SPAD-Kalibrierung FEHLGESCHLAGEN (' + msg.substring(8) +
+                         '). -50 = Ziel ungeeignet: weisse Flaeche auf 20-30 cm halten.');
+          }
+        } else if (msg.startsWith('DISTAUTO:')) {
+          distFeedback('Auto-Meldung ' + (msg.endsWith('ON') ? 'eingeschaltet' : 'ausgeschaltet') + '.');
+        } else if (msg.startsWith('DIST:')) {
+          // DIST:<mm> = VL53L0X Messwert, DIST:-- = ausser Reichweite/Fehler
+          // Badge: rot = Hindernis (<Stopp), gruen = frei (>Freigabe), dazwischen halten.
+          const v = msg.substring(5);
+          const liveEl = document.getElementById('distLive');
+          if (liveEl) liveEl.textContent = (v === '--') ? '--' : v + ' mm';
           const irEl = document.getElementById('irStatus');
           const irBadge = document.getElementById('irBadge');
           if (irEl && irBadge) {
-            if (v === '1') {
-              irEl.textContent = '1';
-              irBadge.classList.remove('ir-clear');
-              irBadge.classList.add('ir-blocked');
-              irBadge.title = 'IR: Hindernis erkannt';
-            } else if (v === '0') {
-              irEl.textContent = '0';
+            if (v === '--') {
+              irEl.textContent = '--';
               irBadge.classList.remove('ir-blocked');
               irBadge.classList.add('ir-clear');
-              irBadge.title = 'IR: frei';
+              irBadge.title = 'Distanz: ausser Reichweite';
             } else {
+              const mm = parseInt(v, 10);
               irEl.textContent = v;
+              // Nur ein echter Messwert darf den Badge aendern. Ein
+              // unparsbares v (z. B. eine spaeter ergaenzte, hier nicht
+              // abgefangene Nutzlast) darf den Hindernis-Zustand NICHT
+              // auf "frei" setzen - das waere ein stiller Fehlalarm.
+              if (isNaN(mm)) {
+                irBadge.title = 'Distanz: unlesbarer Messwert "' + v + '"';
+                return;
+              }
+              // Hysterese wie Firmware: <Stopp blockiert, >Freigabe frei, dazwischen halten.
+              if (mm < distStopMM) {
+                irBadge.classList.remove('ir-clear');
+                irBadge.classList.add('ir-blocked');
+                irBadge.title = 'Distanz: ' + v + ' mm - Hindernis erkannt';
+              } else if (mm > distFreeMM) {
+                irBadge.classList.remove('ir-blocked');
+                irBadge.classList.add('ir-clear');
+                irBadge.title = 'Distanz: ' + v + ' mm - frei';
+              } else {
+                // dazwischen: nur Text, Badge-Status bleibt (Hysterese)
+                irBadge.title = 'Distanz: ' + v + ' mm';
+              }
             }
           }
+        } else if (msg.startsWith('OBSDIST=')) {
+          const n = parseInt(msg.substring(8), 10);
+          if (!isNaN(n)) { distStopMM = n; distSetVal('distStop', n); }
+          distRefreshStatus();
+          distFeedback('Stopp-Abstand: ' + distStopMM + ' mm (gespeichert)');
+        } else if (msg.startsWith('OBSREL=')) {
+          const n = parseInt(msg.substring(7), 10);
+          if (!isNaN(n)) { distFreeMM = n; distSetVal('distFree', n); }
+          distRefreshStatus();
+          distFeedback('Frei-Abstand: ' + distFreeMM + ' mm (gespeichert)');
+        } else if (msg === 'OBSDIST:BAD' || msg === 'OBSREL:BAD') {
+          distFeedback('Ungueltig! 50...1200 mm, Frei-Abstand muss ueber Stopp-Abstand liegen.');
+        } else if (msg.startsWith('DISTCAL=')) {
+          distFeedback('Offset: ' + msg.substring(8) + ' mm (gespeichert)');
+        } else if (msg === 'DISTCAL:RUN') {
+          distFeedback('Messe ... Ziel ruhig halten!');
+        } else if (msg === 'DISTCAL:FAIL') {
+          distFeedback('Fehlgeschlagen: weisses Ziel im Ziel-Abstand ruhig halten (dunkle Umgebung hilft).');
+        } else if (msg === 'DISTCAL:BAD') {
+          distFeedback('Ziel muss zwischen 50 und 500 mm liegen.');
         }
+      }
+
+      function distSetVal(id, v) {
+        const el = document.getElementById(id);
+        if (el && v !== undefined && v !== null && v !== '') el.value = v;
+      }
+      function distFeedback(t) {
+        const el = document.getElementById('distFeedback');
+        if (el) { el.textContent = t; el.style.display = 'block'; }
+      }
+      function distRefreshStatus() {
+        const el = document.getElementById('distStatus');
+        if (el) el.textContent = 'Stopp unter ' + distStopMM + ' mm | Frei ab ' + distFreeMM + ' mm';
+      }
+      function distSetStop() {
+        const v = parseInt(document.getElementById('distStop').value, 10);
+        if (isNaN(v) || v < 50 || v > 1200) { distFeedback('Stopp muss zwischen 50 und 1200 mm liegen.'); return; }
+        sendCommand('OBSDIST:' + v);
+        distFeedback('Sende OBSDIST:' + v + ' ...');
+      }
+      function distSetFree() {
+        const v = parseInt(document.getElementById('distFree').value, 10);
+        if (isNaN(v) || v < 50 || v > 1200) { distFeedback('Frei muss zwischen 50 und 1200 mm liegen.'); return; }
+        sendCommand('OBSREL:' + v);
+        distFeedback('Sende OBSREL:' + v + ' ...');
+      }
+      function distCalibrate() {
+        const v = parseInt(document.getElementById('distCalTarget').value, 10);
+        if (isNaN(v) || v < 50 || v > 500) { distFeedback('Ziel muss zwischen 50 und 500 mm liegen (100 empfohlen).'); return; }
+        sendCommand('DISTCAL:' + v);
+        distFeedback('Messe ... Ziel bei ' + v + ' mm ruhig halten!');
+      }
+
+      // Diagnose anfordern. Ausfuehrliche Ausgabe kommt ueber Serial (115200),
+      // die kompakte Zeile hier zur schnellen Kontrolle.
+      function distDiag() {
+        const out = document.getElementById('distDiagOut');
+        if (out) out.textContent = 'frage ab ... (Serial-Log zeigt Details)';
+        sendCommand('DISTDIAG');
+      }
+
+      const DIST_STATUS_TEXT = ['Range OK', 'Sigma-Fehler', 'Signal-Fehler',
+                                'Min-Range-Fehler', 'Phasen-Fehler', 'Hardware-Fehler', 'kein Update'];
+
+      function renderDistDiag(payload) {
+        const p = payload.split(',');
+        const out = document.getElementById('distDiagOut');
+        if (p.length < 9 || out === null) {
+          if (out) out.textContent = 'Diagnose unlesbar: ' + payload;
+          return;
+        }
+        const ok = p[0] === '1';
+        const lastMM = parseInt(p[1], 10);
+        const lastRaw = parseInt(p[2], 10);
+        const status = parseInt(p[3], 10);
+        const offset = parseInt(p[4], 10);
+        const nRead = parseInt(p[5], 10);
+        const nNotReady = parseInt(p[6], 10);
+        const nStatusErr = parseInt(p[7], 10);
+        const nRangeErr = parseInt(p[8], 10);
+
+        const statusTxt = (status === 255) ? 'nie gemessen'
+                          : (DIST_STATUS_TEXT[status] || ('Status ' + status));
+        const lines = [];
+        lines.push('Sensor bereit   : ' + (ok ? 'ja' : 'NEIN'));
+        lines.push('Letzter Wert    : ' + (lastMM < 0 ? 'kein Wert' : lastMM + ' mm')
+                   + '  (roh ' + (lastRaw < 0 ? '--' : lastRaw + ' mm')
+                   + ', Offset ' + offset + ' mm)');
+        lines.push('Range-Status    : ' + statusTxt);
+        lines.push('Messungen ok    : ' + nRead);
+        lines.push('Nicht fertig    : ' + nNotReady);
+        lines.push('Status-Fehler   : ' + nStatusErr);
+        lines.push('Wert-Fehler     : ' + nRangeErr);
+        lines.push('');
+        if (!ok) {
+          lines.push('FEHLER: s_ok=false.');
+          lines.push('Serial-Log zeigt, ob 0x29/0x30 antworten.');
+          lines.push('Beide aus -> Verdrahtung/VCC pruefen.');
+        } else if (nRead === 0) {
+          lines.push('Noch keine Messung - ca. 1 s warten, erneut fragen.');
+        } else if (nStatusErr > nRead) {
+          lines.push('Status-Fehler dominieren: zu dunkel/hell, starke');
+          lines.push('Reflexion oder Ziel ausser Reichweite.');
+        } else if (nRead > 0) {
+          lines.push('Sensor liefert gueltige Werte.');
+        }
+        out.textContent = lines.join('\n');
       }
 
       // ==========================================
@@ -4820,8 +5023,8 @@ function slalomRefreshUi() {
         { name: 'GELB', bg: '#e89c1e' },
         { name: 'GRUEN', bg: '#1ea36b' },
         { name: 'BLAU', bg: '#2c6dd2' },
-        { name: 'IR-HIGH', bg: '#8a2f2f' },
-        { name: 'IR-LOW', bg: '#2f6b4a' }
+        { name: 'NAH', bg: '#8a2f2f' },
+        { name: 'FREI', bg: '#2f6b4a' }
       ];
       const PROG_DEFS = {
         F: { ic: '\u2191', label: 'Vorwärts', unit: 'cm', def: 10, min: 1, max: 50, loop: false, slot: 'num' },
@@ -4896,7 +5099,7 @@ function slalomRefreshUi() {
         const chip = document.createElement('span');
         chip.className = 'prog-chip prog-embed-chip';
         chip.style.background = PROG_COLORS[data.color].bg;
-        chip.title = 'Sensor wechseln (Farbe oder IR)';
+        chip.title = 'Sensor wechseln (Farbe oder Distanz)';
         chip.addEventListener('pointerdown', e => e.stopPropagation());
         chip.addEventListener('click', e => {
           e.stopPropagation();

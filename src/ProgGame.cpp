@@ -25,7 +25,7 @@ constexpr uint32_t SLALOM_TARGET_HOLD_MS = 250;  // Zielfarbe stabil sehen, bevo
 
 static const char* const PROG_COLOR_NAMES[6] = { "ROT", "GELB", "GRUEN", "BLAU", "NAH", "FREI" };
 
-// Distanz-Hindernis: VL53L0X-Messwert < OBSTACLE_DIST_MM (siehe DistanceSensor.h).
+// Distanz-Hindernis: distBlocked() (VL53L0X, Schwellen in config.obsDistMM/obsRelMM).
 // -> distBlocked() = true bedeutet: Hindernis erkannt (wie NAH im Web-UI)
 static inline bool irBlocked() {
   return distBlocked();
@@ -48,7 +48,7 @@ static void colorQuickReset() { colQuickStart = 0; colQuickIdx = -1; }
 // true wenn die Sensor-Bedingung (Farbe 0-3 oder Distanz 4/5) erfuellt ist.
 // Farbe: seit >= 40ms stabil sichtbar (kurze Haltezeit, damit selbst kurze
 // Fahrten im Bis-Modus genug Zeit haben zum Erkennen).
-// Distanz: letzter VL53L0X-Wert gegen OBSTACLE_DIST_MM (keine Haltezeit noetig).
+// Distanz: distBlocked() (letzter VL53L0X-Wert, keine Haltezeit noetig).
 static bool sensorPoll(uint8_t idx) {
   if (idx >= PROG_SENSOR_IR_HIGH) return (irBlocked() == (idx == PROG_SENSOR_IR_HIGH));
   if (!colorSensorOk) return false;

@@ -39,6 +39,12 @@ void bleSetup() {
   }
 
   BLEDevice::init("EduBot");
+  // MTU aushandeln. Ohne das bleibt der Default 23 Byte, und
+  // sendStatus() schneidet jede laengere Zeile ab - die
+  // DIST:DIAG:-Zeile (9 Felder, bis ~71 Zeichen) käme unbrauchbar an,
+  // genauso alle SLALOM:-/TMC:-Statuszeilen. Der Browser (Web Bluetooth)
+  // verhandelt die MTU beim Verbinden mit; 247 ist der uebliche Wert.
+  BLEDevice::setMTU(247);
   BLEServer* server = BLEDevice::createServer();
   server->setCallbacks(new ServerCallbacks());
 

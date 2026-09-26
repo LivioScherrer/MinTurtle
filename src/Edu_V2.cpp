@@ -1,4 +1,4 @@
-﻿// =====================================================
+// =====================================================
 // EduBot V2 - Main Entry Point
 // Xiao ESP32-S3 + 2x TMC2209 (UART) + TCS34725 + BLE + ESP-NOW
 // =====================================================
@@ -13,6 +13,7 @@
 #include "Config.h"
 #include "Motor.h"
 #include "ColorSensor.h"
+#include "I2CBus.h"      // i2cBusLock fuer den I2C?-Scan
 #include "BLEManager.h"
 #include "Drive.h"
 #include "EspNow.h"
@@ -34,7 +35,7 @@ constexpr int          CORE_SENSOR        = 0;
 constexpr unsigned long COLOR_NOTIFY_MS    = 100;
 constexpr uint32_t     LOOP_DELAY_MS      = 1;
 
-// Hindernis-Erkennung: VL53L0X (siehe DistanceSensor.h, OBSTACLE_DIST_MM).
+// Hindernis-Erkennung: VL53L0X (distBlocked(), Schwellen in config.obsDistMM/obsRelMM).
 // DIST-Meldungen kommen aus distTick() alle DIST_NOTIFY_MS.
 
 // =====================================================
@@ -369,10 +370,20 @@ static bool cmdDist(const String& cmd) {
     sendStatus(dbuf);
     return true;
   }
+  // Ref-SPAD-Kalibrierung: einziger Weg, einen Sensor mit unbrauchbaren
+  // NVM-Ref-SPAD-Daten wiederzubeleben. Laeuft asynchron, weil sie den
+  // Loop-Task sekundenlang blockieren wuerde (Motor, Spiele, BLE-Retries).
+  if (cmd == "DISTREF") {
+    if (distRefSpadRequest()) {
+      sendStatus("DISTREF:RUN");
+    } else {
+      sendStatus("DISTREF:BUSY");
+    }
+    return true;
+  }
   // Init-Debug: jeden Schritt mit Library-Debug nachvollziehen (nur Diagnose).
   if (cmd == "DISTDEBUG") {
     distDebugInit();
-    sendStatus("DIST:DEBUG_DONE");
     return true;
   }
   // Bus-Zustand vom Boot-Zeitpunkt (beweist Power-Cycle-Wirkung).
@@ -390,15 +401,22 @@ static bool cmdDist(const String& cmd) {
   if (cmd.startsWith("OBSDIST:")) {
     int v = cmd.substring(8).toInt();
     if (v < 50 || v > 1200) { sendStatus("OBSDIST:BAD"); return true; }
+    // Die Hysterese braucht obsRelMM > obsDistMM. Der Mitlauf-Frei-Wert
+    // darf deshalb nicht unter den Stopp-Wert kippen und nicht ueber
+    // 1200 hinauslaufen (sonst waere er selbst ausserhalb des Bereichs,
+    // den die WebUI und configValidate zulassen). Ist kein gueltiger
+    // Mitlauf-Wert moeglich, wird der Widerspruch abgelehnt statt ein
+    // kollabiertes Band zu speichern - sonst laesst sich distBlocked()
+    // nie wieder loesen und der Roboter blockiert dauerhaft.
+    int rel = min(v + 30, 1200);
+    if (rel <= v) { sendStatus("OBSDIST:BAD"); return true; }
     config.obsDistMM = (int16_t)v;
+    config.obsRelMM  = (int16_t)rel;
     configSaveInt("obsDist", v);
-    if (config.obsRelMM <= config.obsDistMM) {
-      config.obsRelMM = (int16_t)min(v + 30, 1200);
-      configSaveInt("obsRel", config.obsRelMM);
-      snprintf(buf, sizeof(buf), "OBSREL=%d", config.obsRelMM);
-      sendStatus(buf);
-    }
+    configSaveInt("obsRel", rel);
     snprintf(buf, sizeof(buf), "OBSDIST=%d", config.obsDistMM);
+    sendStatus(buf);
+    snprintf(buf, sizeof(buf), "OBSREL=%d", config.obsRelMM);
     sendStatus(buf);
     return true;
   }
@@ -410,14 +428,16 @@ static bool cmdDist(const String& cmd) {
   if (cmd.startsWith("OBSREL:")) {
     int v = cmd.substring(7).toInt();
     if (v < 50 || v > 1200) { sendStatus("OBSREL:BAD"); return true; }
-    config.obsRelMM = (int16_t)v;
+    // Spiegelbild zu OBSDIST: Stopp-Wert muss unter dem Frei-Wert bleiben
+    // und selbst im Bereich liegen. Sonst kollabiert das Hystereseband.
+    int st = max(v - 30, 50);
+    if (st >= v) { sendStatus("OBSREL:BAD"); return true; }
+    config.obsRelMM  = (int16_t)v;
+    config.obsDistMM = (int16_t)st;
     configSaveInt("obsRel", v);
-    if (config.obsRelMM <= config.obsDistMM) {
-      config.obsDistMM = (int16_t)max(v - 30, 50);
-      configSaveInt("obsDist", config.obsDistMM);
-      snprintf(buf, sizeof(buf), "OBSDIST=%d", config.obsDistMM);
-      sendStatus(buf);
-    }
+    configSaveInt("obsDist", st);
+    snprintf(buf, sizeof(buf), "OBSDIST=%d", config.obsDistMM);
+    sendStatus(buf);
     snprintf(buf, sizeof(buf), "OBSREL=%d", config.obsRelMM);
     sendStatus(buf);
     return true;
@@ -449,11 +469,22 @@ static bool cmdDist(const String& cmd) {
   if (cmd == "I2C?") {
     // Bus-Scan 0x08..0x77. Gesund: 0x29 (TCS34725) + 0x30 (VL53L0X nach Umzug).
     // Nur 0x29 = VL53L0X fehlt/tot. Nichts = Bus/Wiring/Pull-ups pruefen.
+    // Der Scan MUSS den Bus sperren: er laeuft zur Laufzeit, und der
+    // Farbsensor liest im selben Moment ueber dasselbe TwoWire-Objekt.
+    // TwoWire serialisiert nur Einzelaufrufe, nicht die Dreierfolge des
+    // Farbsensors - dazwischen einzuschieben verschiebt dessen
+    // Registerzeiger.
     String out = "I2C:";
+    if (!i2cBusLock(500)) {
+      Serial.println("[I2C] Scan nicht moeglich: Bus belegt");
+      sendStatus("I2C:BUSY");
+      return true;
+    }
     for (uint8_t a = 0x08; a <= 0x77; a++) {
       Wire.beginTransmission(a);
       if (Wire.endTransmission() == 0) { char h[8]; snprintf(h, sizeof(h), " %02X", a); out += h; }
     }
+    i2cBusUnlock();
     sendStatus(out.c_str());
     Serial.printf("[I2C]%s\n", out.c_str() + 3);
     return true;
@@ -947,17 +978,16 @@ void setup() {
 
   lastCommandTime = millis();
 
-  // VL53L0X VOR dem Farbsensor initialisieren: der Treiber braucht 0x29 fuer
-  // sich allein, waehrend er seine NVM-Daten liest (siehe DistanceSensor.h).
+  // VL53L0X VOR dem Farbsensor initialisieren: der Treiber liest beim
+  // Start seine NVM-Kalibrierdaten, und das muss auf einer Adresse passieren,
+  // an der nur er selbst antwortet (siehe DistanceSensor.h).
   //
-  // ACHTUNG: Diese Reihenfolge allein reicht NICHT, wenn beide Sensoren
-  // physisch am Bus haengen. Ein auch noch nicht konfigurierter TCS34725
-  // antwortet auf 0x29 und verfaelscht damit die NVM-Reads des VL53L0X
-  // (Folge: -50 REF_SPAD_INIT und dann nur ~10 % brauchbare Messungen).
-  // Abhilfe ohne Loeten ist nicht moeglich: der TCS34725 hat eine feste
-  // Adresse und antwortet immer auf 0x29. Verifiziert funktionsfaehig:
-  // 0x29 exklusiv (Farbsensor abgezogen) -> 46/46 gueltige Messungen,
-  // 191-198 mm bei 20 cm Ziel, Range-Status 0.
+  // Die Reihenfolge allein reicht nicht - haengt der TCS34725 mit am Bus,
+  // verfaelscht er die NVM-Reads des VL53L0X (Folge: -50 REF_SPAD_INIT).
+  // Geloest ueber den Library-Patch (patch_vl53l0x.py): begin(0x30) zieht
+  // den Sensor VOR DataInit auf 0x30, sodass alle NVM-Zugriffe dort laufen
+  // und der Farbsensor auf 0x29 bleiben kann. Beides gleichzeitig verifiziert:
+  // Continuous-Modus, 46/46 gueltige Messungen, 191-198 mm bei 20 cm Ziel.
   distSetup();
   colorSetup();
   if (colorSensorOk) {
@@ -1028,8 +1058,12 @@ void loop() {
     sendColorToWebsite();
   }
   // VL53L0X-Distanz: alle DIST_NOTIFY_MS als DIST:<mm> (nur bei BLE, nur wenn AUTO an)
-  // Hindernis-Status fuer ProgGame/Slalom: distBlocked() (DIST < OBSTACLE_DIST_MM)
+  // Hindernis-Status fuer ProgGame/Slalom: distBlocked()
   distTick();
+  // Ergebnis einer asynchronen Ref-SPAD-Kalibrierung (DISTREF) auswerten.
+  // Muss unbedingt im Loop bleiben: der Kalibrierungs-Task sperrt den
+  // I2C-Bus, und distTick() findet bis zum Abschluss keine Messung.
+  distRefSpadService();
   // TMC-Auto-Standby: Treiber aus, wenn laenger als TMC_STANDBY_MS nichts faehrt
   tmcAutoStandbyTick();
   // LED-Streifen: Alert > Zielfarbe > Status (max. 4x/s aktualisieren)

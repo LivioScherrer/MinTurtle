@@ -74,7 +74,17 @@ void configValidate() {
     config.obsDistMM = 100; changed = true;
   }
   if (config.obsRelMM <= config.obsDistMM || config.obsRelMM > 1200) {
-    config.obsRelMM = (int16_t)(config.obsDistMM + 30); changed = true;
+    // Der Nachlauf muss in den Bereich passen UND ueber dem Stopp-Wert
+    // bleiben. Bei einem Stopp-Wert nahe 1200 ist obsDistMM+30 zu gross -
+    // dann den Stopp-Wert so weit absenken, dass 30 mm Abstand passen.
+    int32_t rel = (int32_t)config.obsDistMM + 30;
+    if (rel > 1200) {
+      config.obsDistMM = 1170;
+      rel = 1200;
+      changed = true;
+    }
+    config.obsRelMM = (int16_t)rel;
+    changed = true;
   }
   if (config.obsOffsetMM < -200 || config.obsOffsetMM > 200) {
     config.obsOffsetMM = 0; changed = true;
