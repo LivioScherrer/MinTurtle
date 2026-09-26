@@ -196,22 +196,26 @@ static bool distInitAtTarget(const char* why) {
     i2cBusUnlock();
 
     if (!begun) {
-      // StaticInit ist an der Ref-SPAD-Kalibrierung gescheitert (-50). Die
-      // NVM-Ref-SPAD-Daten sind dann unbrauchbar (z. B. refSpadCount=1070200835,
-      // isApertureSpads=247) und die abhaengigen Skalierungsparameter des
-      // Treibers bleiben 0. Jede Messfunktion rechnet dann durch Null:
+      // StaticInit ist gescheitert, meist mit -50. Wichtig: -50 kann aus
+      // StaticInit selbst kommen - VL53L0X_StaticInit ruft
+      // VL53L0X_perform_ref_spad_management auf, wenn die NVM-Ref-SPAD-Daten
+      // ungueltig sind, und erreicht dann VL53L0X_load_tuning_settings
+      // NICHT mehr. Die Skalierungsparameter des Treibers bleiben dann 0,
+      // und jede Messfunktion rechnet durch Null:
       //   Guru Meditation Error: Core 1 panic'ed (IntegerDivideByZero)
       // Deshalb wird hier bewusst NICHT gemessen und kein Modus getestet.
-      // Der Sensor bleibt deaktiviert, bis die Ref-SPAD-Kalibrierung
-      // erfolgreich war - das ist die einzige Stelle, die sie schreibt.
       distInvalidate();
-      Serial.println("[DIST] StaticInit FEHLGESCHLAGEN (Ref-SPAD-Kalibrierung -50)");
-      Serial.println("[DIST] NVM-Ref-SPAD-Daten unbrauchbar -> Messung wuerde durch Null teilen");
+      Serial.println("[DIST] StaticInit FEHLGESCHLAGEN (meist -50, Ref-SPAD-Daten)");
+      Serial.println("[DIST] Skalierungsparameter unbrauchbar -> Messung wuerde durch Null teilen");
       Serial.println("[DIST] -> Distanzsensor deaktiviert (kein Absturz, aber auch keine Werte)");
-      Serial.println("[DIST]    Ursache 1: Ref-SPAD-Kalibrierung braucht ein geeignetes Ziel");
-      Serial.println("[DIST]    (weisse Flaeche auf ~20 cm, nicht in direkter Sonne).");
-      Serial.println("[DIST]    Ursache 2: NVM-Daten beschaedigt (DISTDEBUG zeigt den Rohwert).");
-      Serial.println("[DIST]    Abhilfe: Ziel herrichten, dann DISTREF senden.");
+      Serial.println("[DIST]    Ursache 1: Ref-SPAD-Kalibrierung scheitert am Ziel");
+      Serial.println("[DIST]    (weisse Flaeche auf ~20 cm, nicht in direkter Sonne)");
+      Serial.println("[DIST]    -> Abhilfe: Ziel herrichten, DISTREF senden.");
+      Serial.println("[DIST]    Ursache 2: NVM-Ref-SPAD-Daten unbrauchbar. Dann greift");
+      Serial.println("[DIST]    die Kalibrierung aus DISTREF nicht (Tuning fehlt) und");
+      Serial.println("[DIST]    der Good-Spad-Map-Patch greift nur bei leerer Map.");
+      Serial.println("[DIST]    Abhilfe: DISTDEBUG zeigt den NVM-Rohwert; bleibt er");
+      Serial.println("[DIST]    unplausibel, Sensor tauschen.");
       return false;
     }
 
@@ -539,19 +543,15 @@ int distRefSpadCalibrate() {
   // Frische Instanz: get_info_from_device() liest die NVM-Daten nur EIN MAL
   // pro Objekt. loxResetInstance() baut das Objekt korrekt neu auf (eine
   // Zuweisung wuerde den Self-Pointer mitkopieren - Crash, siehe dort).
+  // Wichtig: danach KEIN begin() - eduRefSpadRecalibrate() richtet die
+  // Kommunikation selbst ein. Ohne begin() sind nach dem Placement-New
+  // naemlich pMyDevice->i2c == NULL und I2cDevAddr == 0.
   loxResetInstance();
 
   uint32_t count = 0;
   uint8_t aperture = 0;
   Serial.println("[DIST] Kalibrierung laeuft (schreibt die NVM-Daten neu)...");
-  // eduRefSpadRecalibrate() holt DataInit und StaticInit selbst nach und
-  // fuehrt die Ref-SPAD-Kalibrierung danach erneut aus. Das ist der
-  // entscheidende Punkt: begin() wuerde bei -50 false liefern und die
-  // Kalibrierung damit unerreichbar machen - obwohl genau -50 der Fall ist,
-  // den diese Funktion retten soll. -50 entsteht in
-  // perform_ref_spad_management, laeuft also NACH StaticInit; die
-  // Skalierungsparameter sind in diesem Fall gueltig.
-  int st = lox.eduRefSpadRecalibrate(&count, &aperture);
+  int st = lox.eduRefSpadRecalibrate(DIST_I2C_ADDR, &count, &aperture);
   Serial.printf("[DIST] Ergebnis: Status=%d  refSpadCount=%u  isApertureSpads=%u\n",
                 st, (unsigned)count, (unsigned)aperture);
   i2cBusUnlock();
@@ -559,9 +559,15 @@ int distRefSpadCalibrate() {
   if (st != 0) {
     Serial.println("[DIST] -> FEHLGESCHLAGEN.");
     if (st == -50) {
-      Serial.println("[DIST]    -50 = Ziel unbrauchbar: weisse matte Flaeche auf");
-      Serial.println("[DIST]    ~20-30 cm, nicht in direkter Sonne, Sensor still.");
-      Serial.println("[DIST]    DISTREF erneut senden, Ziel ist jetzt richtig.");
+      Serial.println("[DIST]    -50 = Ref-SPAD-Daten unbrauchbar (NVM) oder Ziel");
+      Serial.println("[DIST]    ungeeignet. Unterscheiden laesst sich das nur am");
+      Serial.println("[DIST]    NVM-Rohwert: DISTDEBUG zeigt ihn.");
+      Serial.println("[DIST]    War das Ziel schuld: weisse matte Flaeche auf");
+      Serial.println("[DIST]    ~20-30 cm, nicht in direkter Sonne, DISTREF erneut.");
+      Serial.println("[DIST]    War der NVM schuld: DISTREF hilft hier nicht weiter,");
+      Serial.println("[DIST]    weil die Skalierungsparameter dann fehlen. Ursache");
+      Serial.println("[DIST]    ist dann der Library-Patch (Good-Spad-Map) bzw.");
+      Serial.println("[DIST]    beschaedigte NVM-Daten -> Sensor neu kaufen.");
     } else {
       Serial.println("[DIST]    Kalibrierung konnte nicht durchlaufen (Ziel oder");
       Serial.println("[DIST]    Sensorzustand). DISTDEBUG zeigt den NVM-Rohwert.");

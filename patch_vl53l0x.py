@@ -19,11 +19,17 @@
 #   * Ganz ohne Lesezugriff auf 0x29. Ein WHO_AM_I-Probe waere nicht
 #     verlaesslich: liegen nach einem fehlgeschlagenen Rueckschreiben zwei
 #     Geraete auf 0x29, liest man unbrauchbare Bitmuster und der Umzug
-#     unterbleibt. Ein Write auf Register 0x8A ist dagegen unkritisch:
-#     Ist der VL53L0X schon auf der Zieladresse, trifft der Write den
-#     TCS34725. Dessen Register 0x8A gehoert zum Read-only-RGBC-Datenblock
-#     (0x80-0x8B); ein Write dorthin wird verworfen und aendert weder den
-#     Geraetezustand noch den naechsten Messwert.
+#     unterbleibt.
+#   * Der Umzug wird nur ausgefuehrt, wenn die Zieladresse noch NICHT
+#     antwortet. Ein Adress-Probe auf 0x29 ist eine reine Adressphase ohne
+#     Datenbyte und damit fuer beide Geraete harmlos. Antwortet 0x30 schon,
+#     ist der Sensor dort und der Write auf 0x29 (Register 0x8A) faellt
+#     sonst grundlos beim Farbsensor an - und ob dessen Treiber dieses
+#     Register je liest oder zurueckschreibt, haengt vom Port ab. Diese
+#     Abfrage macht die Frage ueberfluessig: im Normalfall wird auf 0x29
+#     gar nichts geschrieben. Die Gegenrichtung (Rueckschieben auf 0x29
+#     fuer einen anderen Benutzer) ist damit weiterhin moeglich, weil 0x30
+#     dann nicht antwortet.
 #   * setAddress() wird benutzt, nicht ein handgeschriebener Wire-Write.
 #     VL53L0X_SetDeviceAddress() schreibt Register 0x8A mit Wert/2
 #     (Adafruit uebergibt newAddr*2). Register 0xFF ist NICHT die
@@ -91,10 +97,17 @@ CPP_NEW = """
   // [EduV2-Patch] Adresswechsel vor DataInit. Siehe patch_vl53l0x.py.
   // Ohne diesen Schritt laeuft DataInit auf 0x29, kollidiert dort mit einem
   // zweiten I2C-Geraet und verfaelscht die NVM-Kalibrierdaten (-50).
-  // Bewusst ohne Lesezugriff auf 0x29 - der Umzug ist ein reiner Write.
+  // Die Zieladresse wird nur dann beschrieben, wenn sie noch nicht
+  // antwortet: so faellt bei warmem Start grundlos kein Write auf 0x29
+  // an, wo der Farbsensor sitzt. Die Probe ist reine Adressphase
+  // (beginTransmission/endTransmission), also fuer beide Geraete harmlos.
   if (i2c_addr != VL53L0X_I2C_ADDR) {
-    if (!setAddress(i2c_addr)) {
-      return false;
+    pMyDevice->i2c->beginTransmission(i2c_addr);
+    bool atTarget = (pMyDevice->i2c->endTransmission() == 0);
+    if (!atTarget) {
+      if (!setAddress(i2c_addr)) {
+        return false;
+      }
     }
   }
   pMyDevice->I2cDevAddr = i2c_addr; // ab hier laeuft alles auf der Zieladresse"""
@@ -152,9 +165,9 @@ H_PREVIOUS = ["""  // [EduV2-Patch] Ref-SPAD-Kalibrierung von aussen ausloesbar.
   }
 
  private:
-  VL53L0X_Dev_t MyDevice;"""]
+  VL53L0X_Dev_t MyDevice;""",
 
-H_NEW = """  // [EduV2-Patch] Ref-SPAD-Kalibrierung erneut ausfuehren, auch wenn
+"""  // [EduV2-Patch] Ref-SPAD-Kalibrierung erneut ausfuehren, auch wenn
   // begin() genau daran gescheitert ist. Siehe patch_vl53l0x.py.
   //
   // Die Reihenfolge ist der ganze Punkt und darf nicht vereinfacht werden:
@@ -172,6 +185,71 @@ H_NEW = """  // [EduV2-Patch] Ref-SPAD-Kalibrierung erneut ausfuehren, auch wenn
   // Tausch. Ein Aufruf von begin() alone koennte das nicht: es liefert bei
   // -50 false und der Aufrufer wuerde die Kalibrierung nie erreichen.
   int eduRefSpadRecalibrate(uint32_t* outCount, uint8_t* outAperture) {
+    VL53L0X_Error st = VL53L0X_DataInit(pMyDevice);
+    if (st != VL53L0X_ERROR_NONE) {
+      return (int)st;
+    }
+    st = VL53L0X_StaticInit(pMyDevice);
+    if (st != VL53L0X_ERROR_NONE) {
+      return (int)st;  // Skalierungsparameter unbrauchbar -> nicht messen
+    }
+    uint32_t count = 0;
+    uint8_t aperture = 0;
+    st = VL53L0X_PerformRefSpadManagement(pMyDevice, &count, &aperture);
+    if (outCount) {
+      *outCount = count;
+    }
+    if (outAperture) {
+      *outAperture = aperture;
+    }
+    return (int)st;
+  }
+
+ private:
+  VL53L0X_Dev_t MyDevice;"""]
+
+H_NEW = """  // [EduV2-Patch] Ref-SPAD-Kalibrierung erneut ausfuehren, auch wenn
+  // begin() genau daran gescheitert ist. Siehe patch_vl53l0x.py.
+  //
+  // WICHTIG - eigene Kommunikations-Initialisierung. Diese Methode wird
+  // direkt nach einem Neuaufbau des Objekts aufgerufen, also ohne
+  // vorheriges begin(). Nach dem Placement-New ist MyDevice
+  // wertinitialisiert, pMyDevice->i2c ist NULL und I2cDevAddr ist 0. Ohne
+  // den folgenden Block wuerde VL53L0X_DataInit() als erstes ueber
+  // i2c->beginTransmission() einen NULL-Zeiger dereferenzieren (Panic, und
+  // der I2C-Mutex bliebe haengen). Der Block entspricht begin() Zeile fuer
+  // Zeile, inklusive Adresswechsel vor DataInit.
+  //
+  // Zum Fehlerverhalten: -50 (REF_SPAD_INIT) kann aus zwei Quellen kommen.
+  //  (a) VL53L0X_StaticInit ruft VL53L0X_perform_ref_spad_management selbst
+  //      auf, wenn die NVM-Ref-SPAD-Daten ungueltig sind. Dann schlaegt
+  //      StaticInit fehl und VL53L0X_load_tuning_settings wird NICHT
+  //      erreicht - die Skalierungsparameter bleiben 0. Genau dieser Fall
+  //      ist es, den diese Methode NICHT reparieren kann; da wird
+  //      zurueckgegeben und nicht gemessen.
+  //  (b) begin() ruft PerformRefSpadManagement nach erfolgreichem
+  //      StaticInit auf. Dann ist der Tuning-Stand gueltig, und genau
+  //      diese Kalibrierung ist hier wiederholbar - der Grund fuer diese
+  //      Methode: begin() liefert in diesem Fall false und der Aufrufer
+  //      wuerde die Kalibrierung nie erreichen.
+  int eduRefSpadRecalibrate(uint8_t i2c_addr, uint32_t* outCount,
+                            uint8_t* outAperture) {
+    pMyDevice->I2cDevAddr = VL53L0X_I2C_ADDR;
+    pMyDevice->comms_type = 1;
+    pMyDevice->comms_speed_khz = 400;
+    pMyDevice->i2c = &Wire;
+    pMyDevice->i2c->begin();
+    if (i2c_addr != VL53L0X_I2C_ADDR) {
+      pMyDevice->i2c->beginTransmission(i2c_addr);
+      bool atTarget = (pMyDevice->i2c->endTransmission() == 0);
+      if (!atTarget) {
+        if (!setAddress(i2c_addr)) {
+          return (int)VL53L0X_ERROR_CONTROL_INTERFACE;
+        }
+      }
+    }
+    pMyDevice->I2cDevAddr = i2c_addr;
+
     VL53L0X_Error st = VL53L0X_DataInit(pMyDevice);
     if (st != VL53L0X_ERROR_NONE) {
       return (int)st;
