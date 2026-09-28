@@ -57,6 +57,13 @@
 // Intervall fuer automatische Web-Meldungen (DIST:<mm>)
 constexpr uint32_t DIST_NOTIFY_MS = 500;
 
+// Wie lange ein Messwert fuer die Hinderniserkennung gueltig ist. Danach gilt
+// er als "kein Wert" und damit als frei. Notwendig, weil im Continuous-Modus
+// eine fehlende Messung (Range-Status "NoUpdate") den Wert einfrieren laesst -
+// ein eingefrorener Wert unter der Stoppschwelle wuerde den Roboter sonst
+// fuer den Rest der Sitzung anhalten. 1 s ist gegen DIST_NOTIFY_MS grosszuegig.
+constexpr uint32_t DIST_VALUE_MAX_AGE_MS = 1000;
+
 // Die Hindernisschwellen liegen NICHT hier, sondern in
 // config.obsDistMM / config.obsRelMM (NVS-persistent, per OBSDIST:/OBSREL:)
 // - siehe Config.h und distBlocked(). Frueher standen hier zwei Konstanten

@@ -10,6 +10,10 @@
 #define SCL_PIN 6
 
 // Schwellwerte
+// COLOR_LOW ist als "sehr dunkel"-Schwelle deklariert, wird aber nirgends
+// ausgewertet: detectColorName() benutzt dafuer das Literal 60. Bewusst so
+// belassen, damit eine Aenderung hier nicht unbemerkt das Farbverhalten
+// aendert - siehe README / detectColorName().
 constexpr uint16_t COLOR_LOW  = 40;
 constexpr uint16_t COLOR_HIGH = 200;
 constexpr float    RATIO_RED  = 1.35f;
@@ -20,7 +24,11 @@ extern volatile int sensorR, sensorG, sensorB;
 extern volatile uint16_t rawSensorR, rawSensorG, rawSensorB, rawSensorC;
 extern volatile char sensorName[16];
 extern SemaphoreHandle_t colorSem;
-extern bool colorSensorOk;
+// Wird auf Core 0 vom Farb-Task geschrieben und auf Core 1 gelesen (loop(),
+// ProgGame-Hot-Path). Ohne volatile sieht der Compiler die Aenderung nicht
+// garantiert - byteweise gibt es kein Abreissen, aber die Sichtbarkeit war
+// nicht garantiert.
+extern volatile bool colorSensorOk;
 
 // I2C + Sensor initialisieren
 void colorSetup();

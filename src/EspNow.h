@@ -7,7 +7,17 @@
 #include <esp_wifi.h>
 #include <freertos/semphr.h>
 
+// Zielpunktzahl des Rennens. Nur noch der DEFAULT: die Web-UI setzt sie pro
+// Stufe ueber RACE:START:<ziel>:<stufe> (RACE_TARGET_MIN/MAX begrenzen sie).
+// Ohne Parameter gilt weiterhin 10 -> kompatibel zu aelterer Web-UI/Firmware.
 constexpr uint8_t  RENNEN_TARGET_SCORE = 10;
+constexpr uint8_t  RACE_TARGET_MIN  = 1;
+constexpr uint8_t  RACE_TARGET_MAX  = 99;
+// Kein Renn-Schritt des Gegners in dieser Zeit -> Rennen sauber beenden.
+// Der Zaehler startet erst mit dem ersten Schritt des Gegners, deshalb darf
+// das Fenster grosszuegig sein: 45 s reichen fuer eine knappe Denkpause,
+// ohne dass ein abgestuerzter Gegner ewig haengen bleibt.
+constexpr uint32_t RACE_PEER_TIMEOUT_MS = 45000;
 constexpr uint8_t  MAX_PEERS = 4;
 constexpr uint8_t  RACE_FLAG_WINNER  = 0x01;
 constexpr uint8_t  RACE_FLAG_HELLO   = 0x80;

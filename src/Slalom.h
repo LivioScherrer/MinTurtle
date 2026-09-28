@@ -45,6 +45,10 @@ enum SlalomPhase : uint8_t {
 extern bool slalomRunning;     // fährt gerade (RACE)
 extern bool slalomFinished;    // mein Roboter hat die Zielfarbe erreicht
 extern bool slalomWon;         // Spiel ist entschieden (jemand hat getroffen)
+// Ergebnis der letzten Entscheidung fuer die LED-Anzeige in Phase DONE
+// (true = ich habe gewonnen). slalomFinished wird beim Spielende zurueckgesetzt,
+// deshalb braucht die Anzeige ein eigenes, stabiles Flag.
+extern bool slalomIWonLast;
 extern bool slalomMyRunDone;   // mein Durchlauf zu Ende (ohne Treffer)
 extern bool slalomOppRunDone;  // Gegner-Durchlauf zu Ende (MISS empfangen)
 extern bool slalomIsHost;      // Initiator = Host
@@ -71,6 +75,10 @@ void slalomUnpair();
 void slalomSendPacket(uint8_t cmd, const char* data);
 void slalomSendPacketTo(uint8_t cmd, const char* data, const uint8_t destMac[6]);
 void onSlalomPacket(const RacePacket* pkt);
+
+// ---- Einladung (mit Retry + Timeout, damit kein "warten auf Antwort" haengt) ----
+void slalomInviteSend(const uint8_t destMac[6]);
+void slalomTick();   // aus loop() aufrufen, nicht-blockierend
 
 // ---- Spiel-Ablauf ----
 void slalomStartGame();            // nur Host: Zufallsfarbe, Client in BUILD

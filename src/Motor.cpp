@@ -32,6 +32,18 @@ namespace {
   // Mutex fuer alle AccelStepper-State-Aenderungen (setSpeed, MaxSpeed...)
   SemaphoreHandle_t motorMutex = nullptr;
 
+  // Motor bereit? Bleibt false, wenn initSteppers() den Mutex nicht anlegen
+  // konnte (praktisch immer Speichermangel beim Boot).
+  //
+  // WICHTIG: Ohne dieses Flag verlagert ein blosses "return" in
+  // initSteppers() den Absturz nur nach hinten. startupSpin(),
+  // tmcAutoStandbyTick(), setMotorSpeed() und stopMotors() werden unbedingt
+  // weiter aufgerufen und wuerden xSemaphoreTake(nullptr, ...) ausfuehren -
+  // also einen Null-Dereferenzierungs-Crash, teils erst Sekunden nach dem
+  // Boot (tmcAutoStandbyTick greift nach TMC_STANDBY_MS zu). Jede oeffentliche
+  // Motor-API prueft deshalb zuerst hier und tut dann nichts.
+  bool motorReady = false;
+
   // Task-Kommunikation: esp_timer-Tick -> Notification an den Motor-Task
   TaskHandle_t motorTaskHandle = nullptr;
   esp_timer_handle_t pulseTimer = nullptr;
@@ -46,6 +58,11 @@ namespace {
   void motorTaskLoop(void* param) {
     for (;;) {
       ulTaskNotifyTake(pdTRUE, portMAX_DELAY);   // naechster 50us-Tick
+      // motorMutex ist hier garantiert gesetzt: initSteppers() legt ihn an
+      // und bricht VOR xTaskCreatePinnedToCore ab, falls das Anlegen
+      // scheitert. Dieser Task kann also nie mit nullptr laufen. Ein
+      // motorReady-Check ist hier deshalb nicht noetig (und waere in der
+      // 50-us-Schleife auch unnoetiger Overhead).
       if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
         if (posActiveL) {
           // Position-Modus: konstante Geschwindigkeit, Rest-Zaehler dekrementieren.
@@ -148,10 +165,56 @@ volatile unsigned long s_lastMotionMs = 0;
     d.en_spreadCycle(s_spread);
     d.TPOWERDOWN(20);
     d.TPWMTHRS(0);
+    // SLAVECONF auf den Auslieferungswert: Antwort sofort ("always send").
+    // Der Treiber behaelt seine Register ueber einen MCU-Reset hinweg - ohne
+    // diesen Reset koennte eine fremde SENDDELAY-Einstellung vom vorherigen
+    // Lauf den UART-Bus unnoetig verlangsamen.
+    d.SLAVECONF(0);
   }
 }  // namespace
 
+// Laufzeit-Schrittrate (Schritte/s). Nicht selbst setzen: motorUpdateSpeeds()
+// rechnet sie aus config.driveSpeedMM, Rad und Microsteps.
+float FIXED_DRIVE_SPEED = 0.0f;
+
+// Schrittrate fuer die eingestellte Geschwindigkeit. configStepsPerS() ist in
+// Config.cpp und rechnet mm/s x Schritte/mm; begrenzt durch MAX_DRIVE_STEPS_S.
+// Die eigentliche Rechnung. Voraussetzung: motorMutex ist entweder noch nicht
+// angelegt (initSteppers, der Motor-Task laeuft noch gar nicht) oder bereits
+// gehalten.
+static void motorUpdateSpeedsLocked() {
+  FIXED_DRIVE_SPEED = configStepsPerS();
+  stepperL.setMaxSpeed(FIXED_DRIVE_SPEED);
+  stepperR.setMaxSpeed(FIXED_DRIVE_SPEED);
+  const float wanted = config.driveSpeedMM * configStepsPerMM();
+  Serial.printf("[MOTOR] Tempo: %.0f mm/s -> %.0f Schritte/s (%u Schritte/Kreis, %u Microsteps)%s\n",
+                (double)config.driveSpeedMM, (double)FIXED_DRIVE_SPEED,
+                (unsigned)(MOTOR_FULL_STEPS_PER_REV * s_microsteps), s_microsteps,
+                wanted > MAX_DRIVE_STEPS_S ? " - am 50us-Puls-Task begrenzt" : "");
+}
+
+// Oeffentliche API. Sperrt den Mutex, weil setMaxSpeed() den AccelStepper-
+// Zustand aendert, den der Motor-Task auf Core 0 parallel liest - dieselbe
+// Klasse wie in setMotorSpeed()/. Ohne Sperre ist das formal ein Data Race.
+void motorUpdateSpeeds() {
+  // Noch kein Mutex -> initSteppers() vor der Anlage. Zu diesem Zeitpunkt
+  // laeuft der Motor-Task nicht und Core 1 ist der einzige Schreiber, es
+  // gibt also nichts zu serialisieren.
+  if (!motorMutex) { motorUpdateSpeedsLocked(); return; }
+  if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) != pdTRUE) {
+    xSemaphoreTake(motorMutex, portMAX_DELAY);
+  }
+  motorUpdateSpeedsLocked();
+  xSemaphoreGive(motorMutex);
+}
+
 void initSteppers() {
+  // Laufzeitwerte zuerst: die Schrittrate haengt an den Microsteps.
+  s_currentMa = config.tmcCurrent;
+  s_hold = config.tmcHold;
+  s_microsteps = config.tmcMicrosteps;
+  s_spread = config.tmcSpread;
+  motorUpdateSpeeds();
   stepperL.setMaxSpeed(FIXED_DRIVE_SPEED);
   stepperR.setMaxSpeed(FIXED_DRIVE_SPEED);
   // Keine Beschleunigung - nicht gesetzt, wird nirgends gebraucht.
@@ -170,12 +233,8 @@ void initSteppers() {
   digitalWrite(PIN_DIR_R, LOW);
 
   // TMC-UART PCB Edu_V2.2: ESP-TX(43) --1k (R9)--> PDN-Netz + ESP-RX(44) direkt an PDN.
-  // Links = U2/J1 (Addr 0), rechts = U4/J5 (Addr 1).
-  // Laufzeitwerte kommen aus dem NVS (per TMC:*-Befehl einstellbar).
-  s_currentMa = config.tmcCurrent;
-  s_hold = config.tmcHold;
-  s_microsteps = config.tmcMicrosteps;
-  s_spread = config.tmcSpread;
+  // Adresszuordnung siehe TMC_ADDR_L / TMC_ADDR_R in Motor.h (links = U4/J5).
+  // Laufzeitwerte stehen schon oben (aus dem NVS uebernommen).
   Serial1.begin(TMC_BAUD, SERIAL_8N1, TMC_UART_RX, TMC_UART_TX);
   delay(50);
   bool okL = false, okR = false;
@@ -185,14 +244,34 @@ void initSteppers() {
   tmcEnable();
 
   motorMutex = xSemaphoreCreateMutex();
+  // Jede dieser drei Anlagen kann scheitern, und die Folgen sind jeweils
+  // still: ein nuller Mutex liess jede xSemaphoreTake-Dereferenzierung
+  // crashen, ein fehlgeschlagener Task hiess "kein Motor", und ein
+  // gescheiterter Timer hiess, dass motorTaskLoop fuer immer in
+  // ulTaskNotifyTake(portMAX_DELAY) blockiert - der Roboter schaltete dann
+  // nie einen Schritt und meldete keinen Fehler. Deshalb pruefen und laut
+  // sagen, statt still weiterzulaufen.
+  if (!motorMutex) {
+    Serial.println("[MOTOR] FATAL: Mutex konnte nicht angelegt werden");
+    // Hier bewusst NICHT weiterlaufen: der Motor-Task wuerde gleich in
+    // xSemaphoreTake(nullptr, ...) greifen und crashen, und jede
+    // setMotorSpeed()/stopMotors()-Aufruf ebenfalls. Besser: der Roboter
+    // faehrt gar nicht, meldet es laut, und die Ursache (praktisch immer
+    // Speichermangel beim Boot) steht im Log.
+    return;
+  }
 
-  xTaskCreatePinnedToCore(
-    motorTaskLoop, "MotorTask",
-    4096, NULL,
-    5,             // hoeher als ColorSensor (2), unter den System-Tasks
-    &motorTaskHandle,
-    0              // Core 0 (Main-Loop + BLE laufen auf Core 1)
-  );
+  bool taskOk = (xTaskCreatePinnedToCore(
+        motorTaskLoop, "MotorTask",
+        4096, NULL,
+        5,             // hoeher als ColorSensor (2), unter den System-Tasks
+        &motorTaskHandle,
+        0              // Core 0 (Main-Loop + BLE laufen auf Core 1)
+      ) == pdPASS);
+  if (!taskOk) {
+    Serial.println("[MOTOR] FATAL: Motor-Task konnte nicht erstellt werden");
+    return;
+  }
 
   const esp_timer_create_args_t timerArgs = {
     .callback            = &pulseTimerCb,
@@ -201,19 +280,38 @@ void initSteppers() {
     .name                = "motorPulse",
     .skip_unhandled_events = true
   };
-  esp_timer_create(&timerArgs, &pulseTimer);
+  if (esp_timer_create(&timerArgs, &pulseTimer) != ESP_OK) {
+    Serial.println("[MOTOR] FATAL: Puls-Timer konnte nicht erstellt werden - Motor bleibt still");
+    return;
+  }
   // 50us-Periode (~20 kHz): 4x Oversampling ueber der 5 kHz Puls-Rate.
-  esp_timer_start_periodic(pulseTimer, MOTOR_TICK_US);
+  if (esp_timer_start_periodic(pulseTimer, MOTOR_TICK_US) != ESP_OK) {
+    Serial.println("[MOTOR] FATAL: Puls-Timer startete nicht - Motor bleibt still");
+    return;
+  }
+  // Erst jetzt ist die Motoranlage vollstaendig: Mutex, Task und laufender
+  // Puls-Timer vorhanden. Ab hier sind die oeffentlichen APIs erlaubt.
+  motorReady = true;
 }
 
 void startupSpin() {
-  // StartupSpin: kurz mit hoher Drehzahl drehen. setMaxSpeed vorher hochsetzen,
-  // weil manche AccelStepper-Versionen setSpeed auf maxSpeed begrenzen.
+  if (!motorReady) {
+    Serial.println("[MOTOR] Startup-Spin uebersprungen (Motor nicht bereit)");
+    return;
+  }
+  // Echter Spin AUF DER STELLE: linkes Rad vorwaerts, rechtes rueckwaerts.
+  // Beide gleichsinnig zu fahren (wie vorher) hat den Roboter bei jedem Boot
+  // rund 11 mm nach vorn geschoben - auf einem Tisch nicht ungefahrlich und
+  // ausserdem sinnlos, denn es sah wie eine Drehung aus, war aber eine Fahrt.
+  // Die Vorzeichen kommen aus config, damit es bei einer other Verdrahtung
+  // korrekt bleibt.
+  const long spinL = (long)STARTUP_SPIN_SPEED * (long)config.leftSign;
+  const long spinR = -(long)STARTUP_SPIN_SPEED * (long)config.rightSign;
   if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
     stepperL.setMaxSpeed(STARTUP_SPIN_SPEED);
     stepperR.setMaxSpeed(STARTUP_SPIN_SPEED);
-    stepperL.setSpeed(STARTUP_SPIN_SPEED);
-    stepperR.setSpeed(STARTUP_SPIN_SPEED);
+    stepperL.setSpeed((float)spinL);
+    stepperR.setSpeed((float)spinR);
     xSemaphoreGive(motorMutex);
   }
   // Warten - die Pulse erzeugt der Motor-Task selbststaendig.
@@ -228,14 +326,22 @@ void startupSpin() {
 }
 
 void setMotorSpeed(int motorIdx, float speed) {
-  if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-    if (speed == 0.0f) {
-      // Expliziter Stopp fuer diesen Motor (auch eine offene Positionsfahrt aborten)
-      if (motorIdx == 0) { posActiveL = false; remainingL = 0; stepperL.setSpeed(0.0f); }
-      else               { posActiveR = false; remainingR = 0; stepperR.setSpeed(0.0f); }
-      xSemaphoreGive(motorMutex);
-      return;
+  if (!motorReady) return;   // siehe motorReady
+  if (speed == 0.0f) {
+    // Stopp ist fail-safe: erst kurz warten, bei Fehlschlag blockieren, bis
+    // der Mutex frei ist. Ein still gescheiterter Stopp hiesse "der Roboter
+    // faehrt weiter" - das darf in der sicherheitsrelevanten Funktion nicht
+    // passieren. (Die kritischen Abschnitte selbst sind winzig: nur GPIO.)
+    if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) != pdTRUE) {
+      xSemaphoreTake(motorMutex, portMAX_DELAY);
     }
+    // Expliziter Stopp fuer diesen Motor (auch eine offene Positionsfahrt aborten)
+    if (motorIdx == 0) { posActiveL = false; remainingL = 0; stepperL.setSpeed(0.0f); }
+    else               { posActiveR = false; remainingR = 0; stepperR.setSpeed(0.0f); }
+    xSemaphoreGive(motorMutex);
+    return;
+  }
+  if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
     // Jede echte Fahrt schaltet den Treiber automatisch ein
     // (STOP/TMC:EN:0 schalten ihn aus). Flag-Check ist billig.
     if (!s_enabled) tmcEnable();
@@ -251,14 +357,19 @@ void setMotorSpeed(int motorIdx, float speed) {
 }
 
 void stopMotors() {
-  if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-    posActiveL = false; remainingL = 0; stepperL.setSpeed(0.0f);
-    posActiveR = false; remainingR = 0; stepperR.setSpeed(0.0f);
-    xSemaphoreGive(motorMutex);
+  // Fail-safe wie beim Stopp-Zweig in setMotorSpeed(): ein Stopp darf nie
+  // still scheitern, sonst laeuft der Roboter weiter.
+  if (!motorReady) return;   // siehe motorReady
+  if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) != pdTRUE) {
+    xSemaphoreTake(motorMutex, portMAX_DELAY);
   }
+  posActiveL = false; remainingL = 0; stepperL.setSpeed(0.0f);
+  posActiveR = false; remainingR = 0; stepperR.setSpeed(0.0f);
+  xSemaphoreGive(motorMutex);
 }
 
 void prepPositionMove(int motorIdx, long physicalSteps) {
+  if (!motorReady) return;   // siehe motorReady
   if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
     AccelStepper& s = (motorIdx == 0) ? stepperL : stepperR;
     if (physicalSteps == 0) {
@@ -284,7 +395,7 @@ bool motorStillRunning() {
   return (posActiveL && remainingL != 0) || (posActiveR && remainingR != 0);
 }
 
-// ---- TMC2209-Laufzeit-API (linker Treiber / Adresse 0) ----
+// ---- TMC2209-Laufzeit-API (Adresse siehe TMC_ADDR_L / TMC_ADDR_R) ----
 
 void tmcEnable() {
   digitalWrite(PIN_EN, LOW);
@@ -304,6 +415,7 @@ bool tmcIsEnabled() { return s_enabled; }
 // Alle Fahrten sind relativ (kein absolutes Positionswissen) -> Wiederein-
 // schalten bei der naechsten Fahrt ist verlustfrei.
 void tmcAutoStandbyTick() {
+  if (!motorReady) return;   // siehe motorReady
   if (!s_enabled) return;
   if (millis() - s_lastMotionMs < TMC_STANDBY_MS) return;
   bool idle = false;
@@ -327,7 +439,15 @@ void tmcReinit() {
 }
 
 bool tmcSetCurrent(uint16_t mA) {
-  if (mA < 100 || mA > 800) return false;
+  // HARTE Grenze 100..200 mA, siehe die Begruendung bei TMC_CURRENT_MA_MAX
+  // in Motor.h. Auch der Serial-Monitor kann nichts groesseres setzen: der
+  // Aufrufer (cmdTmc) speichert config.tmcCurrent nur bei true, ein
+  // abgelehnter Wert erreicht die NVS also gar nicht erst.
+  if (mA < TMC_CURRENT_MA_MIN || mA > TMC_CURRENT_MA_MAX) {
+    Serial.printf("[TMC] Strom %u mA abgelehnt (erlaubt %u..%u mA)\n",
+                  mA, TMC_CURRENT_MA_MIN, TMC_CURRENT_MA_MAX);
+    return false;
+  }
   s_currentMa = mA;
   tmcL.rms_current(s_currentMa);
   tmcR.rms_current(s_currentMa);
@@ -346,10 +466,33 @@ bool tmcSetHold(uint8_t ihold) {
 
 bool tmcSetMicrosteps(uint16_t ms) {
   if (!validMicrosteps(ms)) return false;
+  // Reihenfolge und Rollback sind hier wichtig, weil drei Ebenen betroffen
+  // sind: der Treiber (MRES im Silizium), der Laufzeit-Schatten
+  // s_microsteps und config.tmcMicrosteps (die NVS-Quelle fuer configStepsPerS).
+  // Vorher wurde s_microsteps VOR dem Readback gesetzt und motorUpdateSpeeds()
+  // rechnete noch mit dem ALTEN config.tmcMicrosteps. Scheiterte der Readback,
+  // blieb s_microsteps auf dem neuen Wert stehen, obwohl im Silizium der alte
+  // lag - Shadow, NVS und Hardware liefen dauerhaft auseinander, und zwar
+  // ueber einen Neustart hinweg (der Aufrufer speichert config nur bei true).
+  // Genau die Art Fehler, die die Architektur in Config.h ("speichere mm,
+  // nie Schrittzahlen") eigentlich ausschliessen soll.
+  const uint16_t prevShadow = s_microsteps;
+  const uint16_t prevConfig = config.tmcMicrosteps;
+  config.tmcMicrosteps = ms;   // VOR dem Tempo: motorUpdateSpeeds() braucht den neuen Wert
   s_microsteps = ms;
-  const bool okL = applyMicrosteps(tmcL, s_microsteps);
-  const bool okR = applyMicrosteps(tmcR, s_microsteps);
+  motorUpdateSpeeds();
+  const bool okL = applyMicrosteps(tmcL, ms);
+  const bool okR = applyMicrosteps(tmcR, ms);
   s_msConfirmed = okL && okR;
+  if (!s_msConfirmed) {
+    // Readback fehlgeschlagen: alles zurueckdrehen, damit Shadow und Config
+    // wieder das beschreiben, was tatsaechlich im Treiber steht.
+    s_microsteps = prevShadow;
+    config.tmcMicrosteps = prevConfig;
+    motorUpdateSpeeds();
+    Serial.printf("[TMC] Microsteps %u nicht bestaetigt (L=%d R=%d) - auf %u zurueckgesetzt\n",
+                  ms, okL ? 1 : 0, okR ? 1 : 0, prevShadow);
+  }
   return s_msConfirmed;
 }
 
@@ -460,71 +603,6 @@ static uint32_t measureBaud(HardwareSerial& port, const char* name) {
   Serial.printf("[3] %s: write(600) blockierte %lu us -> ~%lu Baud (115200: ~41000us)\n",
     name, (unsigned long)tBlock, (unsigned long)baud);
   return baud;
-}
-
-void tmcUartDiag() {
-  Serial.println("========== UART-DIAG ==========");
-  pinMode(TMC_UART_RX, INPUT_PULLDOWN);
-  delay(2);
-  Serial.printf("[1] RX-Netz Ruhepegel (mit Pulldown): %s (HIGH = externer Pullup/PDN verbunden)\n",
-    digitalRead(TMC_UART_RX) ? "HIGH" : "LOW");
-
-  struct PinTest { const char* name; int8_t rx; int8_t tx; };
-  const PinTest tests[2] = {
-    { "normal   RX=44 TX=43", TMC_UART_RX, TMC_UART_TX },
-    { "getauscht RX=43 TX=44", TMC_UART_TX, TMC_UART_RX }
-  };
-
-  for (const PinTest& t : tests) {
-    Serial1.end();
-    Serial1.begin(TMC_BAUD, SERIAL_8N1, t.rx, t.tx);
-    delay(2);
-    for (uint8_t addr = 0; addr <= 3; addr++) {
-      while (Serial1.available()) Serial1.read();
-      // Read-Request GCONF(0x00): [0x05, (addr<<1)|0x01, 0x00, CRC]
-      uint8_t req[4] = { 0x05, (uint8_t)((addr << 1) | 0x01), 0x00, 0x00 };
-      req[3] = tmcCrc8(req, 3);
-      Serial1.write(req, 4);
-      Serial1.flush();
-      delay(8);
-      Serial.printf("[2] %s Addr%u: ", t.name, addr);
-      int n = 0;
-      while (Serial1.available() && n < 16) { Serial.printf("%02X ", Serial1.read()); n++; }
-      if (n == 0)      Serial.print("(kein Byte -> Bus offen/falscher Pin)");
-      else if (n <= 4) Serial.print("(nur Echo -> Leitung OK, TMC antwortet nicht)");
-      else             Serial.print("(TMC-Antwort empfangen!)");
-      Serial.println();
-    }
-    measureBaud(Serial1, "UART1");
-  }
-  Serial1.end();
-  Serial1.begin(TMC_BAUD, SERIAL_8N1, TMC_UART_RX, TMC_UART_TX);
-  delay(2);
-
-  Serial2.end();
-  Serial2.begin(TMC_BAUD, SERIAL_8N1, TMC_UART_RX, TMC_UART_TX);
-  delay(2);
-  for (uint8_t addr = 0; addr <= 1; addr++) {
-    while (Serial2.available()) Serial2.read();
-    uint8_t req[4] = { 0x05, (uint8_t)((addr << 1) | 0x01), 0x00, 0x00 };
-    req[3] = tmcCrc8(req, 3);
-    Serial2.write(req, 4);
-    Serial2.flush();
-    delay(8);
-    Serial.printf("[4] UART2 Addr%u: ", addr);
-    int n = 0;
-    while (Serial2.available() && n < 16) { Serial.printf("%02X ", Serial2.read()); n++; }
-    if (n == 0)      Serial.print("(kein Byte)");
-    else if (n <= 4) Serial.print("(nur Echo, TMC schweigt)");
-    else             Serial.print("(TMC-Antwort empfangen!)");
-    Serial.println();
-  }
-  measureBaud(Serial2, "UART2");
-  Serial2.end();
-  Serial2.begin(TMC_BAUD, SERIAL_8N1, TMC_UART_RX, TMC_UART_TX);
-  delay(2);
-
-  Serial.println("================================");
 }
 
 // "UARTNET": Charakterisiert das PDN-Netz elektrisch (ohne UART-Verkehr).

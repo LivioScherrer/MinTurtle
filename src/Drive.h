@@ -21,3 +21,9 @@ void driveHardStop();
 // Ueberfuehrt den Tastenstatus in Zielgeschwindigkeiten und setzt nach
 // config.commandTimeoutMs ohne Befehl sicher auf Stopp.
 void driveUpdate();
+
+// Diagnose fuer "WASD tut nichts": schreibt den kompletten Zustand der
+// Kette KEYS -> driveUpdate -> setMotorSpeed in einen Puffer, damit sich
+// jeder Abschnitt einzeln pruefen laesst (per Befehl DRV? abrufbar).
+// Reihenfolge im Text: Keys | Zielgeschwindigkeiten | Sperrgrund | Treiber.
+void driveDebug(char* out, size_t n);

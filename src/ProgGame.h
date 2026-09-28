@@ -1,59 +1,74 @@
-// EduBot V1.3 - Programmieren-Spiel (Code-Bausteine, Scratch-artig)
-// User baut auf der Webseite per Drag & Drop ein Programm aus Bloecken:
-// Fahren (cm), Drehen (Grad), Warten (s), Wiederhole-n-mal, Wiederhole-bis-Farbe.
+// EduBot V2 - Programmieren-Spiel (Code-Bausteine, Scratch-artig)
+// Die Webseite baut per Drag & Drop ein Programm aus Bloecken und schickt
+// es als kompakten String zum Roboter.
+//
+// Programm-Aufbau: FLACHE Instruktionsliste mit Sprungzielen.
+//   Ein Loop belegt zwei Eintraege: den Kopf (OP_REPEAT/OP_UNTIL) und einen
+//   OP_END. Der Kopf merkt sich in endIdx, wo sein OP_END steht. Dadurch
+//   sind Schleifen beliebig verschachtelbar - im Gegensatz zur alten
+//   Struct-mit-Innenarray-Loesung, die nur eine Ebene erlaubte.
 #pragma once
 
 #include <Arduino.h>
 
 // Grenzen (kodiertes Programm laeuft ueber BLE -> Webseite begrenzt Laenge)
-constexpr uint8_t PROG_MAX_STEPS      = 20;  // Top-Level-Bloecke
-constexpr uint8_t PROG_LOOP_BODY_MAX  = 8;   // Bloecke pro Loop
-constexpr uint8_t PROG_UNTIL_MAX_ITER = 60;  // Sicherheits-Limit fuer Bis-Farbe-Loops
-constexpr uint8_t PROG_MAX_ENC        = 140; // Max. Laenge des kodierten Programm-Strings
+constexpr uint8_t PROG_MAX_STEPS      = 40;  // flache Liste inkl. aller OP_END
+constexpr uint8_t PROG_MAX_DEPTH      = 3;   // Verschachtelungstiefe der Schleifen
+constexpr uint8_t PROG_UNTIL_MAX_ITER = 60;  // Sicherheits-Limit fuer Bis-Loops
+constexpr uint8_t PROG_MAX_ENC        = 200; // Max. Laenge des kodierten Strings
 
 // Baustein-Op-Codes
 enum ProgOp : uint8_t {
-  OP_FWD = 0,   // F<n>  vorwaerts n cm
-  OP_BACK,      // B<n>  rueckwaerts n cm
-  OP_LEFT,      // L<n>  links drehen n Grad
-  OP_RIGHT,     // R<n>  rechts drehen n Grad
-  OP_WAIT,      // W<n>  warten n Sekunden
-  OP_REPEAT,    // U<n>(body)  Body n-mal wiederholen
-  OP_UNTIL      // C<c>(body)  Body wiederholen bis Farbe c sichtbar
+  // --- vorhanden ---
+  OP_FWD = 0,   // F<n>        vorwaerts n cm
+  OP_BACK,      // B<n>        rueckwaerts n cm
+  OP_LEFT,      // L<n>        links drehen n Grad
+  OP_RIGHT,     // R<n>        rechts drehen n Grad
+  OP_WAIT,      // W<n>        warten n Sekunden (W E <c>: bis Sensor)
+  OP_REPEAT,    // U<n>(body)  n-mal (U E <c>(body): solange Sensor)
+  OP_UNTIL,     // C<c>(body)  body wiederholen bis Farbe c sichtbar
+  // --- neu: millimetergenaue Fahrten ---
+  OP_MM_FWD,    // M<n>        vorwaerts n mm (exakt, unabhaengig von Microsteps)
+  OP_MM_BACK,   // N<n>        rueckwaerts n mm (exakt)
+  // --- neu: Distanzsensor mit eingetragenem Wert ---
+  OP_DRIVE_DIST,// D<n>        fahre vorwaerts bis Abstand <= n mm
+  OP_WAIT_DIST, // X<n>        warte bis Abstand <= n mm (max. 5 s)
+  OP_WAIT_FREE, // G<n>        warte bis Abstand >= n mm (max. 5 s)
+  // --- neu: Anzeige und Feinsteuerung ---
+  OP_LED,       // S<c>        LED auf Slot c setzen (0-3 Farben, 4/5 IR, 6 aus)
+  OP_PAUSE,     // Z<n>        Pause n x 100 ms
+  OP_STOP,      // Q           Vollstopp
+  // --- nur vom Parser erzeugt ---
+  OP_END        // Schliesst eine Schleife
 };
 
-// Sensor-Indizes fuer E/C-Slots: 0-3 Farben, 4 = Distanz NAH (blockiert), 5 = Distanz FREI
+// Sensor-/Slot-Indizes fuer E/C/S-Slots: 0-3 Farben, 4 = Distanz NAH, 5 = Distanz FREI
 constexpr uint8_t PROG_COLOR_ROT   = 0;
 constexpr uint8_t PROG_COLOR_GELB  = 1;
 constexpr uint8_t PROG_COLOR_GRUEN = 2;
 constexpr uint8_t PROG_COLOR_BLAU  = 3;
 constexpr uint8_t PROG_SENSOR_IR_HIGH = 4;  // Hindernis erkannt (distBlocked())
 constexpr uint8_t PROG_SENSOR_IR_LOW  = 5;  // Weg frei (DIST >= Schwelle / kein Wert)
+constexpr uint8_t PROG_SLOT_OFF       = 6;  // nur LED: ausschalten
 
-// Einfacher Baustein (auch Loop-Body: keine verschachtelten Loops)
-struct ProgBodyStep {
-  uint8_t op;    // OP_FWD..OP_WAIT
-  int16_t val;   // cm / Grad / Sekunden
-  int8_t  color; // Ziel-Farbe fuer F/B (-1 wenn nicht gesetzt)
-};
-
+// Ein Eintrag der flachen Programmliste.
 struct ProgStep {
-  uint8_t  op;        // ProgOp
-  int16_t  val;       // cm / Grad / s / Wiederhol-Anzahl
-  int8_t   color;     // Ziel-Farbe (OP_UNTIL oder F/B mit E-Block, -1 wenn keine)
-  uint8_t  bodyLen;   // nur OP_REPEAT/OP_UNTIL
-  ProgBodyStep body[PROG_LOOP_BODY_MAX];
+  uint8_t op;      // ProgOp
+  int16_t val;     // cm / Grad / s / mm / Anzahl; bei W und U auch negativer Sensor-Marker
+  int8_t  color;   // Zielfarbe fuer F/B (=-1 wenn keine); bei C die Farbe des Bis-Loops
+  uint8_t endIdx;  // nur OP_REPEAT/OP_UNTIL: Index des zugehoerigen OP_END
 };
 
 extern ProgStep progSteps[PROG_MAX_STEPS];
 extern uint8_t  progLen;
 extern bool     progActive;
 
-// Programm aus kompaktem String parsen.
-// Format: Top-Level durch Kommas getrennt.
-//   F10 = 10cm vorwaerts, R90 = 90 Grad rechts, W2 = 2s warten
-//   U3(F10,R90) = 3x wiederholen, C2(F5) = wiederholen bis GRUEN
-// true bei Erfolg, false bei Syntaxfehler / leerem Programm
+// Programm aus kompaktem String parsen (Schleifen beliebig verschachtelt).
+//   F10 = 10 cm vorwaerts, R90 = 90 Grad rechts, W2 = 2 s warten
+//   M45 = 45 mm vorwaerts, D120 = fahre bis Abstand <= 120 mm
+//   U3(F10,R90) = 3x, C2(F5) = bis GRUEN
+//   U2(U3(F5))  = verschachtelt
+// true bei Erfolg, false bei Syntaxfehler / leerem Programm.
 bool progSetFromString(const char* s);
 
 // Programm ausfuehren (blockierend, wie Pfeil-Knobeln).

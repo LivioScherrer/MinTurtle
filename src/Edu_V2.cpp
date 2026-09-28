@@ -35,6 +35,11 @@ constexpr int          CORE_SENSOR        = 0;
 constexpr unsigned long COLOR_NOTIFY_MS    = 100;
 constexpr uint32_t     LOOP_DELAY_MS      = 1;
 
+// Zentrale Start-Sperre fuer alle Spiel-Modi. Definiert weiter unten, neben
+// cmdLine(); die Vorwaertsdeklaration ist noetig, weil cmdQuiz() und
+// cmdRace() davor stehen. Siehe ausfuehrliche Begruendung dort.
+static bool claimGameSlot(const char* busyMsg, const char* what);
+
 // Hindernis-Erkennung: VL53L0X (distBlocked(), Schwellen in config.obsDistMM/obsRelMM).
 // DIST-Meldungen kommen aus distTick() alle DIST_NOTIFY_MS.
 
@@ -59,7 +64,10 @@ bool driveLockedByGame() { return currentGame != GAME_NONE; }
 // Feste Geschwindigkeit ohne Beschleunigung: der Motor-Task auf Core 0
 // erzeugt die Pulse unabhaengig von dieser Loop.
 constexpr uint32_t GAME_TICK_MS    = 1;    // Polling-Intervall in blockierenden Moves (Pulse macht der Motor-Task)
-const uint32_t GAME_MOVE_MS       = 360;  // Vor/Zurueck-Fahrt in ALLEN Spielen
+// Spiel-Fahrten laufen inzwischen POSITIONSBASIERT (mm -> Schritte), nicht
+// zeitbasiert, damit die Strecke unabhaengig von der Microstep-Zahl bleibt.
+// GAME_MOVE_MS wird nur noch als Reserve fuer Zeitfahrten (Pause/Puppe) genutzt.
+const uint32_t GAME_MOVE_MS       = 360;  // Reserve-Zeitfahrt, siehe oben
 const uint32_t GAME_COLOR_READ_MS = 250;  // Pause waehrend Farbsensor liest
 constexpr uint8_t QUIZ_MAX_COLOR_USE = 4;  // jede Farbe max. so oft im Quiz verwendbar
 
@@ -124,9 +132,27 @@ void gameStop(uint32_t ms) {
 // Wartet, bis beide Stepper stehen. bAbortOnNoGame=true bricht bei
 // Spielabbruch ab (currentGame == GAME_NONE).
 static void waitForStepsDone(bool bAbortOnNoGame) {
+  // Harte Obergrenze. Die Schleife wartet darauf, dass der Motor-Task die
+  // Positionsschritte auf 0 bringt - und motorStillRunning() liest genau die
+  // Variablen, die dieser Task beschreibt. Sollte dort etwas klemmen (z.B. ein
+  // dauerhaft gehaltener motorMutex, oder eine Stellung, deren Restzaehler
+  // nie 0 wird), wartete diese Schleife uneendlich: der Watchdog greift nicht,
+  // denn esp_task_wdt_init(10000, true) sind 10000 SEKUNDEN. Der Roboter
+  // stand dann still, ohne eine Meldung, und die BLE-Verbindung blieb offen.
+  // 20 s sind fuer die laengste faellige Fahrt (Programm-Block OP_DRIVE_DIST
+  // bis 1500 mm) deutlich ueberdimensioniert.
+  static constexpr uint32_t WAIT_STEPS_TIMEOUT_MS = 20000;
+  const uint32_t start = millis();
   while (motorStillRunning()) {
     esp_task_wdt_reset();
     if (bAbortOnNoGame && currentGame == GAME_NONE) {
+      stopMotors();
+      gameMoveBusy = false;
+      return;
+    }
+    if (millis() - start > WAIT_STEPS_TIMEOUT_MS) {
+      Serial.printf("[GAME] Schritte nach %u ms nicht fertig - Abbruch\n",
+                    (unsigned)WAIT_STEPS_TIMEOUT_MS);
       stopMotors();
       gameMoveBusy = false;
       return;
@@ -142,6 +168,18 @@ void gameDriveForwardSteps(int32_t steps) {
   gameMoveBusy = true;
   prepPositionMove(0, steps * static_cast<long>(config.leftSign));
   prepPositionMove(1, steps * static_cast<long>(config.rightSign));
+  waitForStepsDone(true);
+  gameMoveBusy = false;
+}
+
+// Rueckwaerts in Schritten - Gegenstueck zu gameDriveForwardSteps, damit
+// auch das Memory-Spiel unabhaengig von der Microstep-Zahl dieselbe Strecke
+// faehrt (negative Schrittzahl = zurueck).
+void gameDriveBackwardSteps(int32_t steps) {
+  if (steps < 0) steps = -steps;
+  gameMoveBusy = true;
+  prepPositionMove(0, -(long)steps * (long)config.leftSign);
+  prepPositionMove(1, -(long)steps * (long)config.rightSign);
   waitForStepsDone(true);
   gameMoveBusy = false;
 }
@@ -205,9 +243,23 @@ void korrigierenExecute() {
   sendStatus("QUIZ:CHECKING");
   uint8_t okCount = 0;
   for (uint8_t i = 0; i < korrigierenLen; i++) {
-    if (currentGame != GAME_KORRIGIEREN) { sendStatus("QUIZ:RESULT:ABORT"); return; }
-    gameDriveForwardSteps(config.quizForwardSteps);
+    if (currentGame != GAME_KORRIGIEREN) {
+      // korrigierenRunning MUSS hier zurueckgesetzt werden. Der Abbruch
+      // erfolgt praktisch immer ueber einen anderen Spiel-Befehl, der
+      // currentGame auf GAME_NONE setzt (RACE:STOP, PROG:STOP, ...), ohne
+      // dieses Flag zu kennen. Bliebe es true, wuerde jedes weitere
+      // QUIZ:CHECK an meinem Guard scheitern (QUIZ:BUSY) - das Quiz waere
+      // bis zum naechsten QUIZ:STOP, BLE-Reconnect oder Reboot tot.
+      korrigierenRunning = false;
+      stopMotors();
+      sendStatus("QUIZ:RESULT:ABORT");
+      return;
+    }
+    gameDriveForwardSteps(configForwardSteps());
     gameStop(GAME_COLOR_READ_MS);
+    // Waehrend des Farblesens bleibt der Streifen dunkel: eigenes LED-Licht
+    // (rot/gruen) koennte sonst als Farbe auf dem Boden erkannt werden.
+    ledStripClear();
     char found[16] = "UNBEKANNT";
     getCurrentColorName(found, sizeof(found));
     strlcpy(korrigierenFound[i], found, sizeof(korrigierenFound[i]));
@@ -215,6 +267,10 @@ void korrigierenExecute() {
     char part[48];
     snprintf(part, sizeof(part), "QUIZ:STEP:%u,%s,%s", i, korrigierenExpected[i], found);
     sendStatus(part);
+    // LED-Fortschritt: gruen solange alles stimmt, rot sobald ein Fehler dabei ist.
+    ledStripShowProgress(i + 1, korrigierenLen,
+                         (okCount == i + 1) ? LED_C_GREEN : LED_C_RED);
+    ledStripTick();
     bleProcessEvents();
   }
   stopMotors(); speedL = 0; speedR = 0;
@@ -225,6 +281,9 @@ void korrigierenExecute() {
     snprintf(result, sizeof(result), "QUIZ:RESULT:OK,%u,%u", okCount, korrigierenLen);
   else
     snprintf(result, sizeof(result), "QUIZ:RESULT:WRONG,%u,%u", okCount, korrigierenLen);
+  // Endergebnis zusaetzlich am Roboter: gruener Blitz = alles richtig.
+  ledStripShowResultFlash(okCount == korrigierenLen);
+  ledStripTick();
   sendStatus(result);
 }
 
@@ -235,19 +294,67 @@ int  raceMyScore = 0;
 int  raceOppScore = 0;
 bool raceActive = false;
 bool quizActive = false;
+// Zielpunktzahl des laufenden Rennens. Default RENNEN_TARGET_SCORE (10), damit
+// ein Partner mit aelterer Firmware (die nur RACE:START kennt) weiterhin
+// identisch funktioniert. Ueber RACE:START:<ziel>:<stufe> setzbar.
+uint8_t raceTargetScore = RENNEN_TARGET_SCORE;
+uint8_t raceStage = 0;
+// Strecke je richtigem Punkt in mm, gesetzt ueber RACE:STEP:<mm>.
+// 0 = keine Angabe: dann gilt die eingelernte Quiz-Strecke (configForwardSteps).
+float raceMMPerPoint = 0.0f;
+// Letztes Paket vom Gegner (fuer den Peer-Timeout).
+// 0 = noch kein Gegner-Schritt gesehen, Timeout ist also noch nicht scharf.
+unsigned long raceLastOppMs = 0;
 
 void raceExecuteStart(bool remote = false) {
   currentGame = GAME_RENNEN;
   raceMyScore = 0;
   raceOppScore = 0;
   raceActive = true;
+  // Der Timeout startet absichtlich NICHT hier: bis zum ersten Schritt des
+  // Gegners darf beliebig viel Zeit vergehen (die erste Aufgabe wird gerechnet).
+  raceLastOppMs = 0;
   sendStatus(remote ? "RACE:REMOTE_START" : "RACE:STARTED");
 }
 
-void raceForwardStep() {
+// Einen Punkt vorwaerts: feste Strecke in mm (RACE:STEP:<mm>). Alte Web-UIs
+// ohne Parameter fallen auf die eingelernte Quiz-Strecke zurueck - auch dann
+// wird positionsgefahren, damit die Strecke nie von der Microstep-Zahl haengt.
+void raceForwardStepMM(float mm) {
   if (!raceActive) { stopMotors(); speedL = 0; speedR = 0; return; }
-  gameDriveForward(GAME_MOVE_MS);
+  if (mm > 0.0f) {
+    // Positionsfahrt: exakte Strecke, unabhaengig von Tempo und Microsteps.
+    const int32_t steps = geoStepsForMM(mm, config.tmcMicrosteps);
+    if (steps < 1) return;
+    gameDriveForwardSteps(steps);
+  } else {
+    // Alte Web-UI ohne Parameter: eine feste Strecke statt Zeitbetrieb, damit
+    // auch dieser Pfad unabhaengig von der Microstep-Zahl gleich weit faehrt.
+    gameDriveForwardSteps(configForwardSteps());
+  }
   if (!raceActive) { stopMotors(); speedL = 0; speedR = 0; }
+}
+
+void raceForwardStep() { raceForwardStepMM(raceMMPerPoint); }
+
+// Rennen sauber beenden: Motoren aus, Spiel freigeben. Erlaubt das freie
+// Fahren wieder - vorher blieb GAME_RENNEN aktiv, bis ein STOP kam.
+void raceAbort(bool notifyPeer) {
+  raceActive = false;
+  currentGame = GAME_NONE;
+  stopMotors(); speedL = 0; speedR = 0;
+  if (notifyPeer) raceSendPacket((uint8_t)raceMyScore, false);
+  sendStatus("RACE:STOPPED");
+}
+
+// Prueft, ob der Gegner laenger als RACE_PEER_TIMEOUT_MS nichts gesendet hat.
+// true = Rennen muss beendet werden.
+// Solange der Gegner noch keinen einzigen Schritt geschickt hat, wird nichts
+// abgebrochen - sonst wuerde ein Kind, das die erste Aufgabe noch rechnet,
+// nach RACE_PEER_TIMEOUT_MS faelschlich als verloren gewertet.
+bool racePeerTimedOut() {
+  if (!raceActive || !hasPairedPeer || raceLastOppMs == 0) return false;
+  return (unsigned long)(millis() - raceLastOppMs) > RACE_PEER_TIMEOUT_MS;
 }
 
 // Forward declarations for Slalom
@@ -257,7 +364,10 @@ void slalomMaybeStart();
 void slalomCheckRetry();
 
 void onRacePacket(const RacePacket* pkt) {
-  if (pkt->flags & RACE_FLAG_WINNER || pkt->score >= RENNEN_TARGET_SCORE) {
+  // Timeout erst ab dem ersten echten Renn-Schritt des Gegners zaehlen
+  // (wenn das Rennen schon laeuft) - Scan-/Start-Pakete scharfmachen nichts.
+  if (raceActive) raceLastOppMs = millis();
+  if (pkt->flags & RACE_FLAG_WINNER || pkt->score >= raceTargetScore) {
     raceOppScore = pkt->score;
     raceActive = false;
     currentGame = GAME_NONE;
@@ -288,6 +398,11 @@ void onBleDisconnected() {
   driveClearKeys();
   speedL = 0.0; speedR = 0.0;
   stopMotors();
+  // Gegenstueck zu hardStop(): der EN-Pin ist fuer BEIDE Treiber gemeinsam,
+  // also schaltet ein HIGH den Robotor auch dann hart ab, wenn stopMotors()
+  // den Mutex nicht bekommen haette. Ohne das bliebe ein Disconnect waehrend
+  // einer Fahrt ohne Not-Aus-Backstop.
+  tmcDisable();
    raceActive = false;
   quizActive = false;
   currentGame = GAME_NONE;
@@ -338,6 +453,19 @@ void hardStop() {
   sendStatus("STOP");
 }
 
+// Erkennt die Spiel-STOP-Befehle. Wird ZENTRAL in handleCommand() benutzt:
+// ein Spiel-STOP muss auch die WASD-Tasten loeschen. Andernfalls nimmt die
+// Main-Loop im naechsten Tick die noch gesetzten Tasten wieder auf und der
+// Roboter faehrt mit voller Geschwindigkeit weiter, obwohl das Spiel
+// gestoppt wurde. Weil die WebUI zusaetzlich alle ~50 ms ein KEYS:-
+// Heartbeat schickt, greift der Timeout in driveUpdate() dabei nie.
+// Zentral statt in jedem Handler: ein einzelner vergessener Handler waere
+// sofort wieder derselbe Aerger.
+static bool cmdIsGameStop(const String& cmd) {
+  return cmd == "LINE:STOP"  || cmd == "MEMORY:STOP" || cmd == "QUIZ:STOP"
+      || cmd == "RACE:STOP"  || cmd == "PROG:STOP"  || cmd == "SLALOM:STOP";
+}
+
 // ---- Tastatur-Status (KEYS:<W><A><S><D>) ----
 static bool cmdKeys(const String& cmd) {
   String data = cmd.substring(5);
@@ -365,8 +493,16 @@ static bool cmdDist(const String& cmd) {
   // Diagnose: kompakte Zeile nach BLE + ausfuehrlicher Status auf Serial.
   if (cmd == "DISTDIAG" || cmd == "DIST:DIAG") {
     distDiagPrint();
-    char dbuf[96];
-    distDiag(dbuf, sizeof(dbuf));
+  // 128 statt 96. Die Zeile besteht aus 9 Feldern, vier davon sind
+  // unsigned-long-Zaehler (je 10 Stellen). Rechnerisch schlimmster Fall:
+  //   "DIST:DIAG:" 10 + ok 1 + lastMM 4 + lastRaw 4 + status 3 + offset 4
+  //   + 4 Zaehler a 10 = 40 + 8 Komma  =>  rund 74 Zeichen + NUL
+  // Der alte 96-Byte-Puffer haette also gerade noch gepasst - aber nur
+  // knapp, und ohne Reserve. 128 gibt Luft und bleibt deutlich unter der
+  // BLE-Nutzlastgrenze (MTU 247 -> 244 Byte), sodass die Diagnose auch bei
+  // sehr grossen Zaehlern nicht mittendrin abgeschnitten wird.
+  char dbuf[128];
+  distDiag(dbuf, sizeof(dbuf));
     sendStatus(dbuf);
     return true;
   }
@@ -474,7 +610,28 @@ static bool cmdDist(const String& cmd) {
     // TwoWire serialisiert nur Einzelaufrufe, nicht die Dreierfolge des
     // Farbsensors - dazwischen einzuschieben verschiebt dessen
     // Registerzeiger.
-    String out = "I2C:";
+    //
+    // Laengenbegrenzung: sendStatus() geht per BLE-Notify raus, und bei
+    // MTU 247 sind das 247-3 = 244 Byte Nutzlast. Der Scan ueber 0x08..0x77
+    // kann bis zu 112 Adressen finden und mit " %02X" rund 450 Zeichen
+    // ergeben - bei einem halb defekten Bus antworten viele Adressen, und
+    // die Antwort wurde dann vom BLE-Stack stillschweigend abgeschnitten
+    // bzw. verworfen. Die Web-UI zeigte danach gar nichts. Es wird daher
+    // auf 200 Zeichen Nutzlast gekappt und die Anzahl gefundener
+    // Adressen mitgeschickt, damit die Diagnose vollstaendig bleibt.
+    static constexpr size_t I2C_SCAN_MAX_LEN = 200;
+    // Platz fuer die Schlussangabe reservieren, damit die Diagnose NIEMALS
+    // unmarkiert gekuerzt wird: ohne "n=<Anzahl>" bzw. "+<Anzahl>" waere eine
+    // abgeschnittene Liste nicht als solche erkennbar und man haette eine
+    // vollstaendige, aber falsche Liste vor sich.
+    char out[I2C_SCAN_MAX_LEN + 1];
+    // Platzbedarf am Ende: " :n=65535" = 9 Zeichen, " +65535" = 7, Plus NUL.
+    static constexpr size_t I2C_TAIL_RESERVE = 12;
+    static constexpr size_t I2C_LIST_MAX     = I2C_SCAN_MAX_LEN - I2C_TAIL_RESERVE;
+    memcpy(out, "I2C:", 4);
+    size_t outLen = 4;
+    uint16_t found = 0;    // ALLE antwortenden Adressen, auch die nicht gelisteten
+    uint16_t listed = 0;   // davon tatsaechlich in die Liste geschriebene
     if (!i2cBusLock(500)) {
       Serial.println("[I2C] Scan nicht moeglich: Bus belegt");
       sendStatus("I2C:BUSY");
@@ -482,11 +639,27 @@ static bool cmdDist(const String& cmd) {
     }
     for (uint8_t a = 0x08; a <= 0x77; a++) {
       Wire.beginTransmission(a);
-      if (Wire.endTransmission() == 0) { char h[8]; snprintf(h, sizeof(h), " %02X", a); out += h; }
+      if (Wire.endTransmission() == 0) {
+        found++;
+        if (outLen + 3 > I2C_LIST_MAX) continue;   // Liste voll -> nur noch zaehlen
+        snprintf(out + outLen, (I2C_SCAN_MAX_LEN + 1) - outLen, " %02X", a);
+        outLen += 3;
+        listed++;
+      }
     }
     i2cBusUnlock();
-    sendStatus(out.c_str());
-    Serial.printf("[I2C]%s\n", out.c_str() + 3);
+    if (found > listed) {
+      // Gekuerzt: die Gesamtzahl steht mit da, damit klar ist, dass die Liste
+      // unvollstaendig ist und wie viel fehlt.
+      snprintf(out + outLen, (I2C_SCAN_MAX_LEN + 1) - outLen,
+               " +%u", (unsigned)(found - listed));
+    } else {
+      snprintf(out + outLen, (I2C_SCAN_MAX_LEN + 1) - outLen,
+               " :n=%u", (unsigned)found);
+    }
+    sendStatus(out);
+    Serial.printf("[I2C] %u Adressen (%u gelistet): %s\n",
+                  (unsigned)found, (unsigned)listed, out + 4);
     return true;
   }
   return false;
@@ -496,10 +669,18 @@ static bool cmdDist(const String& cmd) {
 static bool cmdCal(const String& cmd) {
   char buf[48];
   if (cmd == "CAL:BLACK") {
-    if (colorSem && xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) == pdTRUE) {
-      config.blackR = rawSensorR; config.blackG = rawSensorG; config.blackB = rawSensorB;
-      xSemaphoreGive(colorSem);
+    // Sperre wirklich noetig: gelingt sie nicht, waeren rawSensorR/G/B stale
+    // oder - schlimmer - ein halb geschriebener Satz. Vorher speicherte der
+    // Code in diesem Fall einfach die ALTEN Werte und meldete trotzdem
+    // "CAL:BLACK OK" - eine Fehlkalibrierung, die erst beim Spielen auffiel
+    // und sich nicht mehr zuordnen liess.
+    if (!colorSem || xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) != pdTRUE) {
+      sendStatus("CAL:BLACK BUSY");
+      Serial.println("[CAL] BLACK: Farb-Sperre nicht bekommen - nicht gespeichert");
+      return true;
     }
+    config.blackR = rawSensorR; config.blackG = rawSensorG; config.blackB = rawSensorB;
+    xSemaphoreGive(colorSem);
     configSaveUShort("blackR", config.blackR);
     configSaveUShort("blackG", config.blackG);
     configSaveUShort("blackB", config.blackB);
@@ -507,10 +688,13 @@ static bool cmdCal(const String& cmd) {
     return true;
   }
   if (cmd == "CAL:WHITE") {
-    if (colorSem && xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) == pdTRUE) {
-      config.whiteR = rawSensorR; config.whiteG = rawSensorG; config.whiteB = rawSensorB;
-      xSemaphoreGive(colorSem);
+    if (!colorSem || xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) != pdTRUE) {
+      sendStatus("CAL:WHITE BUSY");
+      Serial.println("[CAL] WHITE: Farb-Sperre nicht bekommen - nicht gespeichert");
+      return true;
     }
+    config.whiteR = rawSensorR; config.whiteG = rawSensorG; config.whiteB = rawSensorB;
+    xSemaphoreGive(colorSem);
     configSaveUShort("whiteR", config.whiteR);
     configSaveUShort("whiteG", config.whiteG);
     configSaveUShort("whiteB", config.whiteB);
@@ -570,7 +754,12 @@ static bool cmdTmc(const String& cmd) {
   // Set-Befehle werden im NVS gespeichert und ueberleben einen Reboot.
   // Nach jeder Aenderung kommt zusaetzlich eine TMC:STAT:-Kompaktzeile.
   if (cmd == "TMC?") { tmcPrintStatus(); sendStatus("TMC:LOGGED"); tmcSendCompactStatus(); return true; }
-  if (cmd == "UARTTEST") { tmcUartDiag(); sendStatus("UART:DIAG_DONE"); return true; }
+    // UARTTEST ist absichtlich gesperrt: der Befehl schreibt an die
+    // TMC-Adressen 0..3. Da ein TMC2209 seine UART-Adresse pro Datagram
+    // hochzaehlt, wandern die beiden Treiber danach auf Adresse 2/3 und
+    // antworten nicht mehr - bis ein Neustart die OTP-Adressen zuruecksetzt.
+    // UARTNET (nur lesend) bleibt erlaubt.
+    if (cmd == "UARTTEST") { sendStatus("UARTTEST:GESPERRT"); return true; }
   if (cmd == "UARTNET") { tmcNetDiag(); sendStatus("NETZ:DIAG_DONE"); return true; }
   if (cmd.startsWith("TMC:CURRENT:")) {
     int v = cmd.substring(12).toInt();
@@ -597,7 +786,14 @@ static bool cmdTmc(const String& cmd) {
   if (cmd.startsWith("TMC:MS:")) {
     int v = cmd.substring(7).toInt();
     if (tmcSetMicrosteps((uint16_t)v)) {
-      config.tmcMicrosteps = (uint16_t)v; configSaveUShort("tmcMS", config.tmcMicrosteps);
+      // tmcSetMicrosteps() setzt config.tmcMicrosteps und die Schrittrate
+      // bereits selbst - und zwar VOR dem Readback, mit Rollback bei
+      // Misserfolg. Hier steht deshalb nur noch das Persistieren.
+      configSaveUShort("tmcMS", config.tmcMicrosteps);
+      Serial.printf("[GEO] %u Microsteps: %.1f mm = %ld Schritte, %.1f Grad = %ld Schritte\n",
+                    config.tmcMicrosteps, (double)config.quizForwardMM,
+                    (long)configForwardSteps(), (double)config.quizTurnDeg,
+                    (long)configTurnSteps());
       snprintf(buf, sizeof(buf), "TMC:MS=%u", tmcGetMicrosteps()); sendStatus(buf);
       tmcSendCompactStatus();
     } else {
@@ -619,46 +815,97 @@ static bool cmdTmc(const String& cmd) {
   return false;
 }
 
-// ---- Geometrie-Einlernung: STEPS (Vorwaertstrecke) + ANG (Drehung) ----
+// ---- Geometrie-Einlernung + Tempo (alles in physikalischen Einheiten) ----
+// Gespeichert werden mm / Grad / mm-s, NIEMALS Schrittzahlen. Die Schritte
+// werden bei jedem Aufruf aus der aktuellen Microstep-Zahl berechnet - die
+// Einlernung gilt also fuer JEDE Microstep-Einstellung.
+//   STEPS:<mm>    Strecke einer Farb-Raste (Werkwert 30)
+//   ANG:<grad>    Drehung im Spiel (Werkwert 90)
+//   SPEED:<mm/s>  Fahrgeschwindigkeit (Werkwert 150)
 static bool cmdSteps(const String& cmd) {
-  char buf[48];
+  char buf[64];
   if (cmd == "STEPS?") {
-    snprintf(buf, sizeof(buf), "STEPS=%ld", (long)config.quizForwardSteps);
+    snprintf(buf, sizeof(buf), "STEPS=%.1f,%ld", (double)config.quizForwardMM,
+             (long)configForwardSteps());
+    sendStatus(buf);
+    return true;
+  }
+  if (cmd == "GEO?") {
+    snprintf(buf, sizeof(buf), "GEO:%u,%.2f,%.1f,%.1f",
+             (unsigned)(MOTOR_FULL_STEPS_PER_REV * config.tmcMicrosteps),
+             (double)configStepsPerMM(), (double)config.quizForwardMM,
+             (double)config.quizTurnDeg);
+    sendStatus(buf);
+    return true;
+  }
+  if (cmd == "GEO:RESET") {
+    configResetGeometry();
+    snprintf(buf, sizeof(buf), "GEO:RESET=%.1f,%.1f",
+             (double)config.quizForwardMM, (double)config.quizTurnDeg);
     sendStatus(buf);
     return true;
   }
   if (cmd.startsWith("STEPS:")) {
-    int32_t n = (int32_t)cmd.substring(6).toInt();
-    if (n < 1 || n > 2000) { sendStatus("STEPS:BAD"); return true; }
-    config.quizForwardSteps = n;
-    configSaveInt("quizSteps", n);
-    // Sofort testen
-    testDriveSteps(n);
-    snprintf(buf, sizeof(buf), "STEPS=%ld", (long)n);
+    float mm = cmd.substring(6).toFloat();
+    if (!inRange(mm, FORWARD_MM_MIN, FORWARD_MM_MAX)) { sendStatus("STEPS:BAD"); return true; }
+    config.quizForwardMM = mm;
+    configSaveField("quizMM", mm);
+    // Sofort in der neuen Distanz testen
+    testDriveSteps(configForwardSteps());
+    snprintf(buf, sizeof(buf), "STEPS=%.1f,%ld", (double)mm, (long)configForwardSteps());
     sendStatus(buf);
-    Serial.printf("[STEPS] Test %ld Schritte gefahren (fuer 3cm-Quiz gespeichert)\n", (long)n);
+    Serial.printf("[STEPS] %.1f mm = %ld Schritte (bei %u Microsteps) gefahren und gespeichert\n",
+                  (double)mm, (long)configForwardSteps(), config.tmcMicrosteps);
     return true;
   }
   return false;
 }
 
 static bool cmdAng(const String& cmd) {
-  char buf[48];
+  char buf[64];
   if (cmd == "ANG?") {
-    snprintf(buf, sizeof(buf), "ANG=%ld", (long)config.quizTurnSteps);
+    snprintf(buf, sizeof(buf), "ANG=%.1f,%ld", (double)config.quizTurnDeg,
+             (long)configTurnSteps());
     sendStatus(buf);
     return true;
   }
   if (cmd.startsWith("ANG:")) {
-    int32_t n = (int32_t)cmd.substring(4).toInt();
-    if (n < 1 || n > 5000) { sendStatus("ANG:BAD"); return true; }
-    config.quizTurnSteps = n;
-    configSaveInt("quizTurnSteps", n);
+    float deg = cmd.substring(4).toFloat();
+    if (!inRange(deg, TURN_DEG_MIN, TURN_DEG_MAX)) { sendStatus("ANG:BAD"); return true; }
+    config.quizTurnDeg = deg;
+    configSaveField("quizDeg", deg);
     // Sofort testen (Drehung rechts auf der Stelle)
-    testTurnSteps(n);
-    snprintf(buf, sizeof(buf), "ANG=%ld", (long)n);
+    testTurnSteps(configTurnSteps());
+    snprintf(buf, sizeof(buf), "ANG=%.1f,%ld", (double)deg, (long)configTurnSteps());
     sendStatus(buf);
-    Serial.printf("[ANG] Test %ld Schritte/Rad gedreht (fuer 90-Grad-Spiel gespeichert)\n", (long)n);
+    Serial.printf("[ANG] %.1f Grad = %ld Schritte/Rad gedreht und gespeichert\n",
+                  (double)deg, (long)configTurnSteps());
+    return true;
+  }
+  return false;
+}
+
+// ---- Fahrgeschwindigkeit (mm/s) ----
+static bool cmdSpeed(const String& cmd) {
+  char buf[64];
+  if (cmd == "SPEED?") {
+    snprintf(buf, sizeof(buf), "SPEED=%.0f,%.0f", (double)config.driveSpeedMM,
+             (double)FIXED_DRIVE_SPEED);
+    sendStatus(buf);
+    return true;
+  }
+  if (cmd.startsWith("SPEED:")) {
+    float mmS = cmd.substring(6).toFloat();
+    if (!inRange(mmS, SPEED_MM_S_MIN, SPEED_MM_S_MAX)) { sendStatus("SPEED:BAD"); return true; }
+    config.driveSpeedMM = mmS;
+    configSaveField("driveSpeed", mmS);
+    motorUpdateSpeeds();
+    snprintf(buf, sizeof(buf), "SPEED=%.0f,%.0f", (double)mmS, (double)FIXED_DRIVE_SPEED);
+    sendStatus(buf);
+    Serial.printf("[SPEED] %.0f mm/s = %.0f Schritte/s (%u Microsteps)%s\n",
+                  (double)mmS, (double)FIXED_DRIVE_SPEED, config.tmcMicrosteps,
+                  (double)mmS * configStepsPerMM() > MAX_DRIVE_STEPS_S
+                    ? " - am Puls-Task begrenzt" : "");
     return true;
   }
   return false;
@@ -674,7 +921,7 @@ static bool cmdSat(const String& cmd) {
   }
   if (cmd.startsWith("SAT:")) {
     float v = cmd.substring(4).toFloat();
-    if (v < 0.0f || v > 1.0f) { sendStatus("SAT:BAD"); return true; }
+    if (!inRange(v, 0.0f, 1.0f)) { sendStatus("SAT:BAD"); return true; }
     config.minColorSaturation = v;
     configSaveField("minSat", v);
     snprintf(msg, sizeof(msg), "SAT=%.2f", v);
@@ -703,6 +950,19 @@ static bool cmdQuiz(const String& cmd) {
   if (!cmd.startsWith("QUIZ:")) return false;
   String sub = cmd.substring(5);
   if (sub.startsWith("CHECK:")) {
+    // Kein neues Quiz waehrend eines laufenden: der Parser loescht
+    // korrigierenLen und schreibt korrigierenExpected[] neu, waehrend
+    // korrigierenExecute() genau ueber dieses Array iteriert. handleCommand()
+    // ist re-entrant, zwei Quizlaeufe wuerden sich also verschränken.
+    if (korrigierenRunning) {
+      sendStatus("QUIZ:BUSY");
+      Serial.println("[QUIZ] Laufend - CHECK abgelehnt");
+      return true;
+    }
+    // Siehe claimGameSlot(): korrigierenExecute() bricht ueber
+    // currentGame != GAME_KORRIGIEREN ab und setzt dabei nichts zurueck, was
+    // den fremden Spielzustand wieder freigeraeumt haette.
+    if (claimGameSlot("QUIZ:BUSY", "QUIZ")) return true;
     String arr = sub.substring(6);
     korrigierenLen = 0;
     int start = 0;
@@ -736,27 +996,82 @@ static bool cmdQuiz(const String& cmd) {
     korrigierenRunning = false;
     stopMotors();
     sendStatus("QUIZ:STOPPED");
+  } else {
+    // Unbekannter Sub-Befehl. Muss ein ELSE der Kette sein und darf nicht
+    // unbedingt davor stehen: die Erfolgszweige fallen in den Abschluss der
+    // Funktion durch. Ein unbedingtes sendStatus() schoebe JEDEM gueltigen
+    // Befehl ein "UNKNOWN:..." nach - und da BLE-Notify FIFO ist, wuerde die
+    // Web-UI die gerade gezeigte Erfolgsmeldung zuverlaessig mit einer gelben
+    // "Unbekannter Befehl"-Warnung ueberschreiben.
+    sendStatus((String("UNKNOWN:") + cmd).c_str());
   }
   return true;
 }
 
-// ---- RENNEN (Multiplayer): RACE:START/STEP/WIN/LOSE/SCAN/UNPAIR/PAIR:/PROGRESS: ----
+// ---- RENNEN (Multiplayer): RACE:START[/:<ziel>:<stufe>]/STEP[/:<mm>]/WIN/LOSE/
+//      STOP/SCAN/UNPAIR/PAIR:/PROGRESS: ---------------------------------------------------------
+// Rueckwaertskompatibilitaet (Partner mit aelterer Firmware bzw. aelterer Web-UI):
+//   * RACE:START ohne Parameter  -> Ziel 10 (wie bisher)
+//   * RACE:STEP ohne Parameter  -> Zeitbetrieb 360 ms (wie bisher)
+// Das ESP-NOW-Paket bleibt unveraendert - die Uebertragung zwischen zwei
+// Robotern ist bit-identisch zum bisherigen Protokoll.
 static bool cmdRace(const String& cmd) {
   if (!cmd.startsWith("RACE:")) return false;
   char buf[48];
   String sub = cmd.substring(5);
   if (sub == "START") {
+    raceTargetScore = RENNEN_TARGET_SCORE;   // Default, falls keine Parameter
+    raceStage = 0;
+    raceMMPerPoint = 0.0f;                    // Zeitbetrieb bis zur STEP-Angabe
+  } else if (sub.startsWith("START:")) {
+    // START:<ziel>[:<stufe>] - Ziel 1..99, Stufe 0..6 (nur Anzeige/Protokoll)
+    const String params = sub.substring(6);
+    const int b = params.indexOf(':');
+    long target = params.toInt();
+    long stage = (b >= 0) ? params.substring(b + 1).toInt() : 0;
+    if (target < RACE_TARGET_MIN || target > RACE_TARGET_MAX) target = RENNEN_TARGET_SCORE;
+    if (stage < 0 || stage > 6) stage = 0;
+    raceTargetScore = (uint8_t)target;
+    raceStage = (uint8_t)stage;
+    raceMMPerPoint = 0.0f;
+  }
+  if (sub == "START" || sub.startsWith("START:")) {
+    // Siehe claimGameSlot(): ohne diese Sperre startete das Rennen mitten in
+    // einem anderen Spiel und hinterliess einen Zustand currentGame=GAME_NONE
+    // bei raceActive=true. RACE:STEP zaehlte dann Punkte, obwohl die Fahrt
+    // sofort wieder abgebrochen wurde - das Kind sah Punkte, der Roboter stand.
+    if (claimGameSlot("RACE:BUSY", "RACE")) return true;
     raceExecuteStart();
     raceSendPacket(0, false);
+    snprintf(buf, sizeof(buf), "RACE:TARGET:%u,%u", raceTargetScore, raceStage);
+    sendStatus(buf);
   } else if (sub == "STEP") {
     if (!raceActive) return true;
     raceMyScore++;
     raceForwardStep();
     if (!raceActive) return true;
-    raceSendPacket((uint8_t)raceMyScore, raceMyScore >= RENNEN_TARGET_SCORE);
+    raceSendPacket((uint8_t)raceMyScore, raceMyScore >= raceTargetScore);
     snprintf(buf, sizeof(buf), "RACE:ME:%d", raceMyScore);
     sendStatus(buf);
-    if (raceMyScore >= RENNEN_TARGET_SCORE) {
+    if (raceMyScore >= raceTargetScore) {
+      raceActive = false;
+      currentGame = GAME_NONE;
+      stopMotors(); speedL = 0; speedR = 0;
+      sendStatus("RACE:YOU_WIN");
+    }
+  } else if (sub.startsWith("STEP:")) {
+    // STEP:<mm> - Strecke je Punkt in Millimetern (ersetzt den 360-ms-Betrieb).
+    const float mm = sub.substring(5).toFloat();
+    if (!inRange(mm, 1.0f, 300.0f)) { sendStatus("RACE:BAD_MM"); return true; }
+    raceMMPerPoint = mm;
+    if (!raceActive) return true;
+    raceMyScore++;
+    raceForwardStepMM(mm);
+    if (!raceActive) return true;
+    raceSendPacket((uint8_t)raceMyScore, raceMyScore >= raceTargetScore);
+    snprintf(buf, sizeof(buf), "RACE:ME:%d", raceMyScore);
+    sendStatus(buf);
+    if (raceMyScore >= raceTargetScore) {
       raceActive = false;
       currentGame = GAME_NONE;
       stopMotors(); speedL = 0; speedR = 0;
@@ -766,12 +1081,14 @@ static bool cmdRace(const String& cmd) {
     raceActive = false;
     currentGame = GAME_NONE;
     stopMotors(); speedL = 0; speedR = 0;
-    raceSendPacket((uint8_t)RENNEN_TARGET_SCORE, true);
+    raceSendPacket((uint8_t)raceTargetScore, true);
   } else if (sub == "LOSE") {
     raceActive = false;
     currentGame = GAME_NONE;
     stopMotors(); speedL = 0; speedR = 0;
     raceSendPacket((uint8_t)raceMyScore, false);
+  } else if (sub == "STOP") {
+    raceAbort(true);
   } else if (sub == "SCAN") {
     raceSendHello();
     sendStatus("RACE:SCAN_START");
@@ -791,26 +1108,89 @@ static bool cmdRace(const String& cmd) {
     }
   } else if (sub.startsWith("PROGRESS:")) {
     raceOppScore = sub.substring(9).toInt();
+    raceLastOppMs = millis();
     snprintf(buf, sizeof(buf), "RACE:PROGRESS:%d", raceOppScore);
     sendStatus(buf);
+  } else if (sub == "?") {
+    snprintf(buf, sizeof(buf), "RACE:TARGET:%u,%u", raceTargetScore, raceStage);
+    sendStatus(buf);
+    snprintf(buf, sizeof(buf), "RACE:STATE:%d,%d,%u,%u", raceActive ? 1 : 0,
+             currentGame == GAME_RENNEN ? 1 : 0, (unsigned)raceMyScore,
+             (unsigned)raceOppScore);
+    sendStatus(buf);
+  } else {
+    // Unbekannter Sub-Befehl. Muss ein ELSE der Kette sein und darf nicht
+    // unbedingt davor stehen: die Erfolgszweige fallen in den Abschluss der
+    // Funktion durch. Ein unbedingtes sendStatus() schoebe JEDEM gueltigen
+    // Befehl ein "UNKNOWN:..." nach - und da BLE-Notify FIFO ist, wuerde die
+    // Web-UI die gerade gezeigte Erfolgsmeldung zuverlaessig mit einer gelben
+    // "Unbekannter Befehl"-Warnung ueberschreiben.
+    sendStatus((String("UNKNOWN:") + cmd).c_str());
   }
   return true;
 }
 
 // ---- LINIE FOLGEN: LINE:START / LINE:STOP ----
+// Darf der Befehl "<prefix>BUSY" die aktuell laufende Spiel-Sperre beanspruchen?
+//
+// Hintergrund: handleCommand() ist aus jeder blockierenden Spiel-Warte-
+// schleife heraus re-entrant (bleProcessEvents()). Ein zweiter Start-Befehl
+// kann also mitten in einem laufenden Spiel ankommen. Ohne diese Pruefung
+// passierte Folgendes:
+//
+//   PROG laeuft (progActive, currentGame=GAME_PROG)
+//     -> MEMORY:START kommt rein
+//     -> setzt currentGame = GAME_MEMORY, memoryActive = true, hebt eine Fahrt auf
+//     -> das laufende progMove() erkennt currentGame != GAME_PROG, bricht ab
+//        und setzt am Ende currentGame = GAME_NONE   <-- ueberschreibt das gerade
+//                                                          gestartete Memory
+//   Endzustand: memoryActive == true, currentGame == GAME_NONE
+//     -> Memory ist tot: memoryStart() hat "if (memoryActive) return;"
+//     -> das Freifahren ist entsperrt, die WebUI zeigt aber "Memory laeuft"
+//     -> Rettung nur ueber MEMORY:STOP
+//
+// Dieselbe Mechanik galt fuer RACE:START (Punkte wurden gezaehlt, ohne zu
+// fahren) und QUIZ:CHECK. Deshalb pruefen jetzt ALLE Startbefehle hier -
+// die bisherigen Einzelpruefungen (progActive, korrigierenRunning,
+// memoryActive, raceActive) sehen jeweils nur sich selbst, nicht currentGame.
+//
+// true = gesperrt, der Befehl wurde abgelehnt.
+static bool claimGameSlot(const char* busyMsg, const char* what) {
+  if (!driveLockedByGame()) return false;
+  sendStatus(busyMsg);
+  Serial.printf("[%s] Spiel laeuft (game=%d) - Start abgelehnt\n",
+                what, (int)currentGame);
+  return true;
+}
+
 static bool cmdLine(const String& cmd) {
   if (!cmd.startsWith("LINE:")) return false;
   String sub = cmd.substring(5);
   if (sub == "START") {
+    // Der Linienfolger darf kein laufendes Spiel uebernehmen. Siehe
+    // claimGameSlot() fuer den Grund.
+    if (claimGameSlot("LINE:BUSY", "LINE")) return true;
     if (!lineFollowerActive) {
       currentGame = GAME_LINEFOLLOWER;
       lineFollowerStart();
       sendStatus("LINE:RUNNING");
+    } else {
+      // Bisher stiller No-Op: kein Befehl wurde gesendet, der Knopf
+      // schien defekt. Jetzt gibt es eine Rueckmeldung.
+      sendStatus("LINE:BUSY");
     }
   } else if (sub == "STOP") {
     lineFollowerStop();
     currentGame = GAME_NONE;
     sendStatus("LINE:STOPPED");
+  } else {
+    // Unbekannter Sub-Befehl. Muss ein ELSE der Kette sein und darf nicht
+    // unbedingt davor stehen: die Erfolgszweige fallen in den Abschluss der
+    // Funktion durch. Ein unbedingtes sendStatus() schoebe JEDEM gueltigen
+    // Befehl ein "UNKNOWN:..." nach - und da BLE-Notify FIFO ist, wuerde die
+    // Web-UI die gerade gezeigte Erfolgsmeldung zuverlaessig mit einer gelben
+    // "Unbekannter Befehl"-Warnung ueberschreiben.
+    sendStatus((String("UNKNOWN:") + cmd).c_str());
   }
   return true;
 }
@@ -820,9 +1200,15 @@ static bool cmdMemory(const String& cmd) {
   if (!cmd.startsWith("MEMORY:")) return false;
   String sub = cmd.substring(7);
   if (sub == "START") {
+    // Siehe claimGameSlot(). Besonders folgenreich war das hier, weil
+    // memoryStart() "if (memoryActive) return;" hat und sein eigenes Flag
+    // gesetzt laesst: ein fremder Start hinterliess memoryActive=true bei
+    // currentGame=GAME_NONE. Memory war danach tot und das Freifahren offen.
+    if (claimGameSlot("MEMORY:BUSY", "MEMORY")) return true;
     currentGame = GAME_MEMORY;
     memoryStart(3);
   } else if (sub.startsWith("START:")) {
+    if (claimGameSlot("MEMORY:BUSY", "MEMORY")) return true;
     uint8_t n = (uint8_t)sub.substring(6).toInt();
     if (n < 3) n = 3;
     if (n > MEMORY_MAX_LEN) n = MEMORY_MAX_LEN;
@@ -834,6 +1220,14 @@ static bool cmdMemory(const String& cmd) {
   } else if (sub.startsWith("INPUT:")) {
     uint8_t m = (uint8_t)sub.substring(6).toInt();
     memoryInput(m);
+  } else {
+    // Unbekannter Sub-Befehl. Muss ein ELSE der Kette sein und darf nicht
+    // unbedingt davor stehen: die Erfolgszweige fallen in den Abschluss der
+    // Funktion durch. Ein unbedingtes sendStatus() schoebe JEDEM gueltigen
+    // Befehl ein "UNKNOWN:..." nach - und da BLE-Notify FIFO ist, wuerde die
+    // Web-UI die gerade gezeigte Erfolgsmeldung zuverlaessig mit einer gelben
+    // "Unbekannter Befehl"-Warnung ueberschreiben.
+    sendStatus((String("UNKNOWN:") + cmd).c_str());
   }
   return true;
 }
@@ -844,6 +1238,16 @@ static bool cmdProg(const String& cmd) {
   char buf[48];
   String sub = cmd.substring(5);
   if (sub.startsWith("SET:")) {
+    // Nicht waehrend eines laufenden Programms: progSetFromString() macht
+    // memset(progSteps) und setzt progLen - der laufende Interpreter haelt
+    // aber eine Referenz genau auf dieses Array. handleCommand() ist aus
+    // jeder Spiel-Warteschleife re-entrant, ein zweites PROG:SET wuerde dem
+    // Programm also unter sich selbst die Instruktionen austauschen.
+    if (progActive) {
+      sendStatus("PROG:BUSY");
+      Serial.println("[PROG] Laufend - SET abgelehnt");
+      return true;
+    }
     String enc = sub.substring(4);
     if (progSetFromString(enc.c_str())) {
       snprintf(buf, sizeof(buf), "PROG:READY:%u", progLen);
@@ -852,9 +1256,36 @@ static bool cmdProg(const String& cmd) {
       sendStatus("PROG:BAD");
     }
   } else if (sub == "RUN") {
+    // Auch waehrend eines laufenden Slalom-Matches kein Solo-Start. Der
+    // Slalom-Executor (slalomExecute) ruft progSetFromString() auf, und das
+    // macht memset(progSteps) - faellt ein GO-Paket waehrend eines hier
+    // gestarteten Solo-Laufs ein, wuerde das laufende Programm unter sich
+    // selbst durch die Schrittliste des Gegners ersetzt.
+    if (slalomPhase == SLALOM_BUILD || slalomPhase == SLALOM_COUNTDOWN ||
+        slalomPhase == SLALOM_RACING) {
+      // Eigener String, weil "PROG:BUSY" sonst als "es laeuft schon ein
+      // Programm" gelesen wuerde - es laeuft aber gar kein Programm, sondern
+      // ein Slalom-Match. Die Meldung muss zum tatsaechlichen Zustand passen,
+      // sonst sucht das Kind vergeblich nach einem Stop-Knopf.
+      sendStatus("PROG:BUSY:SLALOM");
+      Serial.println("[PROG] Slalom laeuft - Solo-Start abgelehnt");
+      return true;
+    }
+    // Siehe claimGameSlot(): progRun() setzt am Ende currentGame = GAME_NONE.
+    // Ein fremder Start, der waehrend des Laufs currentGame belegt haette,
+    // wuerde dadurch wieder freigeraeumt, waehrend das neue Spiel weiterlaeuft.
+    if (claimGameSlot("PROG:BUSY", "PROG")) return true;
     progRun();
   } else if (sub == "STOP") {
     progStop();
+  } else {
+    // Unbekannter Sub-Befehl. Muss ein ELSE der Kette sein und darf nicht
+    // unbedingt davor stehen: die Erfolgszweige fallen in den Abschluss der
+    // Funktion durch. Ein unbedingtes sendStatus() schoebe JEDEM gueltigen
+    // Befehl ein "UNKNOWN:..." nach - und da BLE-Notify FIFO ist, wuerde die
+    // Web-UI die gerade gezeigte Erfolgsmeldung zuverlaessig mit einer gelben
+    // "Unbekannter Befehl"-Warnung ueberschreiben.
+    sendStatus((String("UNKNOWN:") + cmd).c_str());
   }
   return true;
 }
@@ -878,8 +1309,13 @@ static bool cmdSlalom(const String& cmd) {
       sendStatus("SLALOM:ERROR:BAD_MAC");
       return true;
     }
-    // CMD_INVITE an den Peer senden (senderMac identifiziert uns)
-    slalomSendPacketTo(SLALOM_CMD_INVITE, nullptr, mac);
+    // CMD_INVITE an den Peer senden. slalomInviteSend() merkt sich Ziel-MAC
+    // und Zeitpunkt und wiederholt die Einladung ueber slalomTick() - vorher
+    // ging genau EIN Paket raus, und bei Paketverlust blieb die Web-UI
+    // dauerhaft in "Einladung gesendet! Warte auf Antwort..." stehen.
+    // Das Merken ist zugleich die Berechtigung fuer ein spaeteres
+    // INVITE_ACK: nur darauf antworten wir.
+    slalomInviteSend(mac);
     sendStatus("SLALOM:INVITE_SENT");
     Serial.printf("[SLALOM] Einladung an %02X:%02X:%02X:%02X:%02X:%02X gesendet\n",
       mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -918,10 +1354,22 @@ static bool cmdSlalom(const String& cmd) {
       sendStatus("SLALOM:ERROR:NOT_HOST");
       return true;
     }
+    // Siehe claimGameSlot(): slalomExecute() setzt am Ende currentGame auf
+    // GAME_NONE und wuerde damit ein mitten im Spiel gestartetes anderes
+    // Programm wieder entsperren.
+    if (claimGameSlot("SLALOM:BUSY", "SLALOM")) return true;
     slalomStartGame();
   } else if (sub == "STOP") {
     // Spiel manuell abbrechen -> beide zurueck zu PAIRED
     slalomAbortGame();
+  } else {
+    // Unbekannter Sub-Befehl. Muss ein ELSE der Kette sein und darf nicht
+    // unbedingt davor stehen: die Erfolgszweige fallen in den Abschluss der
+    // Funktion durch. Ein unbedingtes sendStatus() schoebe JEDEM gueltigen
+    // Befehl ein "UNKNOWN:..." nach - und da BLE-Notify FIFO ist, wuerde die
+    // Web-UI die gerade gezeigte Erfolgsmeldung zuverlaessig mit einer gelben
+    // "Unbekannter Befehl"-Warnung ueberschreiben.
+    sendStatus((String("UNKNOWN:") + cmd).c_str());
   }
   return true;
 }
@@ -932,14 +1380,30 @@ void handleCommand(const char* cmdStr) {
   cmd.toUpperCase();
   lastCommandTime = millis();
 
-  if (cmd.startsWith("KEYS:")) { cmdKeys(cmd); return; }
+    if (cmd.startsWith("KEYS:")) { cmdKeys(cmd); return; }
+    // DRV? zeigt die komplette Freifahren-Kette (Keys, Geschwindigkeit,
+    // Spiel-Sperre, Treiber). Nur Diagnose - veraendert nichts.
+    if (cmd == "DRV?") {
+      char drv[160];
+      driveDebug(drv, sizeof(drv));
+      sendStatus(drv);
+      return;
+    }
 
   Serial.printf("[CMD] %s\n", cmd.c_str());
   if (cmd == "STOP") { hardStop(); return; }
 
+  // Spiel-STOP: Tasten + Geschwindigkeits-Buchfuehrung mitraeumen, damit die
+  // Main-Loop nicht sofort wieder anzieht. (Siehe cmdIsGameStop.)
+  if (cmdIsGameStop(cmd)) {
+    driveClearKeys();
+    speedL = 0.0; speedR = 0.0;
+  }
 
-  if (cmdSteps(cmd)) return;   // STEPS? / STEPS:<1..2000>  (Vorwaertstrecke, faehrt sofort)
-  if (cmdAng(cmd))   return;   // ANG? / ANG:<1..5000>      (90-Grad-Drehung, faehrt sofort)
+
+  if (cmdSteps(cmd)) return;   // STEPS?/STEPS:<mm>  + GEO? / GEO:RESET
+  if (cmdAng(cmd))   return;   // ANG?/ANG:<grad>
+  if (cmdSpeed(cmd)) return;   // SPEED?/SPEED:<mm/s>
   if (cmdSat(cmd))   return;   // SAT? / SAT:<0..1>         (Mindest-Saettigung)
 
 
@@ -1006,6 +1470,64 @@ void setup() {
 }
 
 // =====================================================
+// LED-STATUSANZEIGE
+// =====================================================
+// Waehlt genau EIN Muster nach Prioritaet (oben gewinnt):
+//   1. Slalom-Countdown  - Startampel: rot fuellt sich, gruen = GO
+//   2. Slalom-Ergebnis   - Regenbogen (gewonnen) / rotes Atmen (verloren)
+//   3. Slalom-Bauphase   - Zielfarbe pulsiert
+//   4. Memory            - Show-Lauflicht / gruener Fortschrittsbalken
+//   5. Linienfolger      - gruener Scanner / Such- und Hindernis-Blinken
+//   6. Rennen            - gelbes Lauflicht
+//   7. Freifahren        - Lauflicht in Fahrtrichtung
+//   8. Ruhezustand       - blau atmen (App verbunden) / orange atmen (wartet)
+// Alarm (Not-Aus) und Ergebnisblitze uebersteuern die Kette intern in LedStrip.
+static void ledPatternUpdate() {
+  if (slalomPhase == SLALOM_COUNTDOWN) {
+    const uint32_t now = millis();
+    const uint32_t left = (slalomGoTimer > now) ? (slalomGoTimer - now) : 0;
+    // Host zaehlt 3 s bis GO, Client-Fallback 4,5 s (siehe slalomMaybeStart).
+    ledStripShowCountdown(left, slalomIsHost ? 3000 : 4500);
+    return;
+  }
+  if (slalomPhase == SLALOM_DONE) {
+    ledStripShowResult(slalomIWonLast);
+    return;
+  }
+  if (slalomTargetColor[0] != '\0') {   // Bauphase (auch nach MISS-Retry)
+    ledStripShowTarget(slalomTargetColor);
+    return;
+  }
+  if (slalomPhase == SLALOM_PAIRED) {   // Gegner verbunden, wartet auf Start
+    ledStripShowPaired();
+    return;
+  }
+  if (memoryActive) {
+    // Show-Phase: Roboter zeigt die Sequenz. Eingabe: wie weit ist das Kind?
+    if (memoryAwaitInput) ledStripShowProgress(memoryInputIdx, memoryLen, LED_C_GREEN);
+    else                  ledStripShowMemoryShow();
+    return;
+  }
+  if (currentGame == GAME_LINEFOLLOWER) {
+    ledStripShowLine(lineFollowerLedState());
+    return;
+  }
+  if (currentGame == GAME_RENNEN) {
+    ledStripShowRace();
+    return;
+  }
+  if (speedL != 0.0f || speedR != 0.0f) {
+    // Freifahren: Lauflicht in Fahrtrichtung, Drehen = zwei Punkte nach aussen.
+    uint8_t dir = LED_DIR_IDLE;
+    if (keyW && !keyS)      dir = LED_DIR_FWD;
+    else if (keyS && !keyW) dir = LED_DIR_BACK;
+    ledStripShowDrive(dir);
+    return;
+  }
+  ledStripShowStatus(deviceConnected);
+}
+
+// =====================================================
 // LOOP
 // =====================================================
 unsigned long lastColorNotify = 0;
@@ -1052,6 +1574,8 @@ void loop() {
   }
   // (2) Retry: beide Durchlaeufe ohne Treffer (oder 15s-Timeout) -> BUILD
   slalomCheckRetry();
+  // (2b) Einladungs-Wartezustand: Retry der Einladung bzw. Timeout.
+  slalomTick();
   if (!driveLockedByGame()) driveUpdate();
   if (deviceConnected && millis() - lastColorNotify > COLOR_NOTIFY_MS) {
     lastColorNotify = millis();
@@ -1066,19 +1590,21 @@ void loop() {
   distRefSpadService();
   // TMC-Auto-Standby: Treiber aus, wenn laenger als TMC_STANDBY_MS nichts faehrt
   tmcAutoStandbyTick();
-  // LED-Streifen: Alert > Zielfarbe > Status (max. 4x/s aktualisieren)
+  // Rennen: hat der Gegner zu lange geschwiegen, sauber beenden. Sonst bleibt
+  // der Roboter bis zum naechsten STOP im Renn-Modus und die Steuerung gesperrt.
+  if (racePeerTimedOut()) {
+    Serial.println("[RACE] Gegner timeout -> Rennen beendet");
+    raceAbort(false);
+  }
+  // LED-Streifen: Musterwahl 20x/s (Prioritaetenkette), Zeichnen in jedem
+  // Durchlauf. Alarm/Ergebnisblitze uebersteuern die Kette intern.
   {
-    static unsigned long lastLedUpdate = 0;
-    if (millis() - lastLedUpdate >= 250) {
-      lastLedUpdate = millis();
-      if (ledAlertActive) {
-        ledStripTick();
-      } else if (slalomTargetColor[0] != '\0') {
-        ledStripShowTarget(slalomTargetColor);
-      } else {
-        ledStripShowStatus(deviceConnected);
-      }
+    static unsigned long lastLedMode = 0;
+    if (millis() - lastLedMode >= 50) {
+      lastLedMode = millis();
+      ledPatternUpdate();
     }
+    ledStripTick();
   }
   vTaskDelay(pdMS_TO_TICKS(LOOP_DELAY_MS));
 }

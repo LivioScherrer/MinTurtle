@@ -12,6 +12,7 @@
 #include "Config.h"
 #include "Drive.h"
 #include "BLEManager.h"
+#include "DistanceSensor.h"  // distBlocked() - Hindernis-Schutz
 
 bool lineFollowerActive = false;
 
@@ -44,6 +45,11 @@ namespace {
 
   // Gepufferte Sensorablesung (nicht blockierend)
   bool lineDetected = false;
+  // Zustand, in den nach einem Hindernis-Schturz zurueckgekehrt wird.
+  // Siehe lineFollowerTick() - ohne das verliert der Roboter nach jedem
+  // Hindernis sein Such-Budget und kann endlos drehen.
+  bool    lsStoppedForObstacle = false;
+  LineState lsResumeState = LS_FORWARD;
 
   void changeState(LineState next) {
     lsState = next;
@@ -78,14 +84,40 @@ namespace {
   }
 }
 
+// Zustand fuer die LED-Statusanzeige: Linie erkannt, Suche, Hindernis oder
+// inaktiv. Wird von der Prioritaetenkette in Edu_V2.cpp gelesen.
+// Bewusst der Zustands-Automat (nicht das rohe lineDetected): kurze
+// Sensor-Aussetzer in der Grace-Phase sollen die Anzeige nicht flackern lassen.
+LedLineState lineFollowerLedState() {
+  if (!lineFollowerActive) return LED_LINE_IDLE;
+  switch (lsState) {
+    case LS_IDLE:    return LED_LINE_OBSTACLE;   // wartet auf freie Bahn
+    case LS_FORWARD: return LED_LINE_FOLLOW;     // auch kurze Aussetzer (Grace)
+    default:         return LED_LINE_SEARCH;     // LS_LOST / LS_SEARCH_L/R
+  }
+}
+
 void lineFollowerStart() {
   if (lineFollowerActive) return;
   lineFollowerActive = true;
   lsSearchTries = 0;
+  lsStoppedForObstacle = false;   // frischer Lauf: kein offener Hindernis-Zustand
   lsLastSeenMs = millis();
-  // Feste Beschleunigung (keine Einstellung irgendwo)
-  motorsForward(LINE_FOLLOW_SPEED);
-  changeState(LS_FORWARD);
+  // ERST messen, DANN fahren. Vorher wurde hier blind mit voller
+  // Geschwindigkeit gestartet: readLineDetected() liefert erst nach der
+  // ersten Farb-Task-Ablesung (~150 ms) ein Ergebnis, LS_FORWARD lueft die
+  // 80-ms-Grace also sofort ab und der Roboter fuhr die ersten Zentimeter
+  // ohne zu wissen, ob ueberhaupt eine Linie da ist. Jetzt wird der erste
+  // Zustand aus der Messung abgeleitet: Linie da -> fahren, keine Linie ->
+  // direkt in die Suchphase statt blind loszurollen.
+  lineDetected = readLineDetected();
+  if (lineDetected) {
+    motorsForward(LINE_FOLLOW_SPEED);
+    changeState(LS_FORWARD);
+  } else {
+    motorsOff();
+    changeState(LS_LOST);
+  }
   Serial.println("[LINE] Folge starten");
 }
 
@@ -101,6 +133,7 @@ void lineFollowerStop() {
   lineFollowerActive = false;
   lsState = LS_IDLE;
   lsSearchTries = 0;
+  lsStoppedForObstacle = false;
   Serial.println("[LINE] Gestoppt");
 }
 
@@ -111,6 +144,41 @@ void lineFollowerTick() {
   lineDetected = readLineDetected();
   uint32_t now = millis();
 
+  // HINDERNIS-SCHUTZ: hat der Distanzsensor ein Hindernis gemeldet, wird
+  // angehalten und in LS_IDLE gewartet, bis wieder frei ist. Bewusst VOR dem
+  // Zustandsautomaten: eine Such-Drehung in ein Hindernis hinein waere genau
+  // das, was der Sensor verhindern soll. distBlocked() liefert bei fehlender
+  // Messung "frei" - ohne Sensor verhaelt sich der Linienfolger also exakt
+  // wie vorher.
+  if (distBlocked()) {
+    motorsOff();
+    if (lsState != LS_IDLE) {
+      // Merken, in welchem Zustand wir unterbrochen wurden, um dort
+      // zurueckzukehren - und dass es ein Hindernis war.
+      lsStoppedForObstacle = true;
+      lsResumeState = lsState;
+    }
+    changeState(LS_IDLE);
+    return;
+  }
+  // Hindernis ist frei: aus dem Wartezustand wieder aufnehmen.
+  if (lsState == LS_IDLE) {
+    if (lsStoppedForObstacle) {
+      lsStoppedForObstacle = false;
+      // Nach einem Hindernis nicht in LS_FORWARD einsteigen: dort waere
+      // lsLastSeenMs so alt, dass der Roboter sofort wieder "Linie verloren"
+      // erklaert, die Such-Drehungen starten und lsSearchTries auf 0
+      // gesetzt wird. Das 8-Versuche-Budget (4 links + 4 rechts) faengt dann
+      // nach JEDEM Hindernis neu an - steht das Hindernis auf der Linie, dreht
+      // der Roboter endlos, statt mit LINE:LOST aufzugeben. Stattdessen den
+      // Zustand fortsetzen, in dem wir unterbrochen wurden: das Budget bleibt
+      // erhalten, der naechste Tick laeuft ganz normal weiter.
+      changeState(lsResumeState);
+    } else {
+      changeState(LS_FORWARD);
+    }
+  }
+
   if (lineDetected) {
     lsLastSeenMs = now;
     lsSearchTries = 0;
@@ -119,6 +187,8 @@ void lineFollowerTick() {
   // Zustands-Automat -> setzt die Ziel-Geschwindigkeiten
   switch (lsState) {
     case LS_IDLE:
+      // Wartezustand "Hindernis blockiert" - Motoren bleiben aus, bis
+      // distBlocked() wieder false meldet (siehe-oben).
       motorsOff();
       break;
 
@@ -177,6 +247,7 @@ void lineFollowerTick() {
           motorsOff();
           lineFollowerActive = false;
           lsState = LS_IDLE;
+          lsStoppedForObstacle = false;   // Lauf beendet, nichts offen
           Serial.println("[LINE] Linie verloren - Stopp");
         } else {
           motorsTurnRight(LINE_SEARCH_SPEED);

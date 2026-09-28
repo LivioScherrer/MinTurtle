@@ -6,6 +6,7 @@
 #include "BLEManager.h"
 #include "Motor.h"
 #include "Drive.h"
+#include "LedStrip.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -24,19 +25,26 @@ uint32_t memoryInputStart = 0;
 
 void memoryExecuteMove(uint8_t move) {
   switch (move) {
-    case MEM_FWD:   gameDriveForward(GAME_MOVE_MS); break;
-    case MEM_BACK:  gameDriveBackward(GAME_MOVE_MS); break;
-    case MEM_LEFT:  gameTurnLeftSteps(config.quizTurnSteps); break;
-    case MEM_RIGHT: gameTurnRightSteps(config.quizTurnSteps); break;
+    // Vor/zurueck als feste Strecke (mm -> Schritte), damit ein Memory-Feld
+    // immer gleich weit liegt - unabhaengig von der Microstep-Zahl.
+    // Drehen war schon schrittbasiert.
+    case MEM_FWD:   gameDriveForwardSteps(configForwardSteps()); break;
+    case MEM_BACK:  gameDriveBackwardSteps(configForwardSteps()); break;
+    case MEM_LEFT:  gameTurnLeftSteps(configTurnSteps()); break;
+    case MEM_RIGHT: gameTurnRightSteps(configTurnSteps()); break;
   }
 }
 
 void memoryShowSequence() {
   memoryStopReq = false;
   sendStatusF("MEMORY:SHOW:%u", memoryLen);
+  // LED: violettes Lauflicht, solange der Roboter die Sequenz zeigt.
+  ledStripShowMemoryShow();
+  ledStripTick();
   for (uint8_t i = 0; i < memoryLen; i++) {
     if (memoryStopReq) return;
     memoryExecuteMove(memorySeq[i]);
+    ledStripTick();
     sendStatusF("MEMORY:SHOW_STEP:%u,%u", i, memorySeq[i]);
     bleProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(MEM_GAP_MS));
@@ -95,6 +103,8 @@ bool memoryInput(uint8_t move) {
     sendStatusF("MEMORY:WRONG:%u,%u", memoryInputIdx, move);
     memoryActive = false;
     memoryAwaitInput = false;
+    ledStripShowResultFlash(false);   // roter Blitz: leider falsch
+    ledStripTick();
     return false;
   }
   memoryAwaitInput = false;
@@ -104,6 +114,8 @@ bool memoryInput(uint8_t move) {
     memoryActive = false;
     currentGame = GAME_NONE;
     sendStatusF("MEMORY:WIN:%u", memoryLen);
+    ledStripShowResultFlash(true);   // gruener Blitz: geschafft!
+    ledStripTick();
     Serial.printf("[MEMORY] Gewonnen mit %u Schritten\n", memoryLen);
     return true;
   }
@@ -122,5 +134,7 @@ void memoryTick() {
     memoryAwaitInput = false;
     currentGame = GAME_NONE;
     sendStatus("MEMORY:TIMEOUT");
+    ledStripShowResultFlash(false);   // roter Blitz: Zeit abgelaufen
+    ledStripTick();
   }
 }

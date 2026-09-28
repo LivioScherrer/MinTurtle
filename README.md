@@ -1,4 +1,4 @@
-﻿# EduBot V2
+# EduBot V2
 
 Firmware fuer einen Educational-Roboter auf **Seeed XIAO ESP32S3** mit zwei
 NEMA8-Steppern (TMC2209), Farbsensor (TCS34725), Distanzsensor (VL53L0X),
@@ -21,8 +21,29 @@ pio device monitor      # Serial-Log (115200 baud)
 Ziel: `seeed_xiao_esp32s3`, Flash 3.3 MB (aktuell ~42 % belegt), RAM
 327 KB (aktuell ~21 % belegt).
 
-`Edu_V2.html` ist die Web-UI (Single File, kein Build-Schritt). Sie wird per
-BLE mit dem Roboter verbunden und direkt aus dem Browser geladen.
+Zwei Web-Seiten, beide Single File, kein Build-Schritt. Sie sprechen denselben
+BLE-Dienst an und werden direkt aus dem Browser geöffnet (Chromium-Browser
+nötig, Web Bluetooth).
+
+| Datei | Für wen | Inhalt |
+|---|---|---|
+| **`Edu_V2.html`** | **Schüler** | Alle Spiele, Freifahren, Code-Bausteine, Lernkarte. **Keine Diagnose**, keine Fehlermeldungen über unbekannte Befehle. |
+| **`Edu_V2_dev.html`** | Entwickler | Kleine Konsole: Protokoll jeder gesendeten und empfangenen Zeile, geparste Werte (TMC, Geometrie, Tempo, Distanz, Freifahren-Kette), freier Befehlseingabe. |
+
+Warum das getrennt ist: `handleCommand()` protokolliert jeden Befehl mit
+`Serial.printf("[CMD] %s\n", …)`, und die Firmware antwortet auf Unbekanntes
+mit `UNKNOWN:<befehl>`. Auf der Schülerseite wird das **nicht** angezeigt —
+für ein Kind ist „Unbekannter Befehl: PROG:OLDRUN" eine tote Fehlermeldung, an
+der es nichts zu tun hat, während der Roboter völlig normal läuft. Wer sehen
+will, was wirklich ankommt, öffnet die Entwicklerseite.
+
+> **Ein `UNKNOWN:` im Protokoll bedeutet fast immer:** der Browser hat eine
+> **alte Kopie** der Web-Seite gecacht und sendet Befehle, die die aktuelle
+> Firmware nicht mehr kennt. Abhilfe: Seite neu laden (Strg+F5). Die
+> Entwicklerseite zeigt dann sofort, welcher Befehl es ist.
+
+Beide Seiten brauchen die gleichen BLE-UUIDs (siehe `BLEManager.cpp` und den
+Kopf beider HTML-Dateien).
 
 ---
 
@@ -33,18 +54,62 @@ BLE mit dem Roboter verbunden und direkt aus dem Browser geladen.
 Beide Treiber hängen an einem **gemeinsamen Single-Wire-UART-Bus**.
 VIO = 3V3, VM = Motorspannung (ohne VM antwortet der Treiber nicht).
 
+> **Diese Tabelle ist die am Fahrroboter geprüfte IST-Verdrahtung (2026-09).**
+> Sie stimmt mit `src/Motor.h` überein. Eine frühere Fassung dieses README
+> stand hier spiegelverkehrt (U2/J1 als „links") — das war die Verdrahtung,
+> bei der jede Drehung auf der Stelle in die falsche Richtung lief. Wer
+> `Motor.h` nicht glaubt, sollte `PIN_STEP_*`/`TMC_ADDR_*` dort nachsehen,
+> nicht hier.
+
 | Signal | GPIO | Hinweis |
 |---|---|---|
-| STEP links | 7 (D8) | U2 / J1, TMC-Adresse 0 |
-| DIR links  | 3 (D2) | STEP/DIR auf dem PCB gedreht, hier kompensiert |
-| STEP rechts | 2 (D1) | U4 / J5, TMC-Adresse 1 |
-| DIR rechts  | 1 (D0) | |
+| STEP links | 2 (D1) | U4 / J5, TMC-Adresse `0b01` |
+| DIR links  | 1 (D0) | |
+| STEP rechts | 7 (D8) | U2 / J1, TMC-Adresse `0b00` |
+| DIR rechts  | 3 (D2) | STEP/DIR auf dem PCB gedreht, hier kompensiert |
 | EN (beide)  | 4    | LOW aktiv |
 | UART TX     | 43 (D6) | über 1 kΩ (R9) an das PDN-Netz |
 | UART RX     | 44 (D7) | direkt am PDN-Netz |
 
-Adressen: links `0b00` (MS1=GND, MS2=GND), rechts `0b01` (MS1=3V3, MS2=GND).
+Adressen: links `0b01` (MS1=3V3, MS2=GND), rechts `0b00` (MS1=GND, MS2=GND).
 R_Sense auf dem PCB: 560 mΩ.
+
+> **Achtung, D8 ist auf dem ESP32-S3 GPIO 7** (auf dem klassischen XIAO
+> ESP32 war D8 = GPIO 8). `PIN_STEP_R 7 // D8` in `Motor.h` ist also korrekt
+> und sieht nur falsch aus — bitte nicht auf 8 „korrigieren“.
+
+#### Drehrichtung (`LEFT_MOTOR_SIGN` / `RIGHT_MOTOR_SIGN`)
+
+Die Drehrichtung steckt in **zwei Konstanten** am Anfang von `src/Config.h`:
+
+```cpp
+constexpr int8_t LEFT_MOTOR_SIGN  = +1;   // links  (U4/J5, D0/D1)
+constexpr int8_t RIGHT_MOTOR_SIGN = -1;   // rechts (U2/J1, D2/D8)
+```
+
+Feste Konstanten, **bewusst keine NVS-Werte und keine Web-UI-Einstellung.**
+Ein einmal falsch gespeicherter Wert würde jeden späteren korrigierten
+Default bei jedem Build überschreiben – die Quelle soll die einzige
+Wahrheit bleiben.
+
+Weiter wichtig:
+
+- Beide Werte werden **an jeder Stelle angewendet** – `setMotorSpeed()`
+  multipliziert intern mit dem Vorzeichen, die zehn `prepPositionMove()`-
+  Aufrufer ebenfalls. Der Faktor wirkt also **genach einmal**. Wer ihn in
+  `Motor.cpp` nochmals umkehrt, dreht beide Motoren wieder um.
+- **Die beiden Werte müssen unterschiedlich sein.** Sind sie gleich, drehen
+  beide Räder gleichsinnig und der Roboter dreht sich auf der Stelle statt
+  zu fahren. Ein `static_assert` in `Config.h` bricht den Build in dem
+  Fall ab – lieber kein Build als ein Roboter, der im Kreis fährt.
+
+**Symptome falscher Werte** (Roboter frei auf dem Tisch, `W` gedrückt):
+
+| Beobachtung | Ursache |
+|---|---|
+| dreht sich auf der Stelle | beide Werte gleich (Build bricht ab) |
+| fährt rückwärts | Werte unterschiedlich, aber beide umgekehrt zur nötigen Polarität |
+| fährt geradeaus, dreht auf der Stelle in die falsche Richtung | Fahrzeichen stimmt, aber `gameTurnSteps()`-Logik prüfen |
 
 ### I2C-Sensoren
 
@@ -66,8 +131,42 @@ R_Sense auf dem PCB: 560 mΩ.
 
 ### Weitere Peripherie
 
-- **NeoPixel-Ring** (LED-Strip) - Status, Zielfarbe, Alert
+- **NeoPixel-Ring** (LED-Strip, 7 LEDs, GPIO 8) - Statusanzeige, siehe unten
 - **Motor-Referenz**: NEMA8 8HS11-0204S (0,2 A Nennstrom, 24 Ω, 8 mH)
+
+### LED-Statusanzeige (NeoPixel-Ring)
+
+Der Ring ist die Statusanzeige des Roboters. `LedStrip.cpp` ist eine
+Muster-Engine: `ledStripShowXxx()` waehlt nur ein Muster, `ledStripTick()`
+zeichnet es zeitbasiert (max. 25 Bilder/s, nicht blockierend). Die
+Main-Loop waehlt in `ledPatternUpdate()` **ein** Muster nach Prioritaet,
+Alarm (Not-Aus) und Ergebnisblitze uebersteuern die Kette intern fuer eine
+kurze Haltezeit.
+
+| Situation | Anzeige |
+|---|---|
+| Boot | Pixel-Selbsttest (jede LED einmal weiss), danach Sensor-Selbsttest: 2x gruen = beide Sensoren OK; linker Teil magenta blinkend = Farbsensor fehlt, rechter Teil rot blinkend = Distanzsensor fehlt |
+| Ruhezustand, App verbunden | blaues Atmen |
+| Ruhezustand, keine App | oranges Atmen (wartet auf Verbindung) |
+| Slalom gepaart (Gegner verbunden, Start noch offen) | cyanfarbenes Atmen |
+| Freifahren | gruenes Lauflicht in Fahrtrichtung; Drehen auf der Stelle: zwei Punkte wandern nach aussen |
+| Quiz (Korrigieren) | Fortschrittsbalken: gruen solange alles stimmt, sonst rot; waehrend des Farblesens bleibt der Ring dunkel; Ende: gruener bzw. roter Blitz |
+| Memory | Sequenz-Ansicht: violettes Lauflicht; Eingabe: gruener Fortschrittsbalken, der naechste Punkt blinkt |
+| Linienfolger | gruener Scanner (Linie erkannt), oranges Blinken (Suche), rotes langsames Blinken (Hindernis) |
+| Rennen | gelbes Lauflicht |
+| Slalom Bauphase | Zielfarbe pulsiert |
+| Slalom Countdown | Startampel: erst 2, dann 4, dann 6 rote LEDs, bei GO die ganze Reihe gruen |
+| Slalom entschieden | Sieg = Regenbogen, Niederlage = rotes Atmen |
+| Not-Aus (`STOP`) | rotes Doppelblinken, 3 s |
+
+Zwei Regeln sind bewusst so gewaehlt:
+
+1. **Waehrend Farbmessungen bleibt der Ring dunkel** (Slalom-Rennen,
+   Quiz-Lesephase, ausgefuehrte Programme). Eigenes LED-Licht koennte sonst
+   als Farbe auf dem Boden erkannt werden. Der Not-Aus-Alarm blinkt trotzdem.
+2. **Der S-Block** (`LED`-Baustein) nutzt dieselbe Anzeige: Slots 0-3 zeigen
+   die Zielfarbe, Slot 4/5 die Distanz-Bedeutung NAH (dunkelrot) / FREI
+   (dunkelgruen), Slot 6 schaltet aus.
 
 ---
 
@@ -110,15 +209,23 @@ keinen Spiel-Zustand an.
 | `EspNow.cpp/.h` | ESP-NOW-Peers, Race- und Slalom-Pakete, Event-Queue |
 | `BLEManager.cpp/.h` | BLE-Service, Event-Queue, `sendStatus`, Serial-Polling |
 | `Config.cpp/.h` | NVS-Konfiguration + Sanity-Validierung |
-| `LedStrip.cpp/.h` | NeoPixel-Ring |
+| `LedStrip.cpp/.h` | NeoPixel-Statusanzeige: Muster-Engine, Boot-Selbsttest, Alarm |
 
 ### Bewegung
 
-Es gibt bewusst **keine Beschleunigungsrampe**. `FIXED_DRIVE_SPEED`
-(5000 steps/s @ 16 Microsteps ≈ 180 mm/s bei 37 mm Rad) ist die einzige
-Geschwindigkeitskonstante im Projekt; `setMotorSpeed()` legt den Betrag
-immer darauf fest. Drehen auf der Stelle: ein Motor steht, der andere fährt
-mit voller Geschwindigkeit.
+Es gibt bewusst **keine Beschleunigungsrampe**. Die Fahrgeschwindigkeit wird
+in **mm/s** vorgegeben (`config.driveSpeedMM`, per `SPEED:` und Web-UI
+einstellbar, 20..600 mm/s) und zur Schrittrate `FIXED_DRIVE_SPEED`
+umgerechnet - aus Rad-Durchmesser und der aktuellen Microstep-Zahl
+(`configStepsPerS()` in `Config.cpp`, gedeckelt bei `MAX_DRIVE_STEPS_S` =
+20 000 Schritte/s durch den 50-µs-Puls-Task). `setMotorSpeed()` legt den
+Betrag immer darauf fest. Drehen auf der Stelle: ein Motor steht, der andere
+fährt mit voller Geschwindigkeit.
+
+Deshalb bleiben **alle Längen unabhängig von der Microstep-Einstellung
+richtig**: gespeichert werden mm/Grad, die Schrittzahl wird bei jedem Bedarf
+neu berechnet (`configForwardSteps()` / `configTurnSteps()`). Microsteps
+ändern dadurch nur die Feinheit, nicht die Strecke.
 
 `Motor.h` hält die Stepper-Instanzen privat - direkte `stepper.run()`-Aufrufe
 ausserhalb von `Motor.cpp` sind dadurch unmöglich.
@@ -144,9 +251,11 @@ Dispatch-Liste am Ende von `handleCommand()` eintragen.
 
 | Befehl | Wirkung |
 |---|---|
-| `STEPS?` / `STEPS:<1..2000>` | Vorwärtsstrecke je Farbe im Quiz (setzt + fährt Test) |
-| `ANG?` / `ANG:<1..5000>` | Schritte pro Rad für 90° (setzt + dreht Test) |
-| `SAT?` / `SAT:<0..1>` | Mindest-Sättigung für warme Farbtöne |
+| `STEPS?` / `STEPS:<5..150>` | Vorwärtsstrecke je Farbe in **mm** (setzt + fährt Test) |
+| `ANG?` / `ANG:<10..360>` | Drehung im Spiel in **Grad** (setzt + dreht Test) |
+| `GEO?` / `GEO:RESET` | Geometrie melden / Einlernung auf 27,5 mm + 195 Grad zurücksetzen |
+| `SPEED?` / `SPEED:<20..600>` | Fahrgeschwindigkeit in mm/s (wird zur Schrittrate umgerechnet) |
+| `SAT?` / `SAT:<0..1>` | Mindest-Sättigung für warme Farbtöne (GELB/ROT). Wirkt **nur** auf die warmen Töne: eine blasse, warme Fläche (Parkett, Karton, warmes Licht) fällt sonst als GELB/ROT durch. Blaue und grüne Marker sind nie betroffen. `SAT:0` schaltet die Schranke ab. |
 
 ### Distanzsensor
 
@@ -187,7 +296,11 @@ Dispatch-Liste am Ende von `handleCommand()` eintragen.
 |---|---|
 | `QUIZ:CHECK:<ROT,GELB,...>` | Farb-Quiz starten (max. 16 Farben, jede max. 4×) |
 | `QUIZ:STOP` | Quiz abbrechen |
-| `RACE:START` / `RACE:STEP` / `RACE:WIN` / `RACE:LOSE` | Rennen (Ziel: 10 Punkte) |
+| `RACE:START` / `RACE:STEP` / `RACE:WIN` / `RACE:LOSE` | Rennen (kurze Form: Ziel 10, 360 ms je Punkt) |
+| `RACE:START:<ziel>:<stufe>` | Rennen mit Zielzahl (1..99; das Web-UI schickt die Stufen-Zielzahl) |
+| `RACE:STEP:<mm>` | Einen Punkt gutschreiben und **exakt mm** fahren (Rennstrecke) |
+| `RACE:STOP` | Rennen abbrechen (Motoren frei, `currentGame` wird gelöscht) |
+| `RACE:?` | Ziel/Stufe und Spielstatus melden |
 | `RACE:SCAN` / `RACE:PAIR:<MAC>` / `RACE:UNPAIR` | Rennen-Pairing |
 | `SLALOM:INVITE:<MAC>` / `SLALOM:INVITE_ACCEPT` / `SLALOM:INVITE_DECLINE` | Slalom-Pairing |
 | `SLALOM:START_MATCH` | Spiel starten (nur Host) |

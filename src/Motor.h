@@ -1,14 +1,17 @@
 // EduBot V2 - Motor-Modul (2x TMC2209 via UART + STEP/DIR)
 // Stand: Neuaufbau auf EduV1.3-Basis - DRV8834 ersetzt durch TMC2209 (UART).
-// BEIDE Treiber am gemeinsamen Single-Wire-Bus:
-// links Adresse 0 (MS1=GND, MS2=GND), rechts Adresse 1 (MS1=3V3, MS2=GND).
+// BEIDE Treiber am gemeinsamen Single-Wire-Bus. Die Zuordnung Motor ->
+// Platine -> GPIO -> TMC-Adresse steht ausfuehrlich bei den #defines weiter
+// unten (ab "Stepper-Pins") und ist dort die EINZIGE Wahrheit. Frueher
+// widersprachen die Kommentare an dieser Stelle und bei TMC_ADDR_* einander
+// und nannten die Zuordnung umgekehrt; bitte nur noch die #defines
+// konsultieren und diese Kopfzeile nicht als Beleg verwenden.
 //
 // Getestete Hardware: PCB Edu_V2.2 mit TMC2209-LA direkt bestueckt.
 // VIO = 3V3 (Xiao), VM = Motorspannung
 // (ohne VM antwortet der Treiber nicht!).
-// Verdrahtung PCB Edu_V2.2: ESP-TX --1k (R9)--> PDN-Netz, ESP-RX direkt an PDN (gemeinsam
-// fuer BEIDE Treiber, kein Pull-up noetig). J1 (U2/Addr0) = linker Motor,
-// J5 (U4/Addr1) = rechter Motor.
+// Verdrahtung PCB Edu_V2.2: ESP-TX --1k (R9)--> PDN-Netz, ESP-RX direkt an PDN
+// (gemeinsam fuer BEIDE Treiber, kein Pull-up noetig).
 //
 // Feste Geschwindigkeit - keine Beschleunigung/Rampe irgendwo im Code.
 // Die Step-Puls-Erzeugung laeuft in einem eigenen FreeRTOS-Task auf Core 0,
@@ -20,15 +23,21 @@
 #pragma once
 
 #include <Arduino.h>
+#include "Config.h"   // TMC_CURRENT_MA_MIN/MAX (Stromgrenze 200 mA)
 
 // Stepper-Pins (Xiao ESP32-S3, PCB Edu_V2.2 verdrahtet - NICHT aendern!)
-// PCB-Ist: U2 (J1, Addr 0) = links an D2/D8, U4 (J5, Addr 1) = rechts an D0/D1
-// STEP/DIR sind auf dem PCB jeweils gedreht gegen das Breadboard-Layout,
-// darum hier kompensiert. J1 = links, J5 = rechts.
-#define PIN_STEP_L   7   // D8 -> U2-STEP (TMC links)
-#define PIN_DIR_L    3   // D2 -> U2-DIR (TMC links)
-#define PIN_STEP_R   2   // D1 -> U4-STEP (TMC rechts)
-#define PIN_DIR_R    1   // D0 -> U4-DIR (TMC rechts)
+// IST-Verdrahtung dieses Roboters (am Fahrroboter geprueft, 2026-09):
+// das Board an U2/J1 (Addr 0, D8/D2) treibt das RECHTE Rad,
+// das Board an U4/J5 (Addr 1, D1/D0) treibt das LINKE Rad.
+// Vorher stand hier die umgekehrte Annahme - Vorwaerts/Rueckwaerts fiel
+// nicht auf (beide Raeder bekommen dasselbe Vorzeichen), aber jede
+// Drehung auf der Stelle lief in die falsche Richtung.
+// Deshalb ist "links" jetzt U4/J5 und "rechts" U2/J1. Beide Boards werden
+// identisch konfiguriert, die Adressen sind reine Diagnose-Labels.
+#define PIN_STEP_L   2   // D1 -> U4-STEP (TMC links)
+#define PIN_DIR_L    1   // D0 -> U4-DIR  (TMC links)
+#define PIN_STEP_R   7   // D8 -> U2-STEP (TMC rechts)
+#define PIN_DIR_R    3   // D2 -> U2-DIR  (TMC rechts)
 #define PIN_EN       4   // EN -> TMC-EN (gemeinsam, LOW aktiv)
 
 // TMC2209-UART (gemeinsamer Single-Wire-Bus fuer BEIDE Treiber)
@@ -36,14 +45,23 @@
 #define TMC_UART_TX  43  // D6 = TX-Netz (ueber 1k an PDN, PCB R9)
 #define TMC_BAUD     115200
 #define TMC_R_SENSE  0.56f   // PCB Edu_V2.2: 560mOhm Sense (R6/R7/R11/R12)
-#define TMC_ADDR_L   0b00    // links U2/J1: MS1=GND, MS2=GND
-#define TMC_ADDR_R   0b01    // rechts U4/J5: MS1=3V3, MS2=GND
+#define TMC_ADDR_L   0b01    // links U4/J5: MS1=3V3, MS2=GND
+#define TMC_ADDR_R   0b00    // rechts U2/J1: MS1=GND, MS2=GND
 
-// Feste Fahrgeschwindigkeit in steps/s.
-// Einzige Geschwindigkeits-Konstante im gesamten Projekt.
-// 5000 steps/s @16 Microsteps = 1,56 U/s = 94 U/min = ca. 180 mm/s (Rad 37mm).
-// Puls-Periode 200us -> 5x schneller als die alten 1000 steps/s (ca. 36 mm/s).
-constexpr float FIXED_DRIVE_SPEED  = 5000.0f;
+// Feste Fahrgeschwindigkeit - keine Beschleunigung/Rampe irgendwo im Code.
+// WICHTIG: nicht in Schritten fest verdrahtet. Die Schrittrate haengt an den
+// Microsteps (16 Microsteps = 4x weniger Schritte pro Umdrehung als 64), ein
+// fester Schritt/s-Wert wuerde den Roboter beim Umschalten der Microsteps
+// 4x schneller oder langsamer machen. Stattdessen wird die gewuenschte
+// Geschwindigkeit in mm/s gespeichert (config.driveSpeedMM, einstellbar per
+// SPEED:<mm/s> und in der Web-UI) und hier zur Schrittrate umgerechnet.
+//
+// MAX_DRIVE_STEPS_S (Config.h) ist die Grenze des 50us-Motor-Tasks (20 kHz
+// Takt); die Haelfte bleibt als Reserve fuer Jitter. Darueber wuerde der Motor
+// einzelne Pulse verschlucken -> gelegentlich zu kurze Strecken.
+// Laufzeitwert (Schritte/s) - in initSteppers() und nach jedem Wechsel der
+// Microsteps bzw. der Geschwindigkeit neu berechnet (motorUpdateSpeeds()).
+extern float FIXED_DRIVE_SPEED;
 
 // Motor-Task-Abtastung: 50us-Takt (~20 kHz) >> 5 kHz Puls-Rate.
 // Noetig, damit AccelStepper.runSpeed() bei 5000 steps/s (200us Periode)
@@ -56,9 +74,13 @@ constexpr uint32_t STARTUP_SPIN_MS = 500;
 
 // TMC-Defaults (8HS11-0204S NEMA8: 0.2A Nennstrom, 24 Ohm, 8mH)
 // Strom = exakt Nennstrom (mehr -> Ueberhitzung, max. 80 Grad Rise im Stillstand).
-// Hold 16 = halber Haltestrom (kuehl + akkuschonend, reicht auf ebenem Boden).
+// Hold 16 = halber Haltestrom (kuehl + akkuschonend, reicht flach).
 // StealthChop = leise (Klassenzimmer); per Web-UI auf SpreadCycle schaltbar.
-constexpr uint16_t TMC_CURRENT_MA_DEFAULT = 200;  // 100...800 (RMS)
+//
+// Die STROMGRENZEN (TMC_CURRENT_MA_MIN/MAX/DEFAULT) stehen bewusst in
+// Config.h neben den anderen Motorkonstanten, weil sie sowohl der Befehl
+// (tmcSetCurrent) als auch die NVS-Validierung (Config.cpp) brauchen und
+// dort das "wir wirklich 200 mA maximal" durchgesetzt wird.
 constexpr uint8_t  TMC_HOLD_DEFAULT       = 16;   // 0...31
 constexpr uint16_t TMC_MICROSTEPS_DEFAULT = 16;   // 1,2,4,8,16,32,64,128,256
 
@@ -72,6 +94,11 @@ constexpr uint32_t R9_SERIES_OHM = 1000;
 
 // Initialisierung (Pins + Stepper-Defaults + Motor-Task auf Core 0 starten)
 void initSteppers();
+
+// Schrittrate aus config.driveSpeedMM + Microsteps + Rad berechnen und den
+// AccelStepper mitteilen. Muss nach jeder Aenderung an Microsteps, Tempo oder
+// Geometrie aufgerufen werden.
+void motorUpdateSpeeds();
 
 // Start-Signal nach dem Booten: beide Motoren drehen kurz
 // (STARTUP_SPIN_SPEED fuer STARTUP_SPIN_MS), danach wieder Stillstand.
@@ -98,7 +125,9 @@ void prepPositionMove(int motorIdx, long physicalSteps);
 // Thread-sicher (liest volatile Zaehler).
 bool motorStillRunning();
 
-// ---- TMC2209-Laufzeit-API (UART, BEIDE Treiber: links Addr 0 + rechts Addr 1) ----
+// ---- TMC2209-Laufzeit-API (UART, BEIDE Treiber) ----
+// Die Adressen stehen als TMC_ADDR_L / TMC_ADDR_R bei den #defines oben.
+// Alle Set-Befehle wirken auf BEIDE Treiber gleichzeitig.
 // Alle Set-Befehle wirken auf BEIDE Treiber gleichzeitig.
 // Treiber ein/ausschalten (EN-Pin). disable stoppt auch die Motoren.
 void tmcEnable();
@@ -128,7 +157,13 @@ void tmcPrintStatus();
 void tmcSendCompactStatus();
 // Boot-Diagnose (einmalig in setup()): Verbindung, Version, IFCNT, MRES.
 void tmcBootDiag();
-// UART-Bus-Diagnose (Echo/Reply/Ruhepegel, Pin-Tausch-Test, Baud-Messung).
-void tmcUartDiag();
-// PDN-Netz-Diagnose (Pull-up-Vorhandenheit, Level-Divider-Test).
+// UART-Bus-Diagnose (Echo/Reply/Ruhepegel, Baud-Messung).
+// ACHTUNG: Es gab hier einmal eine Funktion tmcUartDiag(), die per
+// Read-Request an die UART-Adressen 0..3 gesendet hat. Die war nie aufgerufen
+// und ist entfernt worden: ein Read-Request an die Adresse 0 ist beim
+// TMC2209 gleichzeitig ein Auto-Inkrement, wuerde die Adressen der beiden
+// Treiber dauerhaft verschieben und damit die UART-Kommunikation zerstoeren.
+// Ausserdem band sie Serial2 auf GPIO 43/44 und liess es dort.
+// Die harmlose Variante heisst UARTNET -> tmcNetDiag() (nur Rx-Pegel, kein
+// UART-Verkehr), UARTTEST ist absichtlich gesperrt.
 void tmcNetDiag();

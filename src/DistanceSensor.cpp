@@ -13,11 +13,26 @@
 #include <freertos/task.h>
 
 static Adafruit_VL53L0X lox;
-static bool s_ok = false;
+// Diese Zustandsvariablen werden von ZWEI Tasks auf Core 1 angefasst: dem
+// loopTask (Prioritaet 1) und refSpadTask, das distRefSpadCalibrate() in
+// einem eigenen Task ebenfalls auf Core 1/Prioritaet 1 ausfuehrt. Beide
+// werden also frei abwechselnd scheduliert, nicht ueber einen Mutex
+// serialisiert - der I2C-Mutex schuetzt nur die Bus-Transaktionen, nicht
+// diesen Treiber-Zustand.
+// volatile ist keine vollstaendige Synchronisation, garantiert aber die
+// Sichtbarkeit und verhindert, dass der Compiler die Werte wegoptimiert.
+// Die entscheidende Reihenfolge ist weiterhin:
+//   distInvalidate() setzt s_ok = false VOR loxResetInstance(),
+//   und s_ok == false sperrt jeden Leser gegen die frische Instanz.
+static volatile bool s_ok = false;
 static bool s_auto = true;
-static bool s_continuous = false;  // true = Continuous-Modus nutzbar (bevorzugt)
-static int16_t s_last = -1;     // letzter korrigierter Messwert
-static int16_t s_lastRaw = -1;  // letzter Roh-Messwert (ohne Offset)
+static volatile bool s_continuous = false;  // true = Continuous-Modus nutzbar (bevorzugt)
+static volatile int16_t s_last = -1;     // letzter korrigierter Messwert
+static volatile int16_t s_lastRaw = -1;  // letzter Roh-Messwert (ohne Offset)
+// Zeitpunkt von s_last. Einen veralteten Wert darf distBlocked() nicht mehr
+// als Hindernis werten - sonst koennte ein eingefrorener Messwert den
+// Roboter dauerhaft anhalten. (Siehe distBlocked() fuer den Hintergrund.)
+static volatile unsigned long s_lastMs = 0;
 static bool s_blocked = false;
 static unsigned long s_lastNotify = 0;
 static unsigned long s_lastSingle = 0;  // Zeitpunkt der letzten Single-Shot-Messung
@@ -28,11 +43,11 @@ static unsigned long s_bootMs = 0;
 static bool s_bootHad29 = false;
 static bool s_bootHad30 = false;
 // Diagnose-Zaehler (nur lesend ueber distDiag(), kein Verhaltenseinfluss)
-static uint32_t s_statRead = 0;      // erfolgreiche Range-Auswertungen
-static uint32_t s_statNotReady = 0;  // isRangeComplete() == false
-static uint32_t s_statStatusErr = 0; // Range-Status != Range Valid
-static uint32_t s_statRangeErr = 0;  // Wert ausser 0..2000mm
-static uint8_t  s_lastStatus = 0xFF; // letzter Range-Status (0xFF = noch keiner)
+static volatile uint32_t s_statRead = 0;      // erfolgreiche Range-Auswertungen
+static volatile uint32_t s_statNotReady = 0;  // isRangeComplete() == false
+static volatile uint32_t s_statStatusErr = 0; // Range-Status != Range Valid
+static volatile uint32_t s_statRangeErr = 0;  // Wert ausser 0..2000mm
+static volatile uint8_t  s_lastStatus = 0xFF; // letzter Range-Status (0xFF = noch keiner)
 
 static bool probeAddr(uint8_t addr) {
   Wire.beginTransmission(addr);
@@ -436,6 +451,14 @@ void distDebugInit() {
     if (started) {
       // Messreihe bewusst OHNE Bus-Sperre: pro Iteration nur kurz sperren.
       for (int i = 0; i < 6; i++) {
+        // Waehrend der Wartezeit beide Event-Warteschlangen bedienen. Ohne das
+        // blieb der Loop-Task hier ueber 2 s komplett blind: die BLE-Queue
+        // (32 Eintraege) lief voll, Befehle wurden verworfen, und der
+        // ESP-NOW-Verkehr der Rennen-/Slalom-Partner wurde verpasst. Jeder
+        // andere lange Befehl in dieser Firmware (distCalibrateOffset,
+        // progMove, die Spiel-Warteschleifen) pumpt aus demselben Grund.
+        bleProcessEvents();
+        espNowProcessEvents();
         vTaskDelay(pdMS_TO_TICKS(300));
         if (!i2cBusLock(50)) {
           Serial.printf("    isRangeComplete=?  rangeStatus=?  mm=?  (Bus belegt)\n");
@@ -742,6 +765,7 @@ int16_t distMeasureMM() {
   int16_t c = raw - config.obsOffsetMM;
   if (c < 0) c = 0;
   s_last = c;
+  s_lastMs = millis();   // Alter des Messwerts - siehe distBlocked()
   return s_last;
 }
 
@@ -813,6 +837,26 @@ bool distBlocked() {
   if (!s_ok) return false;
   int16_t mm = s_last;
   if (mm < 0) { s_blocked = false; return false; }  // kein Wert = frei
+
+  // VERALT-VALUE: ein alter Messwert darf keinen Haltbefehl mehr erzeugen.
+  //
+  // distTick() kehrt im Continuous-Modus frueh zurueck, solange der Sensor
+  // keine fertige Messung liefert (isRangeComplete() == false, z.B. der
+  // Range-Status "NoUpdate"). Dann wird s_last NICHT aktualisiert, der Wert
+  // friert ein - distBlocked() wertete ihn aber weiter aus. Ein einmal
+  // eingefrorener Wert unter 100 mm haette den Roboter fuer den Rest der
+  // Sitzung festgehalten: kein Weg aus dieser Lage ausser Stecker ziehen,
+  // weil s_last nur von distInvalidate() und der Offset-Kalibrierung
+  // zurueckgesetzt wird.
+  //
+  // Deshalb gilt ein Messwert, der aelter als 1 s ist, als "kein Wert" und
+  // damit als frei. 1 s ist bei DIST_NOTIFY_MS = 500 grosszuegig, aber
+  // deutlich kuerzer als die Sichtbarkeitsfrist des Hindernis-Badges.
+  if (millis() - s_lastMs > DIST_VALUE_MAX_AGE_MS) {
+    s_blocked = false;
+    return false;
+  }
+
   if (s_blocked) {
     if (mm > config.obsRelMM) s_blocked = false;
   } else {

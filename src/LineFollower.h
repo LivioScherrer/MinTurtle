@@ -2,9 +2,13 @@
 #pragma once
 
 #include <Arduino.h>
+#include <LedStrip.h>   // LedLineState (Zustand fuer die LED-Statusanzeige)
 
 // Status des Linienfolge-Modus
 extern bool lineFollowerActive;
+
+// Grober Zustand fuer die LED-Statusanzeige (LED_LINE_*).
+LedLineState lineFollowerLedState();
 
 // Linienfolge starten (setzt driveLock via currentGame in main)
 void lineFollowerStart();

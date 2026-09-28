@@ -24,6 +24,7 @@ bool slalomReady     = false;   // ich habe Bereit gedrueckt
 bool slalomOppReady  = false;   // Gegner hat Bereit gedrueckt (PROG empfangen)
 bool slalomFinished  = false;   // mein Roboter hat die Zielfarbe erreicht (von progRunSlalom)
 bool slalomWon       = false;   // das Spiel ist entschieden (jemand hat getroffen)
+bool slalomIWonLast  = false;   // Ergebnis der letzten Entscheidung (LED-Anzeige in DONE)
 
 // Retry-Logik (niemand hat getroffen -> neue Runde mit gleicher Farbe)
 bool slalomMyRunDone  = false;  // mein Durchlauf ist zu Ende (ohne Treffer)
@@ -51,6 +52,24 @@ static uint8_t slalomPeerMac[6]  = {0,0,0,0,0,0}; // MAC des Slalom-Peers
 static uint8_t slalomInviterMac[6] = {0,0,0,0,0,0};
 // Pending: wir haben eine Einladung bekommen, aber Web-Accept steht noch aus
 static bool    slalomInvitePending_ = false;
+// Wir selbst haben eine Einladung GESENDET und warten auf das ACK. Ohne diesen
+// Zustand konnte JEDES beliebige Geraet ein INVITE_ACK schicken und sich mit
+// uns paaren - sogar als Host. Der Zustand macht das ACK beantwortbar.
+static bool    slalomInviteSent_     = false;
+static uint8_t slalomInviteSentMac[6] = {0,0,0,0,0,0};
+static unsigned long slalomInviteSentMs = 0;
+static uint8_t slalomInviteRetries    = 0;
+// Wer unsere Einladung abgelehnt hat. Solange das gesetzt ist, wird nicht
+// erneut eingeladen (sonst poppt das Popup mehrfach wieder auf).
+static uint8_t slalomDeclinedBy_[6]   = {0,0,0,0,0,0};
+
+// Einladungs-Timeout: wie lange warten wir auf ein ACK, und wie oft senden wir
+// die Einladung erneut? Vorher wurde die Einladung GENAU EINMAL geschickt -
+// ein einziges verlorenes ESP-NOW-Paket liess die Web-UI dauerhaft in
+// "Einladung gesendet! Warte auf Antwort..." stehen, ohne jeden Ausweg.
+static constexpr uint32_t SLALOM_INVITE_RETRY_MS = 2000;  // Abstand zweier Versuche
+static constexpr uint8_t  SLALOM_INVITE_MAX_RETRY = 3;    // Versuche insgesamt
+static constexpr uint32_t SLALOM_INVITE_TIMEOUT_MS = 10000; // danach aufgeben
 
 bool slalomHasPeer() { return slalomHasPeer_; }
 uint8_t* slalomPeerMacPtr() { return slalomPeerMac; }
@@ -59,6 +78,63 @@ uint8_t* slalomInviterMacPtr() { return slalomInviterMac; }
 void slalomClearInvite() {
   slalomInvitePending_ = false;
   memset(slalomInviterMac, 0, 6);
+}
+
+// Einladung senden und den Wartezustand-armed: Retry in slalomTick().
+void slalomInviteSend(const uint8_t destMac[6]) {
+  // Alte Ablehnung loeschen! Sonst blockiert eine fruehere Ablehnung genau
+  // diese neue Einladung: beim naechsten slalomTick() passt
+  // slalomDeclinedBy_ weiterhin zu slalomInviteSentMac, der Retry wird
+  // abgebrochen, slalomInviteSent_ faellt auf false - und weil dann auch der
+  // Timeout-Zweig nie erreicht wird (er prueft slalomInviteSent_), blieb die
+  // Web-UI dauerhaft bei "Warte auf Antwort..." stehen.
+  memset(slalomDeclinedBy_, 0, 6);
+  memcpy(slalomInviteSentMac, destMac, 6);
+  espNowAddSpecificPeer(destMac);   // sicherstellen, dass der Peer in der Tabelle ist
+  slalomInviteSent_ = true;
+  slalomInviteSentMs = millis();
+  slalomInviteRetries = 1;
+  slalomSendPacketTo(SLALOM_CMD_INVITE, nullptr, destMac);
+  Serial.printf("[SLALOM] Einladung an %02X:%02X:%02X:%02X:%02X:%02X gesendet (Versuch 1/%d)\n",
+    destMac[0], destMac[1], destMac[2], destMac[3], destMac[4], destMac[5],
+    SLALOM_INVITE_MAX_RETRY);
+}
+
+// Einladungs-Timeout / Retry (aus loop() aufrufen, nicht-blockierend).
+void slalomTick() {
+  if (!slalomInviteSent_ || slalomHasPeer_) return;
+  const unsigned long age = millis() - slalomInviteSentMs;
+  if (age < SLALOM_INVITE_RETRY_MS) return;
+
+  if (slalomInviteRetries < SLALOM_INVITE_MAX_RETRY) {
+    slalomInviteRetries++;
+    slalomInviteSentMs = millis();
+    // Ein Retry, nachdem die Gegenseite abgelehnt hat, wuerde das
+    // Einladungs-Pop-up dort erneut aufpoppen lassen - bis zu
+    // SLALOM_INVITE_MAX_RETRY Mal. Deshalb die Ablehnung im
+    // SLALOM_CMD_SLALOM_UNPAIR-Handler protokollieren und den Retry
+    // abbrechen.
+    if (slalomDeclinedBy_) {
+      if (memcmp(slalomDeclinedBy_, slalomInviteSentMac, 6) == 0) {
+        slalomInviteSent_ = false;
+        memset(slalomDeclinedBy_, 0, 6);
+        // Auch der Web-UI Bescheid geben: sie steht sonst weiter auf
+        // "Warte auf Antwort...", obwohl hier abgebrochen wurde.
+        sendStatus("SLALOM:INVITE_DECLINED");
+        Serial.println("[SLALOM] Einladung abgelehnt - kein weiterer Versuch");
+        return;
+      }
+    }
+    slalomSendPacketTo(SLALOM_CMD_INVITE, nullptr, slalomInviteSentMac);
+    Serial.printf("[SLALOM] Einladung erneut gesendet (Versuch %d/%d)\n",
+                  slalomInviteRetries, SLALOM_INVITE_MAX_RETRY);
+    return;
+  }
+  if (age >= SLALOM_INVITE_TIMEOUT_MS) {
+    slalomInviteSent_ = false;
+    sendStatus("SLALOM:INVITE_TIMEOUT");
+    Serial.println("[SLALOM] Einladung unbeantwortet - aufgegeben");
+  }
 }
 
 // Phase-Setzer (Logging + Status-Update zentral)
@@ -90,6 +166,7 @@ void slalomPairWith(const uint8_t mac[6], bool initiator) {
   memcpy(slalomPeerMac, mac, 6);
   slalomHasPeer_ = true;
   slalomIsHost  = initiator;  // Initiator = Host
+  slalomInviteSent_ = false;  // ACK ist da, wartezustand beendet
   // ESP-NOW Peer registrieren (falls noch nicht)
   espNowAddSpecificPeer(mac);
   slalomResetRuntime();
@@ -104,13 +181,29 @@ void slalomPairWith(const uint8_t mac[6], bool initiator) {
 // Slalom-spezifisches Unpair (nur Slalom-State, Race-Pairing unberuehrt)
 void slalomUnpair() {
   if (slalomHasPeer_) {
-    esp_now_del_peer(slalomPeerMac);
+    // ACHTUNG: der ESP-NOW-Peer-Eintrag wird nur geloescht, wenn dieser
+    // Geraet nicht zugleich der Rennen-Gegner ist. slalomAutoScan findet den
+    // Slalom-Partner ueber den RACE-Scan, d.h. beide Pairings zeigen
+    // normalerweise auf dieselbe MAC. Ein pauschales esp_now_del_peer()
+    // entfernte dort den Peer aus der Tabelle, waehrend hasPairedPeer im
+    // EspNow-Modul weiter true blieb - jedes raceSendPacket() scheiterte
+    // danach still mit ESP_ERR_NO_PEER und das Rennen war ohne Neustart
+    // tot. Jetzt bleibt der Eintrag erhalten, wenn er fuer das Rennen
+    // gebraucht wird.
+    const bool isRacePeer = hasPairedPeer && memcmp(pairedPeer, slalomPeerMac, 6) == 0;
+    if (!isRacePeer) {
+      esp_now_del_peer(slalomPeerMac);
+    } else {
+      Serial.println("[SLALOM] Peer bleibt als Rennen-Peer in der ESP-NOW-Tabelle");
+    }
   }
   slalomHasPeer_       = false;
   slalomIsHost        = false;
   slalomInvitePending_ = false;
+  slalomInviteSent_   = false;
   memset(slalomPeerMac, 0, 6);
   memset(slalomInviterMac, 0, 6);
+  memset(slalomInviteSentMac, 0, 6);
   slalomResetRuntime();
   slalomTargetColor[0] = '\0';
   slalomSetPhase(SLALOM_IDLE);
@@ -164,13 +257,21 @@ void slalomSendPacketTo(uint8_t cmd, const char* data, const uint8_t destMac[6])
 
 // Spiel vorbei, weil JEMAND die Zielfarbe erreicht hat: stoppen, DONE-Phase.
 void slalomEndGame(bool iWon) {
-  if (slalomRunning) {
+  // Nicht nur slalomRunning pruefen: es gibt auch den Fall, dass waehrend des
+  // Slaloms ein SOLO-Programm (progActive, ohne slalomRunning) laeuft. Ein
+  // WIN/ABORT-Paket beendete dann nur den Slalom-Zustand, progStop() wurde
+  // nie gerufen - der Roboter fuhr das Solo-Programm weiter, waehrend die
+  // Web-UI schon "Gegner hat gewonnen" anzeigte.
+  if (slalomRunning || progActive) {
     progStop();
     slalomRunning = false;
     currentGame = GAME_NONE;
   }
   slalomResetRuntime();
   slalomWon = true;   // Spiel ist entschieden (verhindert z.B. spaetes MISS)
+  // Fuer die LED-Anzeige in Phase DONE: resetRuntime() loescht slalomFinished,
+  // deshalb das Ergebnis hier separat und stabil ablegen.
+  slalomIWonLast = iWon;
   slalomSetPhase(SLALOM_DONE);
   sendStatus(iWon ? "SLALOM:WIN:ME" : "SLALOM:WIN:OPP");
   Serial.printf("[SLALOM] Spielende: %s\n", iWon ? "ICH habe gewonnen!" : "Gegner hat gewonnen");
@@ -178,7 +279,8 @@ void slalomEndGame(bool iWon) {
 
 // Spiel abgebrochen (manuell): zurueck zu PAIRED, Peer informieren.
 void slalomAbortGame() {
-  if (slalomRunning) {
+  // Siehe slalomEndGame(): auch ein laufendes Solo-Programm muss stoppen.
+  if (slalomRunning || progActive) {
     progStop();
     slalomRunning = false;
     currentGame = GAME_NONE;
@@ -330,9 +432,63 @@ void slalomCheckRetry() {
 }
 
 void onSlalomPacket(const RacePacket* pkt) {
+  // ---- ZENTRALE ABSENDER-PRUEFUNG ---------------------------------
+  // Vorher pruefte NUR der UNPAIR-Fall den Absender. Jedes beliebige
+  // ESP-NOW-Geraet in Reichweite konnte dadurch:
+  //   WIN     -> das Spiel sofort beenden und sich zum Gewinner erklaeren
+  //   ABORT   -> das laufende Spiel abbrechen
+  //   START   -> dem Client eine fremde Zielfarbe aufzwingen
+  //   PROG    -> den Countdown erzwingen
+  //   INVITE_ACK -> sich paaren, OHNE jemals eingeladen worden zu sein -
+  //                und dabei sogar zum HOST werden
+  // Zwei Nachrichten sind davon ausgenommen, und nur aus guten Gruenden:
+  //   * INVITE      - kommt per Definition von einem noch Ungepaarten.
+  //   * INVITE_ACK  - nur wenn WIR selbst eine Einladung an genau diese MAC
+  //                   gesendet haben (slalomInviteSent_). Das beweist, dass
+  //                   das ACK eine Antwort auf unsere eigene Einladung ist.
+  // Hinweis: pkt->senderMac ist hier bereits die vom Wi-Fi-Stack gemeldete
+  // MAC (siehe onEspNowRecv) und damit nicht mehr frei waehlbar.
+  switch (pkt->slalomCmd) {
+    case SLALOM_CMD_INVITE:
+      break;  // Absender wird weiter unten (Phase-Pruefung) bewertet
+    case SLALOM_CMD_INVITE_ACK:
+      break;  // eigener Ast weiter unten (nur nach eigener Einladung gueltig)
+    case SLALOM_CMD_SLALOM_UNPAIR:
+      // Gilt fuer GEGNER unseres Slalom-Peers UND fuer eine Ablehnung, wenn
+      // wir selbst gerade eine Einladung offen haben. Vorher brauchte der
+      // Handler zwingend einen gepaarten Peer - eine Ablehnung kam also gar
+      // nicht an, und die Gegenseite blieb in IDLE, waehrend wir ewig auf
+      // eine Antwort warteten.
+      if (slalomInviteSent_ &&
+          memcmp(pkt->senderMac, slalomInviteSentMac, 6) == 0) {
+        slalomInviteSent_ = false;
+        memcpy(slalomDeclinedBy_, pkt->senderMac, 6);
+        memset(slalomInviteSentMac, 0, 6);
+        sendStatus("SLALOM:INVITE_DECLINED");
+        Serial.println("[SLALOM] Einladung abgelehnt");
+        return;
+      }
+      break;
+    default:
+      if (!slalomHasPeer_) {
+        Serial.println("[SLALOM] Paket verworfen: kein Slalom-Peer");
+        return;
+      }
+      if (memcmp(pkt->senderMac, slalomPeerMac, 6) != 0) {
+        Serial.println("[SLALOM] Paket verworfen: Absender ist nicht der Slalom-Peer");
+        return;
+      }
+      break;
+  }
+
   switch (pkt->slalomCmd) {
     case SLALOM_CMD_PROG:
-      if (pkt->slalomLen > 0 && slalomPhase == SLALOM_BUILD) {
+      // Absender ist jetzt garantiert der Slalom-Peer. "Bereit" wird in
+      // JEDER Phase gemerkt, nicht nur in BUILD: kam das PROG waehrend des
+      // eigenen Countdowns an, ging es sonst verloren und nach dem Retry
+      // warteten beide vergeblich aufeinander. slalomMaybeStart() ist
+      // selbststaendig no-op, solange wir nicht in BUILD sind.
+      if (pkt->slalomLen > 0) {
         slalomOppReady = true;
         sendStatus("SLALOM:OPP_PROG");
         slalomMaybeStart();
@@ -401,7 +557,8 @@ void onSlalomPacket(const RacePacket* pkt) {
       break;
 
     case SLALOM_CMD_INVITE_ACK:
-      // Initiator: Empfaenger hat die Einladung angenommen
+      // Absender ist hier bereits als das Geraet bestaetigt, auf dessen
+      // Einladung wir gewartet haben (Pruefung weiter oben). Initiator = Host.
       if (!slalomHasPeer_) {
         slalomPairWith(pkt->senderMac, true);  // Initiator = Host
       }

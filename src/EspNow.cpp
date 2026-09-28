@@ -47,36 +47,52 @@ void peerListAdd(const uint8_t mac[6]) {
 // Wi-Fi-Callback: KEINE BLE/Heap-Aufrufe -> nur in Queue posten
 void onEspNowRecv(const uint8_t* mac, const uint8_t* data, int len) {
   if (len != sizeof(RacePacket)) return;
-  const RacePacket* pkt = (const RacePacket*)data;
-  if (pkt->magic != 0xA5) return;
-  if (memcmp(pkt->senderMac, myMac, 6) == 0) return;
+  // In eine lokale Kopie lesen, NICHT in den empfangenen Puffer casten.
+  RacePacket pkt;
+  memcpy(&pkt, data, sizeof(RacePacket));
+  if (pkt.magic != 0xA5) return;
+  if (memcmp(pkt.senderMac, myMac, 6) == 0) return;
 
-  if (pkt->flags & RACE_FLAG_PRESENT) {
+  // ---- Identitaet verifizieren ------------------------------------
+  // pkt.senderMac ist ein frei waehlbares Feld: jeder Absender kann so
+  // tun, als sei er ein anderer Roboter. Der Callback-Parameter `mac`
+  // stammt dagegen vom Wi-Fi-Stack und ist die echte Adresse des
+  // Absenders. Wir ueberschreiben das Paketfeld deshalb sofort - damit
+  // arbeiten ALLE nachgelagerten Pruefungen (Rennen-Pairing, Slalom-
+  // Absendercheck) gegen eine verifizierte Identitaet. Ohne das koennte
+  // ein fremdes Geraet das Rennen-Pairing durchspoielen, indem es die
+  // MAC des gepairten Roboters in sein Paket schreibt.
+  memcpy(pkt.senderMac, mac, 6);
+  // Auch der eigene Reflex wird ab jetzt gegen die echte MAC geprueft:
+  if (memcmp(mac, myMac, 6) == 0) return;
+
+  if (pkt.flags & RACE_FLAG_PRESENT) {
     EspNowEvent e = {};
     e.type = EspNowEvent::PEER_ADD;
-    memcpy(e.mac, pkt->senderMac, 6);
+    memcpy(e.mac, pkt.senderMac, 6);
     if (espNowEventQueue) xQueueSend(espNowEventQueue, &e, 0);
     return;
   }
-  if (pkt->flags & RACE_FLAG_HELLO) {
+  if (pkt.flags & RACE_FLAG_HELLO) {
     // PEER_ADD + PRESENT-Antwort + addSpecificPeer in Main ausfuehren
     EspNowEvent e = {};
     e.type = EspNowEvent::PEER_ADD;
-    memcpy(e.mac, pkt->senderMac, 6);
+    memcpy(e.mac, pkt.senderMac, 6);
     if (espNowEventQueue) xQueueSend(espNowEventQueue, &e, 0);
-    // Antwort direkt ueber esp_now_send (nur Wi-Fi API, kein BLE)
+    // Antwort direkt ueber esp_now_send (nur Wi-Fi API, kein BLE).
+    // Auch hier die echte MAC des Absenders verwenden.
     RacePacket resp = {};
     resp.magic = 0xA5;
     memcpy(resp.senderMac, myMac, 6);
     resp.score = 0;
     resp.flags = RACE_FLAG_PRESENT;
-    esp_now_send(pkt->senderMac, (uint8_t*)&resp, sizeof(resp));
+    esp_now_send(mac, (uint8_t*)&resp, sizeof(resp));
     return;
   }
-  // Normales Rennen-Paket: in Queue posten
+  // Normales Rennen-/Slalom-Paket: in Queue posten
   EspNowEvent e = {};
   e.type = EspNowEvent::RACE_PKT;
-  memcpy(&e.pkt, pkt, sizeof(RacePacket));
+  memcpy(&e.pkt, &pkt, sizeof(RacePacket));
   if (espNowEventQueue) xQueueSend(espNowEventQueue, &e, 0);
 }
 
@@ -91,12 +107,24 @@ void espNowProcessEvents() {
         espNowAddSpecificPeer(e.mac);
         break;
        case EspNowEvent::RACE_PKT:
-        // Slalom-Pakete immer durchlassen (Slalom hat eigenes Pairing)
         if (e.pkt.slalomCmd != SLALOM_CMD_NONE) {
+          // Slalom hat eigenes Pairing; die Absender-Pruefung findet
+          // in onSlalomPacket() statt.
           onSlalomPacket(&e.pkt);
         } else {
-          // Nur Race-Pakete gegen Race-Pairing filtern
-          if (hasPairedPeer && memcmp(e.pkt.senderMac, pairedPeer, 6) != 0) break;
+          // Rennen NUR vom gepairten Gegner, und ohne Pairing ueberhaupt
+          // nicht. Vorher stand hier
+          //     if (hasPairedPeer && senderMac != pairedPeer) break;
+          // d.h. OHNE Pairing wurde jedes Paket mit passender Laenge und
+          // Magic durchgelassen - jedes ESP-NOW-Geraet in Reichweite (auch
+          // ein Handy mit passender App) konnte so ein Rennen starten. Der
+          // Aufrufer onRacePacket() setzt dann currentGame = GAME_RENNEN,
+          // wodurch driveLockedByGame() die komplette Tastatursteuerung
+          // stilllegt: der Roboter war nicht mehr steuerbar.
+          // Hinweis: Discovery (HELLO/PRESENT) laeuft weiterhin ueber den
+          // PEER_ADD-Zweig und ist davon nicht betroffen.
+          if (!hasPairedPeer) break;
+          if (memcmp(e.pkt.senderMac, pairedPeer, 6) != 0) break;
           onRacePacket(&e.pkt);
         }
         break;

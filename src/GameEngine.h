@@ -45,6 +45,7 @@ void gameTurnRightSteps(int32_t steps);
 
 // Positionsfahrt vorwaerts: exakte Strecke in Schritten (z.B. 3cm im Quiz).
 void gameDriveForwardSteps(int32_t steps);
+void gameDriveBackwardSteps(int32_t steps);
 
 // Motoren stehen fuer 'ms' Millisekunden (Pause-Fenster, z.B. Farb-Lesezeit).
 void gameStop(uint32_t ms);
