@@ -221,36 +221,39 @@ Microstep-Zahl (`configStepsPerS()` in `Config.cpp`, gedeckelt bei
 `MAX_DRIVE_STEPS_S` = 20 000 Schritte/s durch den 50-µs-Puls-Task).
 `setMotorSpeed()` legt den Betrag immer darauf fest.
 
-Das **Anfahren** ist eine sanfte Rampe: von 0 auf `FIXED_DRIVE_SPEED` in
-`config.rampMs` (Werkwert 150 ms, per `RAMP:` und Web-UI einstellbar,
-0..2000 ms) - und genauso lang wieder herunter. `0` = aus, dann fährt der
-Roboter überall sofort mit voller Geschwindigkeit.
+Das **Anfahren und Abbremsen** ist eine sanfte Rampe: von 0 auf
+`FIXED_DRIVE_SPEED` in `config.rampMs` (Werkwert 150 ms, per `RAMP:` und
+Web-UI einstellbar, 0..2000 ms) - und genauso lang wieder herunter.
+`0` = aus, dann fährt der Roboter überall sofort mit voller Geschwindigkeit.
 
 Sie gilt an zwei Stellen, mit derselben Bedeutung:
 
 | Wo | Wie | Warum |
 |---|---|---|
-| Freies Fahren (WASD) | Software-Rampe im Motor-Task: die Ist-Geschwindigkeit wandert pro 50-µs-Tick um `Beschleunigung × dt` auf das Ziel | AccelStepper kann nur mit einem Ziel rampe(n) - beim Freifahren gibt es keins, es geht nur um „wie schnell gerade" |
+| Freies Fahren (WASD) | Software-Rampe im Motor-Task: die Ist-Geschwindigkeit wandert pro 50-µs-Tick um `Beschleunigung × dt` auf das Ziel. Anfahren beim Drücken, **Abbremsen beim Loslassen** | AccelStepper kann nur mit einem Ziel rampe(n) - beim Freifahren gibt es keins, es geht nur um „wie schnell gerade" |
 | Fahrten nach Strecke (Spiele, Blöcke, Einlern-Tests) | AccelStepper `run()`/`setAcceleration()`, die Schrittzahl bleibt exakt | bremst zusätzlich **vor** dem Ziel ab |
 
-Bewusst **ohne** Rampe: das STOPP, der Linienfolger und zeitlich begrenzte
-Fahrten (`gameDrive`).
+**Hart** bleibt, was im Notfall hart sein muss:
 
-- **STOPP** (`setMotorSpeed(i, 0)`) ist immer hart. Not-Aus, losgelassene
-  Taste und Befehls-Timeout dürfen nicht warten; eine weiche Bremse würde den
-  Roboter bei Verbindungsausfall noch bis zu zwei Sekunden rollen lassen.
-  Anfahren ist also gerampt, Abbremsen auf Tastendruck nicht.
-- **Linienfolger** schaltet seine Suchdrehungen alle 140 ms um - eine Rampe
-  würde den Richtungswechsel verschlucken, der Roboter käme nie von der
-  Links- in die Rechtssuche.
-- **`gameDrive(400 ms)`**: dort ist die Zeit das Kommando. 150 ms Anlaufzeit
-  wären ein Drittel der gewünschten Fahrt. Wegstrecken über
-  `prepPositionMove()` fahren dagegen mit Rampe, weil dort die Strecke das
-  Kommando ist.
+| | Stopp |
+|---|---|
+| STOP-Knopf / Not-Aus | sofort (`stopMotors()`) |
+| Verbindung verloren (Befehls-Timeout) | sofort - eine Bremse über `config.rampMs` ließe den Roboter bei 2000 ms Anfahrzeit noch zwei Sekunden rollen, obwohl niemand mehr da ist |
+| `TMC:EN:0` | sofort |
+| Linienfolger | sofort - seine Zustandswechsel liegen bei 140 ms, ein Ausrollen liefe in den nächsten hinein |
+| `gameStop` / Ende von `gameDrive` | sofort - Spiel-Pausen stehen vor Aktionen, die einen **stehenden** Roboter brauchen (Farbe messen, Drehung ansetzen) |
 
-Aufrufer melden die Ausnahme über `setMotorSpeed(idx, speed, /*useRamp=*/false)`
-an. Wer die Rampe selbst verstellt, muss den Weg über `motorUpdateSpeeds()`
+`setMotorSpeed(idx, 0, /*useRamp=*/true)` ist das weiche Ausrollen und greift
+nur, wenn die Rampe an ist **und** keine Positionsfahrt läuft — die hat einen
+festen Zielpunkt und eine Schrittzahl, die kann man nicht weich abbrechen.
+Not-Aus, Timeout, Linienfolger und Spiele rufen deshalb `useRamp = false`.
+
+Wer die Rampe selbst verstellt, muss den Weg über `motorUpdateSpeeds()`
 nehmen - dort - und nur dort - wird das Flag gesetzt, das der Puls-Task liest.
+Weil dort `setAcceleration()` intern `computeNewSpeed()` aufruft, und das im
+Freifahr-Modus auf einem ins Unendliche wachsenden „Abstand zum Ziel" die
+AccelStepper-Rampe starten würde, wird die aktuelle Geschwindigkeit danach
+einmal wiederhergestellt.
 
 Warum die Rampe in **Zeit** und nicht in Beschleunigung angegeben wird: nur die
 Zeit ergibt unabhängig von Microstep-Zahl und Tempo dasselbe Fahrgefühl. Eine
@@ -341,7 +344,7 @@ in der Web-UI direkt unter dem Tempo einstellbar.
 
 | Befehl | Wirkung |
 |---|---|
-| `RAMP?` / `RAMP:<0..2000>` | Anfahrzeit in **ms** bis zum eingestellten Tempo - gilt für freies Fahren und für Fahrten nach Strecke. Antwort `RAMP=<ms>,<0\|1>`; das zweite Feld sagt, ob die Rampe wirklich aktiv ist. `0` = keine Rampe (sofort volles Tempo). Das STOPP bleibt immer hart |
+| `RAMP?` / `RAMP:<0..2000>` | Anfahr- **und** Abbremszeit in **ms** für das eingestellte Tempo - gilt beim freien Fahren (an *und* ab) und für Fahrten nach Strecke. Antwort `RAMP=<ms>,<0\|1>`; das zweite Feld sagt, ob die Rampe wirklich aktiv ist. `0` = keine Rampe (sofort). Die Not-Aus-Pfade bleiben hart |
 | `SPIN?` / `SPIN:<0..3000>` | Dauer der Einschalt-Drehung in ms, `0` = aus (dann wartet der Roboter auch nicht). Die Drehzahl bleibt, wie sie ist |
 | `SPIN:<0..20000>,<0..3000>` | Drehzahl (Schritte/s) **und** Dauer zusammen, für den Serial Monitor. Beide nur gemeinsam gültig: ein halb gesetzter Wert wäre eine Fahrt, die nie stattfindet, aber den Boot verzögert |
 

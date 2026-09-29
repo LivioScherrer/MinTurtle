@@ -116,8 +116,8 @@ void gameDrive(int32_t ms, bool bForward) {
   setMotorSpeed(0, target, false);
   setMotorSpeed(1, target, false);
   waitWhileRunning((uint32_t)ms, true);
-  setMotorSpeed(0, 0);
-  setMotorSpeed(1, 0);
+  setMotorSpeed(0, 0, false);
+  setMotorSpeed(1, 0, false);
   waitForStop();
   gameMoveBusy = false;
 }
@@ -127,8 +127,12 @@ void gameDriveBackward(uint32_t ms) { gameDrive((int32_t)ms, false); }
 
 void gameStop(uint32_t ms) {
   gameMoveBusy = true;
-  setMotorSpeed(0, 0);
-  setMotorSpeed(1, 0);
+  // Hart, nicht weich: Spiel-Pausen stehen ueblicherweise vor Aktionen, die
+  // einen STILLSTEHENDEN Roboter brauchen (Farbe messen, Drehung ansetzen,
+  // warten bis etwas da ist). Ein ausrollender Roboter wuerde die Farbe im
+  // Vorbeifahren lesen und das Ergebnis waere Muell.
+  setMotorSpeed(0, 0, false);
+  setMotorSpeed(1, 0, false);
   // bAbortOnNoGame=false: ein bewusstes Pause-Fenster (z.B. waehrend der
   // Farbsensor liest) darf nicht durch einen Spielabbruch verkuerzt werden.
   waitWhileRunning(ms, false);

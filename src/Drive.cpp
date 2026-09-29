@@ -64,14 +64,20 @@ void driveUpdate() {
   // Programm-Bausteinen "fahre bis ..." / "warte nah" / "warte frei"
   // (ProgGame.cpp). Dort ist die Nutzung gewollt und sichtbar.
 
-  // Timeout: kein BLE-Befehl mehr -> Stop.
+  // Timeout: kein BLE-Befehl mehr -> HARTER Stopp.
   // WICHTIG: hier nur die Geschwindigkeit auf 0 setzen, die Tasten NICHT
   // loeschen. BLE verliert gelegentlich ein Paket; wuerde man dabei auch die
   // Keys loeschen, stuende der Roboter bei jedem einzelnen Aussetzer mitten
   // im Fahren. Das naechste Heartbeat-Paket (alle 50 ms) stellt den Zustand
   // ohnehin sofort wieder her. Beim echten Verbindungsverlust raeumt
   // onBleDisconnected() die Tasten auf.
-  if (millis() - lastCommandTime > config.commandTimeoutMs) {
+  //
+  // bHardStop merkt sich diesen Fall: hier wird ausdruecklich NICHT weich
+  // gebremst. Eine Bremse, die config.rampMs lang dauert, wuerde den Roboter
+  // bei einer 2000er-Anfahrzeit noch zwei Sekunden rollen lassen - genau
+  // dann, wenn niemand mehr da ist, um ihn anzuhalten.
+  const bool bHardStop = (millis() - lastCommandTime > config.commandTimeoutMs);
+  if (bHardStop) {
     targetL = 0.0; targetR = 0.0;
     if (speedL != 0.0 || speedR != 0.0) {
       speedL = 0.0;
@@ -80,8 +86,10 @@ void driveUpdate() {
   }
 
   // Feste Geschwindigkeit setzen - Motor.cpp nutzt immer FIXED_DRIVE_SPEED.
-  setMotorSpeed(0, targetL);
-  setMotorSpeed(1, targetR);
+  // useRamp = !bHardStop: also weiches Ausrollen, wenn eine Taste losgelassen
+  // wird (speed == 0, Rampe aktiv), und harter Stopp im Timeout-Fall.
+  setMotorSpeed(0, targetL, !bHardStop);
+  setMotorSpeed(1, targetR, !bHardStop);
   speedL = targetL;
   speedR = targetR;
 }

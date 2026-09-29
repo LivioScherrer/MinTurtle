@@ -86,8 +86,11 @@ namespace {
     setMotorSpeed(1, -v, false);
   }
   void motorsOff() {
-    setMotorSpeed(0, 0);
-    setMotorSpeed(1, 0);
+    // Hart, nicht weich (useRamp = false) - der ganze Linienfolger faehrt ohne
+    // Rampe, und die Zustandswechsel liegen bei 140 ms. Ein Ausrollen wuerde
+    // in den naechsten Zustand hineinlaufen.
+    setMotorSpeed(0, 0, false);
+    setMotorSpeed(1, 0, false);
   }
 }
 

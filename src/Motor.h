@@ -79,13 +79,13 @@ constexpr uint32_t MOTOR_TICK_US = 50;
 //
 // Die Rampe gilt an ZWEI Stellen, mit derselben Bedeutung:
 //   * Freies Fahren (WASD)  - als Software-Rampe im Motor-Task, weil es dort
-//     kein Ziel gibt, vor dem man bremsen koennte.
+//     kein Ziel gibt, vor dem man bremsen koennte. Anfahren UND Abbremsen
+//     beim Loslassen der Taste.
 //   * Positions-Moves       - als AccelStepper-Rampe (run()/setAcceleration),
 //     die zusaetzlich vor dem Ziel abbremst.
-// Alles, was auf eine SOFORTige Reaktion angewiesen ist, meldet das ueber
-// setMotorSpeed(..., false) ab: der Linienfolger (schaltet seine Suchdrehungen
-// alle 140 ms um) und zeitlich begrenzte Fahrten (gameDrive - die Rampe wuerde
-// die gewaehnte Fahrzeit auffressen).
+// Harter Stopp (useRamp = false) melden ab: der STOP-Knopf, der
+// Befehls-Timeout, TMC:EN:0, der Linienfolger und zeitlich begrenzte Fahrten.
+// Als Anfahrzeit lesbar in der Web-UI: "Anfahren (ms)".
 
 // TMC-Defaults (8HS11-0204S NEMA8: 0.2A Nennstrom, 24 Ohm, 8mH)
 // Strom = exakt Nennstrom (mehr -> Ueberhitzung, max. 80 Grad Rise im Stillstand).
@@ -129,14 +129,22 @@ void startupSpin();
 
 // Geschwindigkeit setzen (steps/s, Vorzeichen = Richtung).
 // Der Betrag wird IMMER auf FIXED_DRIVE_SPEED gelegt - egal was uebergeben wird.
-// speed == 0 bedeutet explizit SOFORT-STOP (die Rampe wird nicht abgewartet:
-// Not-Aus, Tasten loslassen und Befehls-Timeout muessen sofort greifen).
 //
-// useRamp == true (Vorgabe): faehrt an und bremst weich ueber config.rampMs.
-// useRamp == false: sofort die volle Geschwindigkeit. Nur fuer Stellen, die
-// wirklich auf SOFORTige Reaktion angewiesen sind - der Linienfolger und
-// zeitlich begrenzte Fahrten (gameDrive), bei denen die Rampe die
-// gewaehnte Fahrzeit auffressen wuerde.
+// speed == 0 heisst STOPP, und useRamp entscheidet, WIE:
+//   * useRamp == true  -> weiches Ausrollen ueber config.rampMs (Taste
+//     losgelassen). Greift nur, wenn die Rampe an ist UND keine
+//     Positionsfahrt laeuft - die hat einen festen Zielpunkt und kann nicht
+//     weich abgebrochen werden.
+//   * useRamp == false -> sofort Stillstand. fuer alles Sicherheitsrelevante:
+//     Not-Aus, STOP-Knopf, Befehls-Timeout, TMC:EN:0. Hier darf die Bremse
+//     NICHT config.rampMs lang dauern: bei Verbindungsausfall wuerde der
+//     Roboter sonst noch sekundenlang rollen.
+//
+// useRamp == false beim Fahren (speed != 0) heisst: sofort die volle
+// Geschwindigkeit, ohne Anfahren. Nur fuer Stellen, die wirklich auf
+// SOFORTige Reaktion angewiesen sind - der Linienfolger und zeitlich
+// begrenzte Fahrten (gameDrive), bei denen die Rampe die gewaehnte
+// Fahrzeit auffressen wuerde.
 // Thread-sicher: kann von jedem Core aus aufgerufen werden.
 void setMotorSpeed(int motorIdx, float speed, bool useRamp = true);
 

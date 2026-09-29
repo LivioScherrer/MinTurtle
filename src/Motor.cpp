@@ -19,8 +19,8 @@
 //   * Positions-Moves: AccelStepper-Rampe (run()/setAcceleration), die
 //     zusaetzlich vor dem Ziel abbremst.
 // Bei config.rampMs == 0 ist beides aus (sofort volle Geschwindigkeit).
-// NICHT gerampt ist das STOPP (setMotorSpeed(i, 0) ist immer hart) und alles,
-// was useRamp=false meldet: Linienfolger und zeitlich begrenzte Fahrten.
+// Harter Stopp (useRamp=false): Not-Aus, STOP-Knopf, Befehls-Timeout,
+// TMC:EN:0, Linienfolger, zeitlich begrenzte Fahrten.
 // Der eigene Rest-Schritt-Zaehler gilt nur fuer Positions-Moves; er zaehlt die
 // echten Pulse (Positionsaenderung) mit, erkennt das Ende und ist gleichzeitig
 // die Anzeige fuer motorStillRunning().
@@ -295,6 +295,17 @@ static void motorUpdateSpeedsLocked() {
   // dann fahren beide Wege ohne Rampe (Positions-Modus ueber runSpeed()).
   stepperL.setAcceleration(s_accel);
   stepperR.setAcceleration(s_accel);
+  // computeNewSpeed() rechnet mit distanceToGo() = _targetPos - _currentPos.
+  // Beim Freifahren laeuft _currentPos mit jedem Puls weiter, _targetPos
+  // nicht - der "Abstand zum Ziel" waechst also ins Unendliche. computeNewSpeed
+  // wuerde daraufhin die AccelStepper-Rampe starten und die aktuelle
+  // Geschwindigkeit auf deren ersten Wert ueberschreiben (bei Tempo 150 und
+  // Rampe 150 ms etwa 190 statt 2500 Schritte/s). Genau das passiert, wenn
+  // jemand waehrend der Fahrt SPEED: oder RAMP: schickt. Deshalb danach
+  // die vom Task gesetzte Geschwindigkeit wiederherstellen; der Task rammt
+  // sie im naechsten Tick auf das neue Ziel.
+  if (s_curL != 0.0f) stepperL.setSpeed(s_curL);
+  if (s_curR != 0.0f) stepperR.setSpeed(s_curR);
   const float wanted = config.driveSpeedMM * configStepsPerMM();
   Serial.printf("[MOTOR] Tempo: %.0f mm/s -> %.0f Schritte/s (%u Schritte/Kreis, %u Microsteps)%s\n",
                 (double)config.driveSpeedMM, (double)FIXED_DRIVE_SPEED,
@@ -459,17 +470,44 @@ void startupSpin() {
 void setMotorSpeed(int motorIdx, float speed, bool useRamp) {
   if (!motorReady) return;   // siehe motorReady
   if (speed == 0.0f) {
-    // Stopp ist fail-safe: erst kurz warten, bei Fehlschlag blockieren, bis
-    // der Mutex frei ist. Ein still gescheiterter Stopp hiesse "der Roboter
-    // faehrt weiter" - das darf in der sicherheitsrelevanten Funktion nicht
-    // passieren. (Die kritischen Abschnitte selbst sind winzig: nur GPIO.)
+    // ---- WEICHES ABBREMSEN (Taste losgelassen) ----
+    // NUR das Ziel auf 0. Der Puls-Task laesst die Ist-Geschwindigkeit dann
+    // ueber config.rampMs ausrollen. stepperHalt() wird hier bewusst NICHT
+    // aufgerufen: das setzt _stepInterval = 0, der Motor stuende sofort.
+    // Voraussetzung: die Rampe ist ueberhaupt an (sonst waere "weich"
+    // ohnehin "sofort") und es laeuft keine Positionsfahrt - die hat einen
+    // festen Zielpunkt und eine Schrittzahl, die kann man nicht weich
+    // abbrechen. Eine laufende Positionsfahrt faellt deshalb unten in den
+    // harten Zweig.
+    if (useRamp && s_rampOn && !(motorIdx == 0 ? posActiveL : posActiveR)) {
+      volatile float& cur = (motorIdx == 0) ? s_curL : s_curR;
+      volatile float& tgt = (motorIdx == 0) ? s_tgtL : s_tgtR;
+      // Die Schleife ruft das in jedem Durchlauf auf: nur anfassen, wenn
+      // wirklich noch etwas laeuft.
+      if (cur != 0.0f || tgt != 0.0f) {
+        if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+          // s_lastMotionMs wird hier weitergepflegt: der Roboter rollt ja
+          // noch aus, und tmcAutoStandbyTick() schaltet die Treiber nach
+          // TMC_STANDBY_MS ab. Ohne das wuerde der Treiber mitten im
+          // Ausrollen weggeschaltet.
+          s_lastMotionMs = millis();
+          tgt = 0.0f;
+          xSemaphoreGive(motorMutex);
+        }
+      }
+      return;
+    }
+    // ---- HALTER STOPP (Not-Aus, STOP-Knopf, Timeout, TMC:EN:0) ----
+    // Fail-safe: erst kurz warten, bei Fehlschlag blockieren, bis der Mutex
+    // frei ist. Ein still gescheiterter Stopp hiesse "der Roboter faehrt
+    // weiter" - das darf hier nicht passieren. (Die kritischen Abschnitte
+    // selbst sind winzig: nur GPIO.)
     if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) != pdTRUE) {
       xSemaphoreTake(motorMutex, portMAX_DELAY);
     }
-    // Expliziter Stopp fuer diesen Motor (auch eine offene Positionsfahrt aborten)
-    // Die Rampe wird hier NICHT abgewartet: Not-Aus, losgelassene Taste und
-    // Befehls-Timeout muessen sofort greifen. cur UND tgt auf 0, sonst zoege
-    // der Puls-Task nach dem Stopp noch auf ein altes Ziel hin.
+    // Expliziter Stopp fuer diesen Motor (auch eine offene Positionsfahrt abbrechen)
+    // cur UND tgt auf 0, sonst zoege der Puls-Task nach dem Stopp noch auf
+    // ein altes Ziel hin.
     if (motorIdx == 0) {
       posActiveL = false; remainingL = 0; s_curL = 0.0f; s_tgtL = 0.0f;
       stepperHalt(stepperL);

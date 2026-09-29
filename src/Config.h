@@ -115,10 +115,15 @@ constexpr float SPEED_MM_S_MIN = 20.0f,  SPEED_MM_S_MAX = 600.0f;
 // ---------- Anfahrzeit (Beschleunigungsrampe) ----------
 // Zeit, die der Motor von 0 auf das eingestellte Tempo braucht - und
 // symmetrisch wieder herunter. Eine Zahl, eine Bedeutung, an beiden Stellen
-// an denen sie wirkt: freies Fahren (WASD) und Fahrten nach Strecke.
-// 0 = KEINE Rampe: dann fährt er überall sofort mit voller Geschwindigkeit
+// an denen sie wirkt: freies Fahren (WASD, anfahren UND abbremsen beim
+// Loslassen) und Fahrten nach Strecke.
+// 0 = KEINE Rampe: dann faehrt er ueberall sofort mit voller Geschwindigkeit
 // (das Verhalten vor dem Rampen-Umbau - lauter, aber ohne jede Verzoegerung).
-// Das STOPP ist auch bei grosser Rampe hart (setMotorSpeed(i, 0)).
+//
+// NICHT von dieser Zahl betroffen sind die harten Stopps: Not-Aus,
+// STOP-Knopf, Befehls-Timeout, TMC:EN:0. Eine Bremse, die hier so lange
+// dauert, wuerde den Roboter bei Verbindungsausfall noch sekundenlang
+// rollen lassen.
 //
 // Warum ZEIT und nicht Beschleunigung in mm/s^2: die Zeit ist die einzige
 // Angabe, die unabhaengig von Microstep-Zahl und Tempo dasselbe Gefahr
