@@ -120,6 +120,11 @@ void motorUpdateSpeeds();
 // bei "sofort volle Geschwindigkeit". Fuer Befehls-Antworten und Anzeigen.
 bool motorRampActive();
 
+// Beide IST-Geschwindigkeiten der Freifahr-Rampe in Schritte/s (mit
+// Vorzeichen), unter einem einzigen Mutex-Halt gelesen. Reine Diagnose:
+// zeigt, was die Motoren TUN - DRV:spd= zeigt nur, was befohlen wurde.
+void motorRampSpeeds(float& outL, float& outR);
+
 // Start-Signal nach dem Booten: beide Motoren drehen kurz auf der Stelle
 // (config.spinSpeed Schritte/s fuer config.spinMs), danach wieder Stillstand.
 // Beide Werte kommen aus der NVS (Web-UI, SPIN:<s>,<ms>); ist einer davon 0,

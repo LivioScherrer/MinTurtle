@@ -237,6 +237,10 @@ function showParsed(msg) {
       const i = kv.indexOf('='); if (i > 0) d[kv.slice(0, i)] = kv.slice(i + 1);
     }
     out = [['Tasten', d.keys], ['gewuenscht', d.want], ['Tempo', d.spd],
+           // lst = die wirklich gefahrenen Geschwindigkeiten der Rampe.
+           // Weichen die beim Anfahren dauerhaft voneinander ab, faehrt der
+           // Roboter schief - das ist ein Motor-Problem, kein Aufbau-Problem.
+           ['gefahren L/R', (d.lst || '?')],
            ['Spiel-Sperre', d.lock === '1'], ['Spiel', d.game],
            // cmdAlter liefert die Firmware bereits mit Einheit ("42ms"),
            // also hier keine zweite anfuegen.

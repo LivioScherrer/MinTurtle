@@ -108,11 +108,19 @@ void driveDebug(char* out, size_t n) {
   else if (left)     { want[0] = 'L'; want[1] = 'R'; }
   else if (right)    { want[0] = 'R'; want[1] = 'L'; }
   const unsigned long age = millis() - lastCommandTime;
+  // lst=/lst= sind die TATSAECHLICHEN Geschwindigkeiten der Freifahr-Rampe
+  // (Schritte/s). spd= zeigt nur, was befohlen wurde - bei der Rampe sind die
+  // beiden nicht dasselbe: beim Anfahren sind sie kurzzeitig verschieden, und
+  // genau so laesst sich ein schiefer Start von einem schiefen Aufbau
+  // unterscheiden.
+  float curL = 0.0f, curR = 0.0f;
+  motorRampSpeeds(curL, curR);
   snprintf(out, n,
-    "DRV:keys=%d%d%d%d want=%s spd=%.0f/%.0f fix=%.0f lock=%d game=%d "
+    "DRV:keys=%d%d%d%d want=%s spd=%.0f/%.0f fix=%.0f lst=%.0f/%.0f lock=%d game=%d "
     "cmdAlter=%lums timeout=%ums laeuft=%d sign=%d/%d en=%d",
     keyW, keyA, keyS, keyD, want,
     (double)speedL, (double)speedR, (double)FIXED_DRIVE_SPEED,
+    (double)curL, (double)curR,
     locked ? 1 : 0, (int)currentGame, age,
     (unsigned long)config.commandTimeoutMs,
     motorStillRunning() ? 1 : 0,

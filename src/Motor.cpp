@@ -336,6 +336,25 @@ void motorUpdateSpeeds() {
 
 bool motorRampActive() { return s_rampOn; }
 
+// Beide IST-Geschwindigkeiten der Freifahr-Rampe (Schritte/s, mit
+// Vorzeichen), unter EINEM Mutex-Halt gelesen - zwei Einzelaufrufe koennten
+// sonst zwei verschiedene 50-us-Ticks zeigen und genau den Versatz vortaeuschen,
+// den man eigentlich sucht.
+// Zweck: Diagnose. Ohne das sieht man am Serial-Monitor nur die BEFEHLE
+// (DRV:spd=...), nicht was die Motoren wirklich tun. Wenn die Rampe die
+// Motoren unterschiedlich schnell hochzieht, sieht man es hier.
+void motorRampSpeeds(float& outL, float& outR) {
+  outL = s_curL;
+  outR = s_curR;
+  if (!motorMutex) return;   // noch nicht initialisiert
+  if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) != pdTRUE) {
+    xSemaphoreTake(motorMutex, portMAX_DELAY);
+  }
+  outL = s_curL;
+  outR = s_curR;
+  xSemaphoreGive(motorMutex);
+}
+
 void initSteppers() {
   // Laufzeitwerte zuerst: die Schrittrate haengt an den Microsteps.
   s_currentMa = config.tmcCurrent;
@@ -485,15 +504,16 @@ void setMotorSpeed(int motorIdx, float speed, bool useRamp) {
       // Die Schleife ruft das in jedem Durchlauf auf: nur anfassen, wenn
       // wirklich noch etwas laeuft.
       if (cur != 0.0f || tgt != 0.0f) {
-        if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-          // s_lastMotionMs wird hier weitergepflegt: der Roboter rollt ja
-          // noch aus, und tmcAutoStandbyTick() schaltet die Treiber nach
-          // TMC_STANDBY_MS ab. Ohne das wuerde der Treiber mitten im
-          // Ausrollen weggeschaltet.
-          s_lastMotionMs = millis();
-          tgt = 0.0f;
-          xSemaphoreGive(motorMutex);
+        if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) != pdTRUE) {
+          xSemaphoreTake(motorMutex, portMAX_DELAY);
         }
+        // s_lastMotionMs wird hier weitergepflegt: der Roboter rollt ja
+        // noch aus, und tmcAutoStandbyTick() schaltet die Treiber nach
+        // TMC_STANDBY_MS ab. Ohne das wuerde der Treiber mitten im
+        // Ausrollen weggeschaltet.
+        s_lastMotionMs = millis();
+        tgt = 0.0f;
+        xSemaphoreGive(motorMutex);
       }
       return;
     }
@@ -518,7 +538,24 @@ void setMotorSpeed(int motorIdx, float speed, bool useRamp) {
     xSemaphoreGive(motorMutex);
     return;
   }
-  if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+  // Fail-Safe: nachhaken, statt das Ziel stillschweigend zu verwerfen.
+  // Das ist hier keine Theorie. Der Mutex wird alle 50 us vom Motor-Task
+  // genommen; der ColorSensor-Task laeuft auf DEMSELBEN Core 0 mit Prioritaet 2
+  // und damit HOEHER als der Motor-Task (5). Er darf ihn also mitten in der
+  // kritischen Sektion verdraengen - und der Farbsensor macht I2C, also
+  // Millisekunden. In diesem Fenster ist der Mutex nicht zu bekommen.
+  //
+  // Ein still verworfenes Ziel ist genau der Fehler "ein Motor faehrt erst
+  // spaeter los als der andere": driveUpdate() ruft die beiden Motoren
+  // nacheinander auf, das Zeitfenster liegt mitten dazwischen, und der
+  // zweite Aufruf faellt schon mal aus. Genau wie bei den Stopp-Zweigen
+  // weiter unten: erst kurz warten, dann blockieren. Ein blockierendes
+  // Warten ist hier unkritisch - der Motor-Task gibt den Mutex nach spaeestens
+  // einem Tick (50 us) wieder frei.
+  if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) != pdTRUE) {
+    xSemaphoreTake(motorMutex, portMAX_DELAY);
+  }
+  {
     // Jede echte Fahrt schaltet den Treiber automatisch ein
     // (STOP/TMC:EN:0 schalten ihn aus). Flag-Check ist billig.
     if (!s_enabled) tmcEnable();
@@ -551,8 +588,8 @@ void setMotorSpeed(int motorIdx, float speed, bool useRamp) {
       cur = actual;
       s.setSpeed(actual);
     }
-    xSemaphoreGive(motorMutex);
   }
+  xSemaphoreGive(motorMutex);
 }
 
 void stopMotors() {
