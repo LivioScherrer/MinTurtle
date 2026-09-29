@@ -30,7 +30,8 @@ extern const uint32_t GAME_COLOR_READ_MS; // Pause, waehrend der Farbsensor lies
 extern bool gameMoveBusy;
 
 // ---- Blockierende Bewegungs-Primitiven ----
-// Alle fahren mit fester Geschwindigkeit (FIXED_DRIVE_SPEED, kein Rampen).
+// Alle fahren mit fester Geschwindigkeit (FIXED_DRIVE_SPEED) und sanfter
+// Rampe (MOTOR_RAMP_MS, AccelStepper run()/setAcceleration).
 // Die Step-Pulse erzeugt der Motor-Task; hier wird nur darauf gewartet.
 // Ein Spielabbruch (currentGame -> GAME_NONE, z.B. Notfall-STOP) bricht
 // jeden Move ab, damit der Robrometer nicht weiterfaehrt.

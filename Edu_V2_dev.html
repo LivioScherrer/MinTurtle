@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EduBot V2 — Entwicklerseite</title>
+<style>
+  :root {
+    --bg:#f5f1e8; --card:#fffdf7; --ink:#2b2723; --ink-mute:#7a726a;
+    --line:#ddd4c4; --accent:#2f6bd2; --warn:#b8501a; --ok:#1e7a45;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; padding:14px; background:var(--bg); color:var(--ink);
+    font-family:ui-monospace,Consolas,"SF Mono",Menlo,monospace; font-size:13px;
+  }
+  h1 { font-size:17px; margin:0 0 2px; }
+  .sub { color:var(--ink-mute); font-size:12px; margin-bottom:12px; line-height:1.5; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  button {
+    font:inherit; padding:7px 13px; border-radius:7px; cursor:pointer;
+    border:1px solid var(--line); background:var(--card); color:var(--ink);
+  }
+  button:hover { border-color:var(--accent); }
+  button.pri { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.danger { background:var(--warn); color:#fff; border-color:var(--warn); }
+  .dot { width:11px; height:11px; border-radius:50%; background:#b9b0a4; display:inline-block; }
+  .dot.on { background:#22a35a; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .card h2 { font-size:13px; margin:0 0 9px; text-transform:uppercase;
+             letter-spacing:.06em; color:var(--ink-mute); border-bottom:1px solid var(--line);
+             padding-bottom:6px; }
+  .kv { display:flex; justify-content:space-between; gap:10px; padding:2px 0; }
+  .kv b { font-weight:600; }
+  .kv span { color:var(--ink-mute); }
+  #log { height:290px; overflow:auto; background:#1e1b18; color:#e8e2d8;
+         border-radius:7px; padding:9px; font-size:12px; line-height:1.45; white-space:pre-wrap; word-break:break-all; }
+  .rx { color:#7fd88a; } .tx { color:#ffc861; } .er { color:#ff8a7a; } .dim { color:#9a928a; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  input[type=text] { font:inherit; flex:1; min-width:150px; padding:7px 9px; border-radius:7px;
+                     border:1px solid var(--line); background:#fff; color:var(--ink); }
+  .hint { color:var(--ink-mute); font-size:11px; margin-top:6px; line-height:1.5; }
+  code { background:#efe9dc; padding:1px 5px; border-radius:4px; }
+  .warnbox { background:#fff4e8; border:1px solid #e8b98a; border-radius:8px;
+             padding:9px 11px; margin-bottom:12px; font-size:12px; line-height:1.55; }
+</style>
+</head>
+<body>
+
+<h1>EduBot V2 — Entwicklerseite</h1>
+<div class="sub">
+  Diagnose- und Protokollwerkzeug. Liest denselben BLE-Dienst wie die
+  Schülerseite (<code>Edu_V2.html</code>), zeigt aber jede empfangene und
+  gesendete Zeile. Keine Spiele, keine Diagnose-Kacheln.
+</div>
+
+<div class="warnbox">
+  <b>Unbekannte Befehle sind hier sichtbar, auf der Schülerseite nicht.</b><br>
+  Die Firmware antwortet mit <code>UNKNOWN:&lt;befehl&gt;</code>, wenn sie etwas
+  nicht kennt. In <code>handleCommand()</code> steht am Anfang
+  <code>Serial.printf("[CMD] %s\n", …)</code> — hier siehst du deshalb genau,
+  was ankommt. Ein <code>UNKNOWN:</code> bedeutet fast immer: <b>der Browser
+  hat eine alte Kopie der Web-Seite gecacht</b> und sendet Befehle, die die
+  aktuelle Firmware nicht mehr kennt. Abhilfe: Seite neu laden (Strg+F5).
+</div>
+
+<div class="bar">
+  <span class="dot" id="dot"></span>
+  <span id="connTxt">nicht verbunden</span>
+  <button class="pri" id="btnConn">Verbinden</button>
+  <button id="btnDisc" disabled>Trennen</button>
+  <button id="btnClr">Protokoll leeren</button>
+  <button id="btnPause">Pause: aus</button>
+  <span style="flex:1"></span>
+  <span class="hint">Status-Meldungen: <b id="cnt">0</b></span>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>Befehl senden</h2>
+    <input type="text" id="cmd" placeholder="z.B.  DRV?  oder  TMC?" />
+    <div class="row">
+      <button class="pri" id="btnSend">Senden</button>
+      <button data-cmd="DRV?">DRV?</button>
+      <button data-cmd="TMC?">TMC?</button>
+      <button data-cmd="GEO?">GEO?</button>
+      <button data-cmd="SPEED?">SPEED?</button>
+      <button data-cmd="I2C?">I2C?</button>
+      <button data-cmd="DISTDIAG">DISTDIAG</button>
+      <button data-cmd="DISTSCAN">DISTSCAN</button>
+      <button data-cmd="DIST?">DIST?</button>
+      <button data-cmd="CAL:?">CAL:?</button>
+      <button data-cmd="TMC:INIT">TMC:INIT</button>
+    </div>
+    <div class="hint">
+      <code>STOP</code> ist der echte Not-Aus (Motoren aus, TMC aus, Spiel ab).
+      <code>UARTTEST</code> bleibt absichtlich gesperrt: der Befehl schreibt an
+      die TMC-UART-Adressen 0–3 und verschiebt deren Adresse dauerhaft.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Zuletzt empfangen (geparst)</h2>
+    <div id="vals" class="hint">–</div>
+  </div>
+
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <h2>Protokoll</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+'use strict';
+
+// ---- BLE-Konstanten: identisch zu Edu_V2.html (BLEManager.cpp) ----
+const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+const CMD_UUID    = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+const STATUS_UUID = 'a9b1c2d3-1111-2222-3333-abcdefabcdef';
+
+let device = null, cmdChar = null, statusChar = null;
+let paused = false, count = 0;
+const logEl = document.getElementById('log');
+
+function log(txt, cls) {
+  if (paused) return;
+  const t = new Date().toLocaleTimeString('de-DE', { hour12: false }) +
+            '.' + String(new Date().getMilliseconds()).padStart(3, '0');
+  // Als <span> einfuegen, damit die Farbklasse wirklich greift - bei
+  // textContent waere die Klasse (und damit die rote UNKNOWN-Markierung)
+  // wirkungslos.
+  const span = document.createElement('span');
+  span.className = cls || '';
+  span.textContent = t + '  ' + txt + '\n';
+  logEl.appendChild(span);
+  // Speicher begrenzen: bei langen Laeufen waechst das sonst unbegrenzt.
+  while (logEl.childElementCount > 2000) logEl.removeChild(logEl.firstChild);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function setConn(on, txt) {
+  document.getElementById('dot').className = 'dot' + (on ? ' on' : '');
+  document.getElementById('connTxt').textContent = txt;
+  document.getElementById('btnConn').disabled = on;
+  document.getElementById('btnDisc').disabled = !on;
+}
+
+async function connect() {
+  if (!navigator.bluetooth) {
+    log('FEHLER: Web Bluetooth nicht verfügbar. Nur Chrome/Edge über https oder localhost.', 'er');
+    return;
+  }
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID]
+    });
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+    log('Verbinde mit ' + device.name + ' ...', 'dim');
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    cmdChar = await service.getCharacteristic(CMD_UUID);
+    statusChar = await service.getCharacteristic(STATUS_UUID);
+    await statusChar.startNotifications();
+    statusChar.addEventListener('characteristicvaluechanged', onValue);
+    setConn(true, 'verbunden: ' + device.name);
+    log('Verbunden. Notifications aktiv.', 'dim');
+    // Sofort den Grundzustand abfragen - so sieht man sofort, ob die
+    // Firmware antwortet und welche Microsteps/Strom gelten.
+    for (const c of ['TMC?', 'GEO?', 'SPEED?']) await send(c);
+  } catch (e) {
+    log('Verbindung fehlgeschlagen: ' + e.message, 'er');
+    setConn(false, 'nicht verbunden');
+  }
+}
+
+function onDisconnected() {
+  setConn(false, 'getrennt');
+  log('BLE getrennt.', 'er');
+  cmdChar = statusChar = null;
+}
+
+function onValue(e) {
+  const msg = new TextDecoder().decode(e.target.value);
+  count++;
+  document.getElementById('cnt').textContent = count;
+  const cls = msg.startsWith('UNKNOWN:') ? 'er' : (msg.startsWith(':') ? 'er' : 'rx');
+  log('<= ' + msg, cls);
+  showParsed(msg);
+}
+
+async function send(cmd) {
+  if (!cmdChar) { log('FEHLER: nicht verbunden.', 'er'); return; }
+  try {
+    await cmdChar.writeValueWithoutResponse(new TextEncoder().encode(cmd));
+    log('=> ' + cmd, 'tx');
+  } catch (err) {
+    log('FEHLER beim Senden: ' + err.message, 'er');
+  }
+}
+
+// ---- Antworten zerlegen: die wichtigsten Werte direkt anzeigen ----
+function showParsed(msg) {
+  const v = document.getElementById('vals');
+  let out = null;
+  if (msg.startsWith('DIST:DIAG:')) {
+    const p = msg.split(':');
+    const f = msg.substring(10).split(',');
+    out = [['ok', f[0]], ['letzter Wert', f[1] + ' mm'], ['Roh', f[2] + ' mm'],
+           ['Range-Status', f[3]], ['Offset', f[4] + ' mm'],
+           ['gelesen', f[5]], ['nicht fertig', f[6]], ['Status-Fehler', f[7]],
+           ['Wert-Fehler', f[8]]];
+    void p;
+  } else if (msg.startsWith('TMC:STAT:')) {
+    const f = msg.substring(9).split(',');
+    out = [['ok links/rechts', f[0] + ' / ' + f[1]], ['Version', f[2] + ' / ' + f[3]],
+           ['Strom', f[4] + ' mA'], ['Microsteps', f[5]],
+           ['SpreadCycle', f[6] === '1'], ['EN', f[7] === '1']];
+  } else if (msg.startsWith('GEO:')) {
+    const f = msg.substring(4).split(',');
+    out = [['Schritte/Kreis', f[0]], ['Schritte pro mm', f[1]],
+           ['eingelernt vorwaerts', f[2] + ' mm'], ['eingelernt Drehung', f[3] + '°']];
+  } else if (msg.startsWith('SPEED=')) {
+    const f = msg.substring(6).split(',');
+    out = [['Tempo', f[0] + ' mm/s'], ['Schrittrate', f[1] + ' /s']];
+  } else if (msg.startsWith('DRV:')) {
+    const d = {};
+    for (const kv of msg.substring(4).split(' ')) {
+      const i = kv.indexOf('='); if (i > 0) d[kv.slice(0, i)] = kv.slice(i + 1);
+    }
+    out = [['Tasten', d.keys], ['gewuenscht', d.want], ['Tempo', d.spd],
+           ['Spiel-Sperre', d.lock === '1'], ['Spiel', d.game],
+           // cmdAlter liefert die Firmware bereits mit Einheit ("42ms"),
+           // also hier keine zweite anfuegen.
+           ['Befehlsalter', d.cmdAlter], ['laeuft noch', d.laeft],
+           ['EN', d.en === '1' ? 'an' : 'aus']];
+  }
+  if (!out) return;
+  v.innerHTML = out.map(([k, val]) =>
+    '<div class="kv"><span>' + k + '</span><b>' + val + '</b></div>').join('');
+}
+
+// ---- Bedienung ----
+document.getElementById('btnConn').onclick = connect;
+document.getElementById('btnDisc').onclick = () => { if (device) device.gatt.disconnect(); };
+document.getElementById('btnClr').onclick = () => { logEl.textContent = ''; };document.getElementById('btnPause').onclick = (e) => {
+  paused = !paused;
+  e.target.textContent = 'Pause: ' + (paused ? 'an' : 'aus');
+};
+document.getElementById('btnSend').onclick = () => {
+  const el = document.getElementById('cmd');
+  if (el.value.trim()) send(el.value.trim());
+};
+document.getElementById('cmd').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btnSend').click();
+});
+document.querySelectorAll('button[data-cmd]').forEach(b => {
+  b.onclick = () => send(b.getAttribute('data-cmd'));
+});
+
+log('Entwicklerseite bereit. "Verbinden" waehlen (Chromium-Browser noetig).', 'dim');
+</script>
+</body>
+</html>

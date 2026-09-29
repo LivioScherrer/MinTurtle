@@ -3951,7 +3951,7 @@
     das Fahrfeld bewegt sich dann und der Roboter prüft die Strecke sofort.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
       <label class="game-desc" for="geoFwdIn">Vorwärts (mm):</label>
-      <input id="geoFwdIn" type="number" min="5" max="150" step="0.5" value="27.5"
+      <input id="geoFwdIn" type="number" min="5" max="150" step="0.5" value="27.8"
              style="width:88px;padding:8px;border-radius:10px;border:1px solid var(--line);font:inherit;background:var(--card);color:var(--ink)">
       <button class="btn btn-sm btn-grey" onclick="geoSetFwd()">Übernehmen &amp; testen</button>
     </div>
@@ -3960,7 +3960,7 @@
       „Vorwärts 10 cm" fährt immer genau 10 cm, „vorwärts 100 mm" immer genau
       100 mm — unabhängig von diesem Wert. Eingelernt wird damit nur das
       Raster für <i>Korrigieren</i> und das Rennen, wenn der Roboter dort
-      danebenliegt. Über „Zurücksetzen" oben wird wieder 27,5&nbsp;mm gesetzt.
+      danebenliegt. Über „Zurücksetzen" oben wird wieder 27,8&nbsp;mm gesetzt.
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
       <label class="game-desc" for="geoTurnIn">Drehung (Grad):</label>
@@ -3983,7 +3983,6 @@
               <div class="game-desc" style="margin-top:6px;">Gehört zum Einlernen: weisse Fläche
               auf 10 cm halten, dann im Kalibrierungs-Assistenten den Offset setzen.</div>
             </div>
-            <div class="mesh-section">
             <div class="mesh-section">
               <div class="mesh-section-title">Daten</div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
@@ -4020,13 +4019,12 @@
             <button class="btn btn-primary" onclick="distSetFree()">Setzen</button>
           </div>
           <div class="game-desc">Frei-Abstand muss ueber Stopp-Abstand liegen (Hysterese gegen Flackern). Wird im Roboter gespeichert. Unter ~50 mm ist der Sensor blind — Schwellen bitte darueber.</div>
-          <div class="game-title" style="margin-top:8px;">Offset kalibrieren</div>
-          <div class="game-desc">Weisses Blatt exakt im Ziel-Abstand ruhig vor den Sensor halten, dann Kalibrieren. Gleicht Bauteil-Streuung aus (Datenblatt-Verfahren).</div>
+          <div class="game-title" style="margin-top:8px;">Kalibrieren (5, 10, 20 cm)</div>
+          <div class="game-desc">Weisses Blatt nacheinander genau auf <b>5 cm</b>, <b>10 cm</b> und <b>20 cm</b> vor den Sensor halten und jeweils messen. Aus den drei Messwerten rechnet der Roboter die Korrektur.</div>
           <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
-            <span style="font-weight:700;min-width:140px;">Ziel-Abstand (mm):</span>
-            <input type="number" id="distCalTarget" class="quiz-input" style="max-width:130px;min-width:0;" min="50" max="500" step="10" value="100">
-            <button class="btn btn-primary" onclick="distCalibrate()">Kalibrieren</button>
+            <button class="btn btn-primary" id="btnDistCal3" onclick="distCal3Next()">Kalibrieren starten</button>
           </div>
+          <div class="game-desc" id="distCal3State">Noch nicht kalibriert.</div>
           <div class="game-title" style="margin-top:8px;">Diagnose</div>
           <!-- Auf der SCHUELERSEITE bewusst ohne Knopf: DISTDIAG liefert eine
                Rau-Zeilen fuer die Fehlersuche (Sensor-Adresse, Modus,
@@ -4370,6 +4368,36 @@ function updateConnectionUI(isConn, text) {
           distFeedback('Fehlgeschlagen: weisses Ziel im Ziel-Abstand ruhig halten (dunkle Umgebung hilft).');
         } else if (msg === 'DISTCAL:BAD') {
           distFeedback('Ziel muss zwischen 50 und 500 mm liegen.');
+        } else if (msg.startsWith('DISTMEAS=')) {
+          // Antwort auf einen 3-Punkt-Schritt: <mm>,<roh>
+          const p = msg.substring(9).split(',');
+          const raw = parseInt(p[1], 10);
+          if (p.length < 2 || isNaN(raw) || raw <= 0) {
+            distCal3Retry();
+            return;
+          }
+          distCal3Raw.push(raw);
+          distCal3Step++;
+          if (distCal3Step < DISTCAL3_MM.length) {
+            distCal3Ui('Punkt ' + distCal3Step + ' von 3 gemessen (roh ' + raw + ' mm).',
+                       (DISTCAL3_MM[distCal3Step] / 10) + ' cm messen', false);
+            distFeedback('Gut! Jetzt das Blatt auf ' + (DISTCAL3_MM[distCal3Step] / 10) + ' cm halten und messen.');
+          } else {
+            distCal3Ui('Alle 3 Punkte gemessen - Roboter rechnet ...', 'Kalibrieren starten', true);
+            sendCommand('DISTCAL3:' + distCal3Raw.join(','));
+          }
+        } else if (msg === 'DISTMEAS:FAIL' || msg === 'DISTMEAS:BAD') {
+          distCal3Retry();
+        } else if (msg.startsWith('DISTCAL3=')) {
+          const p = msg.substring(9).split(',');
+          const sc = parseFloat(p[0]);
+          const off = parseInt(p[1], 10);
+          distCal3Reset('Kalibriert! Korrektur: Steigung ' + (isNaN(sc) ? '?' : sc.toFixed(3)) +
+                        ', Versatz ' + (isNaN(off) ? '?' : off) + ' mm.');
+          distFeedback('Kalibrierung gespeichert.');
+        } else if (msg === 'DISTCAL3:BAD') {
+          distCal3Reset('Nicht geklappt - die Messwerte passten nicht zusammen. Nochmal: Blatt ruhig auf 5, 10 und 20 cm halten.');
+          distFeedback('Kalibrierung fehlgeschlagen.');
         } else if (msg.startsWith('TMC:') || msg.startsWith('UART:') || msg.startsWith('NETZ:')) {
           handleMotorMessage(msg);
         } else         if (msg.startsWith('CAL:') || msg.startsWith('GEO:') || msg.startsWith('STEPS=') ||
@@ -4552,11 +4580,38 @@ function updateConnectionUI(isConn, text) {
         sendCommand('OBSREL:' + v);
         distFeedback('Sende OBSREL:' + v + ' ...');
       }
-      function distCalibrate() {
-        const v = parseInt(document.getElementById('distCalTarget').value, 10);
-        if (isNaN(v) || v < 50 || v > 500) { distFeedback('Ziel muss zwischen 50 und 500 mm liegen (100 empfohlen).'); return; }
-        sendCommand('DISTCAL:' + v);
-        distFeedback('Messe ... Ziel bei ' + v + ' mm ruhig halten!');
+      // ---- 3-Punkt-Kalibrierung (5, 10, 20 cm) ----
+      // Jeder Schritt misst nur ROH (DISTMEAS). Erst wenn alle drei Punkte
+      // da sind, schickt die Seite sie zusammen (DISTCAL3) - der Roboter
+      // rechnet daraus die Gerade und speichert sie.
+      const DISTCAL3_MM = [50, 100, 200];
+      let distCal3Step = 0;      // naechster Punkt 0..2
+      let distCal3Raw = [];      // Rohwerte der drei Punkte
+      function distCal3Ui(stateText, btnText, btnLocked) {
+        const st = document.getElementById('distCal3State');
+        if (st && stateText !== null) st.textContent = stateText;
+        const b = document.getElementById('btnDistCal3');
+        if (b && btnText !== null) { b.textContent = btnText; b.disabled = !!btnLocked; }
+      }
+      function distCal3Reset(stateText) {
+        distCal3Step = 0; distCal3Raw = [];
+        distCal3Ui(stateText || 'Noch nicht kalibriert.', 'Kalibrieren starten', false);
+      }
+      function distCal3Next() {
+        if (!connected) { distFeedback('Erst mit dem Roboter verbinden!'); return; }
+        if (distCal3Step >= DISTCAL3_MM.length) distCal3Reset();
+        const mm = DISTCAL3_MM[distCal3Step];
+        distCal3Ui(null, (mm / 10) + ' cm messen ...', true);
+        sendCommand('DISTMEAS:' + mm);
+        distFeedback('Weisses Blatt auf ' + (mm / 10) + ' cm halten und ruhig halten ...');
+      }
+      // Fehlversuch: derselbe Punkt bleibt aktiv und kann wiederholt werden.
+      function distCal3Retry() {
+        const step = Math.min(distCal3Step, DISTCAL3_MM.length - 1);
+        const mm = DISTCAL3_MM[step];
+        distCal3Ui('Punkt ' + (step + 1) + ' von 3 nicht messbar - Blatt ruhig auf ' +
+                   (mm / 10) + ' cm vor den Sensor halten.',
+                   (mm / 10) + ' cm nochmal messen', false);
       }
 
       // Diagnose anfordern. Ausfuehrliche Ausgabe kommt ueber Serial (115200),
@@ -5158,7 +5213,7 @@ function updateConnectionUI(isConn, text) {
         // Frei fahren: Tempo und Microsteps beim Öffnen abfragen, damit der
         // Regler den echten Werten zeigt und die Begrenzung erkannt wird.
         if (viewId === 'drive') { sendCommand('SPEED?'); sendCommand('TMC?'); }
-        if (viewId === 'dist') { sendCommand('OBSDIST?'); sendCommand('OBSREL?'); }
+        if (viewId === 'dist') { sendCommand('OBSDIST?'); sendCommand('OBSREL?'); distCal3Reset(); }
         if (viewId !== 'prog' && progRunning) { sendCommand('PROG:STOP'); }
         // Rennen: laeuft eins, wird beim Verlassen sauber beendet (sonst bleibt
         // der Roboter im Renn-Modus und die Steuerung gesperrt).
@@ -6280,7 +6335,7 @@ function updateConnectionUI(isConn, text) {
             if (geoParts[2]) { const f = document.getElementById('geoFwdIn'); if (f) f.value = parseFloat(geoParts[2]); }
             if (geoParts[3]) { const t = document.getElementById('geoTurnIn'); if (t) t.value = parseFloat(geoParts[3]); }
           }
-          // STEPS=27.5,6403 / ANG=90.0,6400 - erster Wert ist immer die
+          // STEPS=27.8,6400 / ANG=90.0,6400 - erster Wert ist immer die
           // physikalische Groesse, der zweite die daraus berechneten Schritte.
           if (msg.startsWith('STEPS=')) {
             const p = msg.substring(6).split(',');
@@ -6329,7 +6384,7 @@ function updateConnectionUI(isConn, text) {
       // Geschwindigkeit ueberhaupt zulaesst.
       const SPEED_STEP_CAP = 20000;              // muss zu MAX_DRIVE_STEPS_S passen
       const MOTOR_FULL_STEPS = 200;              // NEMA8 laut Datenblatt
-      const WHEEL_DIAM_MM = 35;                  // Rad 35 mm (muss zu Config.h passen)
+      const WHEEL_DIAM_MM = 35.3535;             // effektiv 35 mm + DRIVE_TRIM (Config.h)
       let driveSpeedDragging = false;
       let driveMicrosteps = 128;                  // wird bei TMC:STAT= aktualisiert
       function driveStepsPerMM(ms) {

@@ -79,10 +79,20 @@ constexpr uint16_t TMC_CURRENT_MA_DEFAULT = TMC_CURRENT_MA_MAX;
 // Umrechnung Schritte <-> mm gebraucht; Drehungen kommen ohne den Radwert aus.
 constexpr float WHEEL_DIAMETER_MM = 35.0f;
 constexpr float WHEEL_CIRCUMFERENCE_MM = 3.14159265358979f * WHEEL_DIAMETER_MM;
-// Weg pro EINEM Vollschritt: 0,5498 mm.
-constexpr float MM_PER_FULL_STEP = WHEEL_CIRCUMFERENCE_MM / (float)MOTOR_FULL_STEPS_PER_REV;
+// Strecken-Trim aus der Fahrprobe: auf 10 cm fuhr der Roboter 1 mm zu weit.
+// Die tatsaechlich gerollte Schrittlaenge ist also ~1 % groesser als die
+// Rechnung aus dem gemessenen Radumfang (Messfehler/effektiver Rollradius).
+// EINMAL zentral korrigiert - alle mm<->Schritt-Rechnungen haengen daran
+// (F/M-Bloecke, Quiz-Einlernung, Tempo). Drehungen sind NICHT betroffen.
+// Nachjustieren: DRIVE_TRIM *= tatsaechlich gefahrene mm / Soll-mm,
+// z.B. 1,0101 * (99,5 / 100), wenn 10 cm nur 99,5 mm werden.
+constexpr float DRIVE_TRIM = 1.0101f;
+// Effektiver (gerollter) Radumfang fuer die Schritt-Rechnung.
+constexpr float EFFECTIVE_CIRCUMFERENCE_MM = WHEEL_CIRCUMFERENCE_MM * DRIVE_TRIM;
+// Weg pro EINEM Vollschritt: 0,5553 mm (effektiv, inkl. Trim).
+constexpr float MM_PER_FULL_STEP = EFFECTIVE_CIRCUMFERENCE_MM / (float)MOTOR_FULL_STEPS_PER_REV;
 
-// Spielfeld-Raster: ein Viertel Radumdrehung = 50 Vollschritte = 27,49 mm.
+// Spielfeld-Raster: ein Viertel Radumdrehung = 50 Vollschritte = 27,77 mm.
 // Das ist bewusst derselbe Wert wie eine 90-Grad-Drehung, denn die ist
 // ebenfalls genau MOTOR_FULL_STEPS_PER_REV/4 = 50 Vollschritte. Vorwaerts
 // und Drehen sind damit geometrisch gleich - reines Motorraster, kein
@@ -143,7 +153,7 @@ constexpr float fullStepsToMM(int32_t fullSteps) {
 // Schritte fuer eine Strecke in mm (Microsteps einbezogen).
 constexpr int32_t geoStepsForMM(float mm, uint16_t microsteps) {
   return (int32_t)((mm < 0.0f ? -mm : mm)
-                   * ((float)MOTOR_FULL_STEPS_PER_REV * (float)microsteps / WHEEL_CIRCUMFERENCE_MM)
+                   * ((float)MOTOR_FULL_STEPS_PER_REV * (float)microsteps / EFFECTIVE_CIRCUMFERENCE_MM)
                    + 0.5f);
 }
 // Schritte fuer eine Drehung in Grad (pro Rad). Braucht den Radwert NICHT.
@@ -157,8 +167,8 @@ constexpr int32_t geoStepsForDeg(float deg, uint16_t microsteps) {
 // oder Rad nicht still zu falschen Distanzen fuehrt. Geprueft wird an
 // ZWEI Microstep-Zahlen - wenn 16 und 128 dasselbe Ergebnis skalieren,
 // ist die Strecke nachweislich unabhaengig von der Microstep-Einstellung.
-static_assert(MM_PER_FULL_STEP > 0.549f && MM_PER_FULL_STEP < 0.550f,
-              "Ein Vollschritt muss 0,5498 mm ergeben (Rad 35mm / 200 Schritte).");
+static_assert(MM_PER_FULL_STEP > 0.555f && MM_PER_FULL_STEP < 0.556f,
+              "Ein Vollschritt muss 0,5553 mm ergeben (Rad 35mm / 200 Schritte, inkl. DRIVE_TRIM).");
 static_assert(geoStepsForFullSteps(QUIZ_STEP_FULL_STEPS, 16) == 800
            && geoStepsForFullSteps(QUIZ_STEP_FULL_STEPS, 128) == 6400,
               "50 Vollschritte muessen 16 Microsteps -> 800 und 128 -> 6400 ergeben.");
@@ -197,7 +207,7 @@ struct Config {
   bool     tmcSpread = false;   // false=StealthChop (leise), true=SpreadCycle
   // Einlernung in PHYSIKALISCHEN Einheiten - dadurch von der Microstep-Zahl
   // unabhaengig (NVS: quizMM/quizDeg, per STEPS:<mm>/ANG:<grad>).
-  float quizForwardMM  = QUIZ_STEP_MM;    // 5..150 mm, Werkseinstellung 27,5 (ein Rasterfeld)
+  float quizForwardMM  = QUIZ_STEP_MM;    // 5..150 mm, Werkseinstellung 27,8 (ein Rasterfeld)
   float quizTurnDeg    = TURN_DEG_DEFAULT; // 10..360 Grad, Werkseinstellung 195 (gemessen)
   // Fahrgeschwindigkeit in mm/s (NVS: driveSpeed, per SPEED:<mm/s>).
   // Die Schrittrate wird daraus und aus der Microstep-Zahl berechnet.
@@ -218,9 +228,12 @@ struct Config {
   // loskomme. In Drive.cpp steht die Begruendung ausfuehrlich.
   int16_t obsDistMM = 100;
   int16_t obsRelMM  = 130;
-  // VL53L0X-Offset in mm (DISTCAL:<wahr>): Korrektur = roh - offset.
-  // Faengt Bauteil-Streuung + Einbauversatz ab (Datenblatt: Offset-Cal bei 100mm).
+  // VL53L0X-Korrektur: richtig = obsScale * roh - obsOffsetMM.
+  // Einzelpunkt (DISTCAL:<wahr>, Datenblatt bei 100 mm): obsScale = 1,
+  // obsOffsetMM = roh - wahr. 3-Punkt (DISTCAL3, 5/10/20 cm): Gerade aus
+  // drei Roh-Mittelwerten (Least-Squares), obsScale = Steigung.
   int16_t obsOffsetMM = 0;
+  float   obsScale = 1.0f;   // 0.5..2.0 (NVS: obsScale)
   ColorRef calRot;
   ColorRef calGelb;
   ColorRef calGruen;

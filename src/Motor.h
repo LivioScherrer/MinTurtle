@@ -13,7 +13,7 @@
 // Verdrahtung PCB Edu_V2.2: ESP-TX --1k (R9)--> PDN-Netz, ESP-RX direkt an PDN
 // (gemeinsam fuer BEIDE Treiber, kein Pull-up noetig).
 //
-// Feste Geschwindigkeit - keine Beschleunigung/Rampe irgendwo im Code.
+// Feste Fahrgeschwindigkeit + sanfte Rampe fuer Positionsfahrten (MOTOR_RAMP_MS).
 // Die Step-Puls-Erzeugung laeuft in einem eigenen FreeRTOS-Task auf Core 0,
 // getaktet ueber einen 50us Hardware-Timer (esp_timer) + Task-Notification.
 // Die Main-Loop (Core 1) setzt nur noch Ziel-Geschwindigkeiten/Positionen
@@ -48,8 +48,8 @@
 #define TMC_ADDR_L   0b01    // links U4/J5: MS1=3V3, MS2=GND
 #define TMC_ADDR_R   0b00    // rechts U2/J1: MS1=GND, MS2=GND
 
-// Feste Fahrgeschwindigkeit - keine Beschleunigung/Rampe irgendwo im Code.
-// WICHTIG: nicht in Schritten fest verdrahtet. Die Schrittrate haengt an den
+// Feste Fahrgeschwindigkeit. WICHTIG: nicht in Schritten fest verdrahtet.
+// Die Schrittrate haengt an den
 // Microsteps (16 Microsteps = 4x weniger Schritte pro Umdrehung als 64), ein
 // fester Schritt/s-Wert wuerde den Roboter beim Umschalten der Microsteps
 // 4x schneller oder langsamer machen. Stattdessen wird die gewuenschte
@@ -67,6 +67,14 @@ extern float FIXED_DRIVE_SPEED;
 // Noetig, damit AccelStepper.runSpeed() bei 5000 steps/s (200us Periode)
 // jeden Puls mit Reserve trifft (4x Oversampling, Jitter im us-Bereich).
 constexpr uint32_t MOTOR_TICK_US = 50;
+
+// Rampenzeit fuer Positionsfahrten: von 0 auf FIXED_DRIVE_SPEED in dieser
+// Zeit (und symmetrisch wieder herunter). Bewusst mild gewaehlt: der Roboter
+// reisst nicht mehr los, kurze Strecken (Rasterfeld) erreichen trotzdem fast
+// die volle Geschwindigkeit. Einziger Knopf fuer "mehr/weniger Beschleunigung".
+// Nur fuer Positions-Moves (Spiele, Bloecke, Einlern-Tests); das Fahren per
+// Taste/Linienfolger bleibt direkt und reagiert sofort.
+constexpr uint32_t MOTOR_RAMP_MS = 150;
 
 // Start-Signal nach dem Booten: Drehzahl und Dauer des StartupSpins.
 constexpr float STARTUP_SPIN_SPEED = 6000.0f;
@@ -115,9 +123,10 @@ void setMotorSpeed(int motorIdx, float speed);
 void stopMotors();
 
 // Position-Move vorbereiten: 'physicalSteps' Schritte mit FIXED_DRIVE_SPEED
-// fahren (vorzeichenkorrigiert: positiv = CW). Keine Beschleunigung - der Motor
-// startet sofort mit voller Geschwindigkeit und stoppt hart am Ziel. Das Ende
-// wird intern automatisch erkannt (Rest-Zaehler == 0 -> Speed auf 0).
+// fahren (vorzeichenkorrigiert: positiv = CW). Mit sanfter Rampe (AccelStepper
+// run()/setAcceleration, MOTOR_RAMP_MS): der Motor beschleunigt am Anfang und
+// bremst vor dem Ziel ab. Die Schrittzahl bleibt exakt. Das Ende wird intern
+// automatisch erkannt (Rest-Zaehler == 0 -> Speed auf 0).
 // Thread-sicher.
 void prepPositionMove(int motorIdx, long physicalSteps);
 

@@ -6,7 +6,7 @@ Preferences prefs;
 
 // ---- Umrechnung physikalisch <-> Schritte (Microsteps stecken nur hier drin) ----
 float configStepsPerMM() {
-  return (float)MOTOR_FULL_STEPS_PER_REV * (float)config.tmcMicrosteps / WHEEL_CIRCUMFERENCE_MM;
+  return (float)MOTOR_FULL_STEPS_PER_REV * (float)config.tmcMicrosteps / EFFECTIVE_CIRCUMFERENCE_MM;
 }
 int32_t configForwardSteps() { return geoStepsForMM(config.quizForwardMM, config.tmcMicrosteps); }
 int32_t configTurnSteps()    { return geoStepsForDeg(config.quizTurnDeg, config.tmcMicrosteps); }
@@ -53,6 +53,7 @@ void configLoad() {
   config.obsDistMM = (int16_t)prefs.getInt("obsDist", 100);
   config.obsRelMM  = (int16_t)prefs.getInt("obsRel", 130);
   config.obsOffsetMM = (int16_t)prefs.getInt("obsOff", 0);
+  config.obsScale    = prefs.getFloat("obsScale", 1.0f);
   config.calRot.r      = prefs.getUChar("calRotR", 0);
   config.calRot.g      = prefs.getUChar("calRotG", 0);
   config.calRot.b      = prefs.getUChar("calRotB", 0);
@@ -157,8 +158,13 @@ void configValidate() {
     config.obsRelMM = (int16_t)rel;
     changed = true;
   }
-  if (config.obsOffsetMM < -200 || config.obsOffsetMM > 200) {
-    config.obsOffsetMM = 0; changed = true;
+  // 3-Punkt-Kalibrierung (DISTCAL3) kann den Versatz groesser ziehen als die
+  // Einzelpunkt-Kalibrierung; die Steigung bleibt in einem engen Band.
+  if (config.obsOffsetMM < -400 || config.obsOffsetMM > 400) {
+    config.obsOffsetMM = 0; config.obsScale = 1.0f; changed = true;
+  }
+  if (!inRange(config.obsScale, 0.5f, 2.0f)) {
+    config.obsScale = 1.0f; changed = true;
   }
   // Motorgstrom: 100..200 mA, harte Obergrenze = Nennstrom des NEMA8.
   // Wichtig: der Bereich MUSS mit TMC_CURRENT_MA_MIN/MAX aus Motor.h
@@ -195,6 +201,7 @@ void configValidate() {
   prefs.putInt("obsDist", config.obsDistMM);
   prefs.putInt("obsRel", config.obsRelMM);
     prefs.putInt("obsOff", config.obsOffsetMM);
+    prefs.putFloat("obsScale", config.obsScale);
     prefs.putUShort("tmcCur", config.tmcCurrent);
     prefs.putUChar("tmcHold", config.tmcHold);
     prefs.putUShort("tmcMS", config.tmcMicrosteps);

@@ -1,7 +1,8 @@
 // EduBot V2 - Drive-Modul
 // Frei-Fahren-Modus: WASD/Touch -> linke/rechte Zielgeschwindigkeit.
-// Die Motoren fahren immer mit fester Geschwindigkeit (FIXED_DRIVE_SPEED);
-// eine Rampe/Beschleunigung gibt es bewusst nicht.
+// Die Motoren fahren immer mit fester Geschwindigkeit (FIXED_DRIVE_SPEED).
+// Frei gefahren wird bewusst OHNE Rampe (sofortige Reaktion); nur
+// Positions-Moves (Spiele, Bloecke) haben eine sanfte Rampe (MOTOR_RAMP_MS).
 #pragma once
 
 #include <Arduino.h>

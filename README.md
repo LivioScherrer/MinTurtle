@@ -213,14 +213,21 @@ keinen Spiel-Zustand an.
 
 ### Bewegung
 
-Es gibt bewusst **keine Beschleunigungsrampe**. Die Fahrgeschwindigkeit wird
-in **mm/s** vorgegeben (`config.driveSpeedMM`, per `SPEED:` und Web-UI
-einstellbar, 20..600 mm/s) und zur Schrittrate `FIXED_DRIVE_SPEED`
-umgerechnet - aus Rad-Durchmesser und der aktuellen Microstep-Zahl
-(`configStepsPerS()` in `Config.cpp`, gedeckelt bei `MAX_DRIVE_STEPS_S` =
-20 000 Schritte/s durch den 50-µs-Puls-Task). `setMotorSpeed()` legt den
-Betrag immer darauf fest. Drehen auf der Stelle: ein Motor steht, der andere
-fährt mit voller Geschwindigkeit.
+Die Fahrgeschwindigkeit wird in **mm/s** vorgegeben (`config.driveSpeedMM`,
+per `SPEED:` und Web-UI einstellbar, 20..600 mm/s) und zur Schrittrate
+`FIXED_DRIVE_SPEED` umgerechnet - aus Rad-Durchmesser (plus Strecken-Trim
+`DRIVE_TRIM` aus der Fahrprobe) und der aktuellen
+Microstep-Zahl (`configStepsPerS()` in `Config.cpp`, gedeckelt bei
+`MAX_DRIVE_STEPS_S` = 20 000 Schritte/s durch den 50-µs-Puls-Task).
+`setMotorSpeed()` legt den Betrag immer darauf fest.
+
+Positionsfahrten (Spiele, Programm-Blöcke, Einlern-Tests) haben eine sanfte
+**Rampe**: von 0 auf `FIXED_DRIVE_SPEED` in `MOTOR_RAMP_MS` (150 ms,
+`src/Motor.h`), auf- und abwärts. Sie kommt von AccelStepper
+(`run()`/`setAcceleration()`), die Schrittzahl bleibt exakt. Das freie Fahren
+(Tasten) und der Linienfolger bleiben bewusst **ohne Rampe**: dort zählt
+sofortige Reaktion - die Suchdrehungen des Linienfolgers schalten alle 140 ms
+um und würden von einer Rampe verschluckt.
 
 Deshalb bleiben **alle Längen unabhängig von der Microstep-Einstellung
 richtig**: gespeichert werden mm/Grad, die Schrittzahl wird bei jedem Bedarf
@@ -253,7 +260,7 @@ Dispatch-Liste am Ende von `handleCommand()` eintragen.
 |---|---|
 | `STEPS?` / `STEPS:<5..150>` | Vorwärtsstrecke je Farbe in **mm** (setzt + fährt Test) |
 | `ANG?` / `ANG:<10..360>` | Drehung im Spiel in **Grad** (setzt + dreht Test) |
-| `GEO?` / `GEO:RESET` | Geometrie melden / Einlernung auf 27,5 mm + 195 Grad zurücksetzen |
+| `GEO?` / `GEO:RESET` | Geometrie melden / Einlernung auf 27,8 mm + 195 Grad zurücksetzen |
 | `SPEED?` / `SPEED:<20..600>` | Fahrgeschwindigkeit in mm/s (wird zur Schrittrate umgerechnet) |
 | `SAT?` / `SAT:<0..1>` | Mindest-Sättigung für warme Farbtöne (GELB/ROT). Wirkt **nur** auf die warmen Töne: eine blasse, warme Fläche (Parkett, Karton, warmes Licht) fällt sonst als GELB/ROT durch. Blaue und grüne Marker sind nie betroffen. `SAT:0` schaltet die Schranke ab. |
 

@@ -61,8 +61,8 @@ bool driveLockedByGame() { return currentGame != GAME_NONE; }
 // =====================================================
 // Einheitliche Zeiten: jedes Spiel (Memory, Quiz, Rennen) nutzt
 // dieselbe Vor/Zurueck- und Drehdauer -> konsistenter Bewegungsablauf.
-// Feste Geschwindigkeit ohne Beschleunigung: der Motor-Task auf Core 0
-// erzeugt die Pulse unabhaengig von dieser Loop.
+// Feste Geschwindigkeit; die Rampe fuer Positionsfahrten faehrt der
+// AccelStepper im Motor-Task auf Core 0, unabhaengig von dieser Loop.
 constexpr uint32_t GAME_TICK_MS    = 1;    // Polling-Intervall in blockierenden Moves (Pulse macht der Motor-Task)
 // Spiel-Fahrten laufen inzwischen POSITIONSBASIERT (mm -> Schritte), nicht
 // zeitbasiert, damit die Strecke unabhaengig von der Microstep-Zahl bleibt.
@@ -599,6 +599,46 @@ static bool cmdDist(const String& cmd) {
       sendStatus(buf);
     } else {
       sendStatus("DISTCAL:FAIL");
+    }
+    return true;
+  }
+  // 3-Punkt-Kalibrierung (Web-UI): erst an den drei Abstaenden roh messen
+  // (DISTMEAS:<mm>), dann die drei Roh-Mittelwerte zusammen senden
+  // (DISTCAL3:<roh50>,<roh100>,<roh200>). Die Messung blockiert nur kurz
+  // (~1 s) und verarbeitet dabei BLE-Events.
+  if (cmd.startsWith("DISTMEAS:")) {
+    int v = cmd.substring(9).toInt();
+    if (v < 20 || v > 500) { sendStatus("DISTMEAS:BAD"); return true; }
+    int16_t raw = -1;
+    if (distMeasureRawAvg(raw)) {
+      snprintf(buf, sizeof(buf), "DISTMEAS=%d,%d", v, (int)raw);
+    } else {
+      snprintf(buf, sizeof(buf), "DISTMEAS:FAIL");
+    }
+    sendStatus(buf);
+    return true;
+  }
+  if (cmd.startsWith("DISTCAL3:")) {
+    // Format: DISTCAL3:<roh50>,<roh100>,<roh200> (jeweils > 0, <= 2000 mm)
+    int r[3] = { 0, 0, 0 };
+    int idx = 0;
+    bool ok = true;
+    const char* p = cmd.c_str() + 9;
+    while (*p != '\0' && idx < 3) {
+      char* end = nullptr;
+      long val = strtol(p, &end, 10);
+      if (end == p || val <= 0 || val > 2000) { ok = false; break; }
+      r[idx++] = (int)val;
+      p = end;
+      if (*p == ',') p++;
+    }
+    if (!ok || idx != 3) { sendStatus("DISTCAL3:BAD"); return true; }
+    if (distCalibrate3((int16_t)r[0], (int16_t)r[1], (int16_t)r[2])) {
+      snprintf(buf, sizeof(buf), "DISTCAL3=%.3f,%d",
+               (double)config.obsScale, (int)config.obsOffsetMM);
+      sendStatus(buf);
+    } else {
+      sendStatus("DISTCAL3:BAD");
     }
     return true;
   }
@@ -1436,7 +1476,7 @@ void setup() {
   configLoad();
 
   initSteppers();
-  Serial.println("[MOTOR] Motor-Task auf Core 0 gestartet (feste Geschwindigkeit, keine Beschleunigung)");
+  Serial.println("[MOTOR] Motor-Task auf Core 0 gestartet (feste Geschwindigkeit, sanfte Rampe fuer Positionsfahrten)");
   startupSpin();
   tmcBootDiag();
 

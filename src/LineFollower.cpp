@@ -4,7 +4,8 @@
 // verwendet: fahre geradeaus solange Linie erkannt wird; beim Verlust
 // der Linie: kurzes Stoppen, dann abwechselnd rechts/links Such-Drehungen.
 // Laeuft nicht-blockierend ueber lineFollowerTick() in der Main-Loop.
-// Feste Geschwindigkeit ohne Beschleunigung: die Pulse erzeugt der Motor-Task
+// Feste Geschwindigkeit OHNE Rampe (die Suchdrehungen schalten alle 140 ms um -
+// eine Rampe wuerde sie verschlucken): die Pulse erzeugt der Motor-Task
 // auf Core 0 selbststaendig, hier werden nur Ziel-Geschwindigkeiten gesetzt.
 #include "LineFollower.h"
 #include "Motor.h"

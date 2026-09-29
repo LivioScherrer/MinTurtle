@@ -762,11 +762,46 @@ int16_t distMeasureMM() {
     s_last = -1;
     return -1;
   }
-  int16_t c = raw - config.obsOffsetMM;
+  // Korrektur: 3-Punkt-Kalibrierung liefert Steigung + Versatz
+  // (richtig = obsScale * roh - obsOffsetMM); Einzelpunkt: obsScale = 1.
+  int16_t c = (int16_t)lroundf(config.obsScale * (float)raw - (float)config.obsOffsetMM);
   if (c < 0) c = 0;
   s_last = c;
   s_lastMs = millis();   // Alter des Messwerts - siehe distBlocked()
   return s_last;
+}
+
+// Frische Roh-Messwerte sammeln und mitteln (Basis beider Kalibrierungen).
+//
+// readRawMM() liefert bewusst auch den GESTEIGERTEN Wert s_lastRaw zurueck,
+// wenn keine neue Messung vorliegt (Continuous: isRangeComplete()==false,
+// Single-Shot: innerhalb von DIST_SINGLE_PERIOD_MS). Fuer den Normalbetrieb
+// ist das richtig - ein gehaltenes Messergebnis ist besser als "--". Fuer
+// die Kalibrierung waere es ein Fehler: derselbe Wert wuerde bis zu `want`x
+// als unabhaengige Probe gezaehlt und der Mittelwert waere in Wahrheit
+// der allererste Messwert. Deshalb ueber den fresh-Ausgangsparameter nur
+// Proben zaehlen, bei denen wirklich neu gemessen wurde. Wichtig: nicht
+// ueber "Wert unveraendert" filtern - ein stabiles Ziel liefert
+// zu Recht dieselbe Zahl, und das ist eine echte Messung.
+static bool distCollectRawAvg(int16_t* out, uint8_t want, uint8_t minOk, uint32_t timeoutMs) {
+  long sum = 0;
+  int n = 0;
+  uint32_t start = millis();
+  while (n < want && millis() - start < timeoutMs) {
+    bool fresh = false;
+    int16_t r = readRawMM(&fresh);
+    if (fresh && r > 0) { sum += r; n++; }
+    bleProcessEvents();
+    espNowProcessEvents();
+    esp_task_wdt_reset();
+    vTaskDelay(pdMS_TO_TICKS(120));
+  }
+  if (n < minOk) {
+    Serial.printf("[DIST] zu wenige neue Messungen (%d/%u)\n", n, (unsigned)minOk);
+    return false;
+  }
+  *out = (int16_t)(sum / n);
+  return true;
 }
 
 bool distCalibrateOffset(int16_t trueMM) {
@@ -776,34 +811,12 @@ bool distCalibrateOffset(int16_t trueMM) {
   }
   // Caches verwerfen (alte Korrektur darf nicht einflussen)
   s_last = -1; s_lastRaw = -1;
-  long sum = 0;
-  int n = 0;
-  // readRawMM() liefert bewusst auch den GESTEIGERTEN Wert s_lastRaw zurueck,
-  // wenn keine neue Messung vorliegt (Continuous: isRangeComplete()==false,
-  // Single-Shot: innerhalb von DIST_SINGLE_PERIOD_MS). Fuer den Normalbetrieb
-  // ist das richtig - ein gehaltenes Messergebnis ist besser als "--". Fuer
-  // die Kalibrierung waere es ein Fehler: derselbe Wert wuerde bis zu 10x
-  // als unabhaengige Probe gezaehlt und der Mittelwert waere in Wahrheit
-  // der allererste Messwert. Deshalb ueber den fresh-Ausgangsparameter nur
-  // Proben zaehlen, bei denen wirklich neu gemessen wurde. Wichtig: nicht
-  // ueber "Wert unveraendert" filtern - ein stabiles Ziel liefert
-  // zu Recht dieselbe Zahl, und das ist eine echte Messung.
-  uint32_t start = millis();
-  while (n < 10 && millis() - start < 8000) {
-    bool fresh = false;
-    int16_t r = readRawMM(&fresh);
-    if (fresh && r > 0) { sum += r; n++; }
-    bleProcessEvents();
-    espNowProcessEvents();
-    esp_task_wdt_reset();
-    vTaskDelay(pdMS_TO_TICKS(120));
-  }
-  if (n < 5) {
-    Serial.printf("[DIST] Offset-Kalibrierung: zu wenige neue Messungen (%d/5)\n", n);
+  int16_t avg = 0;
+  if (!distCollectRawAvg(&avg, 10, 5, 8000)) {
+    Serial.println("[DIST] Offset-Kalibrierung: zu wenige neue Messungen");
     Serial.println("[DIST]    Sensor liefert keine neuen Werte? Abstand/Ziel pruefen.");
     return false;
   }
-  int16_t avg = (int16_t)(sum / n);
   // Plausibilitaet: Mittel muss im linearen Bereich nahe am Ziel liegen
   if (abs(avg - trueMM) > 150) {
     Serial.printf("[DIST] Offset-Kalibrierung: Mittel %d mm liegt zu weit vom Ziel %d mm\n",
@@ -815,6 +828,8 @@ bool distCalibrateOffset(int16_t trueMM) {
     Serial.printf("[DIST] Offset-Kalibrierung: Offset %d mm ausserhalb -200..+200\n", (int)off);
     return false;
   }
+  config.obsScale = 1.0f;   // Einzelpunkt = reine Verschiebung
+  configSaveField("obsScale", 1.0f);
   config.obsOffsetMM = off;
   configSaveInt("obsOff", off);
   s_last = -1; s_lastRaw = -1;
@@ -823,11 +838,81 @@ bool distCalibrateOffset(int16_t trueMM) {
   return true;
 }
 
+bool distMeasureRawAvg(int16_t& outRaw, uint8_t want, uint8_t minOk) {
+  if (!s_ok) return false;
+  s_lastRaw = -1;   // kein gehaltener Wert aus einer alten Messung
+  return distCollectRawAvg(&outRaw, want, minOk, 6000);
+}
+
+// 3-Punkt-Kalibrierung: rohe Mittelwerte bei 50/100/200 mm.
+// Gerade richtig = a*roh + b per Least-Squares ueber die drei Punkte.
+// Gespeichert wird config.obsScale = a und config.obsOffsetMM = -b, die
+// Laufzeit-Korrektur lautet damit richtig = obsScale*roh - obsOffsetMM.
+bool distCalibrate3(int16_t raw50, int16_t raw100, int16_t raw200) {
+  const int16_t rr[3] = { raw50, raw100, raw200 };
+  const float   tt[3] = { 50.0f, 100.0f, 200.0f };
+  // Monotonie: naeher muss kleiner messen als weiter.
+  if (!(rr[0] > 0 && rr[0] < rr[1] && rr[1] < rr[2])) {
+    Serial.printf("[DIST] 3-Punkt: Messwerte nicht monoton (%d/%d/%d)\n",
+                  (int)rr[0], (int)rr[1], (int)rr[2]);
+    return false;
+  }
+  // Plausibilitaet: kein Messwert darf weit vom Soll-Abstand abweichen.
+  for (int i = 0; i < 3; i++) {
+    if (fabsf((float)rr[i] - tt[i]) > 150.0f) {
+      Serial.printf("[DIST] 3-Punkt: roh %d passt nicht zu %d mm\n", (int)rr[i], (int)tt[i]);
+      return false;
+    }
+  }
+  const float rMean = ((float)rr[0] + rr[1] + rr[2]) / 3.0f;
+  const float tMean = (tt[0] + tt[1] + tt[2]) / 3.0f;
+  float cov = 0.0f, var = 0.0f;
+  for (int i = 0; i < 3; i++) {
+    const float dr = (float)rr[i] - rMean;
+    cov += dr * (tt[i] - tMean);
+    var += dr * dr;
+  }
+  if (var < 4.0f) {   // Messwerte fast identisch -> keine Gerade ableitbar
+    Serial.println("[DIST] 3-Punkt: Messwerte zu dicht beieinander");
+    return false;
+  }
+  const float a = cov / var;
+  const float b = tMean - a * rMean;
+  if (a < 0.7f || a > 1.4f) {
+    Serial.printf("[DIST] 3-Punkt: Steigung %.3f ausserhalb 0.7..1.4\n", (double)a);
+    return false;
+  }
+  if (b < -400.0f || b > 400.0f) {
+    Serial.printf("[DIST] 3-Punkt: Versatz %.1f ausserhalb -400..+400\n", (double)b);
+    return false;
+  }
+  float maxRes = 0.0f;
+  for (int i = 0; i < 3; i++) {
+    const float res = fabsf(a * (float)rr[i] + b - tt[i]);
+    if (res > maxRes) maxRes = res;
+  }
+  if (maxRes > 30.0f) {
+    Serial.printf("[DIST] 3-Punkt: groesste Abweichung %.1f mm > 30 mm\n", (double)maxRes);
+    return false;
+  }
+  config.obsScale    = a;
+  config.obsOffsetMM = (int16_t)lroundf(-b);
+  configSaveField("obsScale", a);
+  configSaveInt("obsOff", config.obsOffsetMM);
+  s_last = -1; s_lastRaw = -1;
+  Serial.printf("[DIST] 3-Punkt-Kalibrierung: roh=%d/%d/%d -> scale=%.3f offset=%d (maxRes=%.1f)\n",
+                (int)rr[0], (int)rr[1], (int)rr[2], (double)a,
+                (int)config.obsOffsetMM, (double)maxRes);
+  return true;
+}
+
 int16_t distOffsetMM() { return config.obsOffsetMM; }
 
 void distClearOffset() {
   config.obsOffsetMM = 0;
+  config.obsScale = 1.0f;
   configSaveInt("obsOff", 0);
+  configSaveField("obsScale", 1.0f);
   s_last = -1; s_lastRaw = -1;
 }
 

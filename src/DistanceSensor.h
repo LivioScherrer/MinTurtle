@@ -106,7 +106,20 @@ int16_t distMeasureMM();
 // Offset-Kalibrierung nach Datenblatt-Verfahren: weisses Target exakt bei
 // trueMM (50..500, empfohlen 100) ruhig halten, mittelt ~10 Messungen und
 // speichert offset = roh - wahr (NVS). false bei zu wenig/gueltigen Samples.
+// Setzt obsScale auf 1 zurueck (reine Verschiebung).
 bool distCalibrateOffset(int16_t trueMM);
+
+// 3-Punkt-Kalibrierung aus den Roh-Mittelwerten bei 50/100/200 mm
+// (DISTCAL3:<roh50>,<roh100>,<roh200>): rechnet per Least-Squares die
+// Gerade richtig = scale*roh + b, prueft Monotonie/Plausibilitaet und
+// speichert obsScale = scale, obsOffsetMM = -b (NVS).
+// false bei unplausiblen Rohwerten (nichts wird gespeichert).
+bool distCalibrate3(int16_t raw50, int16_t raw100, int16_t raw200);
+
+// Roh-Mittelwert OHNE Korrektur (fuer die 3-Punkt-Kalibrierung, DISTMEAS):
+// mittelt bis zu `want` frische Messungen (max. 6 s); false, wenn weniger
+// als `minOk` gueltige Proben zusammenkommen oder der Sensor nicht bereit ist.
+bool distMeasureRawAvg(int16_t& outRaw, uint8_t want = 8, uint8_t minOk = 3);
 
 // Aktueller Offset / zuruecksetzen
 int16_t distOffsetMM();
