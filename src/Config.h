@@ -112,6 +112,30 @@ constexpr float FORWARD_MM_MIN = 5.0f,  FORWARD_MM_MAX = 150.0f;
 constexpr float TURN_DEG_MIN   = 10.0f,  TURN_DEG_MAX   = 360.0f;
 constexpr float SPEED_MM_S_MIN = 20.0f,  SPEED_MM_S_MAX = 600.0f;
 
+// ---------- Beschleunigungsrampe fuer Positionsfahrten ----------
+// Zeit, die der Motor von 0 auf das eingestellte Tempo braucht (und
+// symmetrisch wieder herunter). 0 = KEINE Rampe: dann laeuft die Fahrt mit
+// runSpeed() und sofort voller Geschwindigkeit (das Verhalten vor dem
+// Rampen-Umbau - lauter, aber ohne jede Verzoegerung).
+//
+// Warum ZEIT und nicht Beschleunigung in mm/s^2: die Zeit ist die einzige
+// Angabe, die unabhaengig von Microstep-Zahl und Tempo dasselbe Gefahr
+// ergibt. Eine mm/s^2-Angabe muesste bei jedem Wechsel der Microsteps neu
+// umgerechnet werden, sonst faehrt derselbe Wert je nach Motor-Einstellung
+// schneller oder langsamer - genau der Fehler, den die ganze Geometrie-
+// Umstellung in diesem Projekt vermeiden soll.
+constexpr uint16_t RAMP_MS_MIN = 0, RAMP_MS_MAX = 2000, RAMP_MS_DEFAULT = 150;
+
+// ---------- Anlaufdrehung nach dem Boot ----------
+// Drehzahl (Schritte/s) und Dauer der Drehung auf der Stelle direkt nach dem
+// Start: zeigt "der Roboter lebt" und holt die Motoren an ihre exakte
+// Ausgangsposition. 0 bei beiden Werten schaltet sie ganz ab.
+// Obergrenze der Drehzahl ist MAX_DRIVE_STEPS_S: der 50-us-Puls-Task kann
+// keine hoehere Rate erzeugen, ein groesserer Wert wuerde nur Steps
+// verschlucken.
+constexpr uint16_t SPIN_SPEED_MIN = 0, SPIN_SPEED_MAX = 20000, SPIN_SPEED_DEFAULT = 6000;
+constexpr uint16_t SPIN_MS_MIN = 0, SPIN_MS_MAX = 3000, SPIN_MS_DEFAULT = 500;
+
 // NaN-sichere Bereichspruefung. IMMER statt "x < MIN || x > MAX" benutzen
 // und mit !inRange(...) auswerten.
 //
@@ -212,6 +236,13 @@ struct Config {
   // Fahrgeschwindigkeit in mm/s (NVS: driveSpeed, per SPEED:<mm/s>).
   // Die Schrittrate wird daraus und aus der Microstep-Zahl berechnet.
   float driveSpeedMM   = 150.0f;          // 20..300 mm/s
+  // Beschleunigungsrampe fuer Positionsfahrten (NVS: rampMs, per RAMP:<ms>).
+  // 0 = keine Rampe. Bereich RAMP_MS_MIN..RAMP_MS_MAX.
+  uint16_t rampMs      = RAMP_MS_DEFAULT;
+  // Anlaufdrehung nach dem Boot (NVS: spinSpeed/spinMs, per SPIN:<s>,<ms>).
+  // 0 bei beiden Werten = aus. Bereiche SPIN_SPEED_MIN/MAX, SPIN_MS_MIN/MAX.
+  uint16_t spinSpeed   = SPIN_SPEED_DEFAULT;
+  uint16_t spinMs      = SPIN_MS_DEFAULT;
   uint16_t blackR = 152, blackG = 137, blackB = 98;
   uint16_t whiteR = 4143, whiteG = 4258, whiteB = 3036;
   // Mindest-Saettigung fuer warme Farbtoene (Boden-Differenzierung):

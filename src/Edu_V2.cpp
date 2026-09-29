@@ -862,6 +862,7 @@ static bool cmdTmc(const String& cmd) {
 //   STEPS:<mm>    Strecke einer Farb-Raste (Werkwert 30)
 //   ANG:<grad>    Drehung im Spiel (Werkwert 90)
 //   SPEED:<mm/s>  Fahrgeschwindigkeit (Werkwert 150)
+// (Rampe und Anlaufdrehung: RAMP: / SPIN:, siehe cmdMotorFeel weiter unten)
 static bool cmdSteps(const String& cmd) {
   char buf[64];
   if (cmd == "STEPS?") {
@@ -946,6 +947,65 @@ static bool cmdSpeed(const String& cmd) {
                   (double)mmS, (double)FIXED_DRIVE_SPEED, config.tmcMicrosteps,
                   (double)mmS * configStepsPerMM() > MAX_DRIVE_STEPS_S
                     ? " - am Puls-Task begrenzt" : "");
+    return true;
+  }
+  return false;
+}
+
+// ---- Fahrgefuehl: Beschleunigungsrampe + Anlaufdrehung ----
+// Beide Werte kommen aus der NVS und sind in der Web-UI einstellbar. Sie sind
+// bewusst NICHT im TMC:-Bereich: sie gehoeren nicht zum Treiber, sondern zur
+// Laufzeit des Motor-Tasks, und ein TMC:RESET soll sie nicht mit zuruecksetzen.
+//   RAMP:<ms>              Rampe fuer Positionsfahrten, 0 = aus (Werkwert 150)
+//   SPIN:<schritte/s>,<ms> Anlaufdrehung nach dem Boot, 0 = aus
+static bool cmdMotorFeel(const String& cmd) {
+  char buf[64];
+  if (cmd == "RAMP?") {
+    snprintf(buf, sizeof(buf), "RAMP=%u,%u", (unsigned)config.rampMs,
+             motorRampActive() ? 1u : 0u);
+    sendStatus(buf);
+    return true;
+  }
+  if (cmd.startsWith("RAMP:")) {
+    // toInt() statt toFloat(): die Angabe ist eine Zeit in ganzen ms, und ein
+    // "RAMP:1e9" soll nicht als 1000000000 durchrutschen.
+    long v = cmd.substring(5).toInt();
+    if (v < RAMP_MS_MIN || v > RAMP_MS_MAX) { sendStatus("RAMP:BAD"); return true; }
+    config.rampMs = (uint16_t)v;
+    configSaveUShort("rampMs", config.rampMs);
+    // motorUpdateSpeeds() setzt das Flag, das der Puls-Task liest - deshalb
+    // muss es hier ueber den normalen Weg laufen, nicht direkt am Config-Feld.
+    motorUpdateSpeeds();
+    snprintf(buf, sizeof(buf), "RAMP=%u,%u", (unsigned)config.rampMs,
+             motorRampActive() ? 1u : 0u);
+    sendStatus(buf);
+    Serial.printf("[RAMP] %u ms (0 = keine Rampe)\n", (unsigned)config.rampMs);
+    return true;
+  }
+  if (cmd == "SPIN?") {
+    snprintf(buf, sizeof(buf), "SPIN=%u,%u", (unsigned)config.spinSpeed,
+             (unsigned)config.spinMs);
+    sendStatus(buf);
+    return true;
+  }
+  if (cmd.startsWith("SPIN:")) {
+    // Format: SPIN:<schritte/s>,<ms>. Beide muessen zusammen gesetzt werden:
+    // ein halb gesetzter Anlaufdreher (Drehzahl 0, Dauer 500) waere eine
+    // Fahrt, die nie stattfindet, aber den Boot um 500 ms verzoegert.
+    int s1 = 0, ms = 0;
+    if (sscanf(cmd.c_str() + 5, "%d,%d", &s1, &ms) != 2) { sendStatus("SPIN:BAD"); return true; }
+    if (s1 < SPIN_SPEED_MIN || s1 > SPIN_SPEED_MAX ||
+        ms < SPIN_MS_MIN   || ms > SPIN_MS_MAX)               { sendStatus("SPIN:BAD"); return true; }
+    config.spinSpeed = (uint16_t)s1;
+    config.spinMs    = (uint16_t)ms;
+    configSaveUShort("spinSpeed", config.spinSpeed);
+    configSaveUShort("spinMs", config.spinMs);
+    snprintf(buf, sizeof(buf), "SPIN=%u,%u", (unsigned)config.spinSpeed,
+             (unsigned)config.spinMs);
+    sendStatus(buf);
+    Serial.printf("[SPIN] Anlaufdrehung: %u Schritte/s fuer %u ms%s\n",
+                  (unsigned)config.spinSpeed, (unsigned)config.spinMs,
+                  (config.spinSpeed == 0 || config.spinMs == 0) ? " (aus)" : "");
     return true;
   }
   return false;
@@ -1444,6 +1504,7 @@ void handleCommand(const char* cmdStr) {
   if (cmdSteps(cmd)) return;   // STEPS?/STEPS:<mm>  + GEO? / GEO:RESET
   if (cmdAng(cmd))   return;   // ANG?/ANG:<grad>
   if (cmdSpeed(cmd)) return;   // SPEED?/SPEED:<mm/s>
+  if (cmdMotorFeel(cmd)) return;  // RAMP?/RAMP:<ms>  + SPIN?/SPIN:<s>,<ms>
   if (cmdSat(cmd))   return;   // SAT? / SAT:<0..1>         (Mindest-Saettigung)
 
 

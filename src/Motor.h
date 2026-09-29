@@ -13,7 +13,7 @@
 // Verdrahtung PCB Edu_V2.2: ESP-TX --1k (R9)--> PDN-Netz, ESP-RX direkt an PDN
 // (gemeinsam fuer BEIDE Treiber, kein Pull-up noetig).
 //
-// Feste Fahrgeschwindigkeit + sanfte Rampe fuer Positionsfahrten (MOTOR_RAMP_MS).
+// Feste Fahrgeschwindigkeit + sanfte Rampe fuer Positionsfahrten (config.rampMs).
 // Die Step-Puls-Erzeugung laeuft in einem eigenen FreeRTOS-Task auf Core 0,
 // getaktet ueber einen 50us Hardware-Timer (esp_timer) + Task-Notification.
 // Die Main-Loop (Core 1) setzt nur noch Ziel-Geschwindigkeiten/Positionen
@@ -68,17 +68,15 @@ extern float FIXED_DRIVE_SPEED;
 // jeden Puls mit Reserve trifft (4x Oversampling, Jitter im us-Bereich).
 constexpr uint32_t MOTOR_TICK_US = 50;
 
-// Rampenzeit fuer Positionsfahrten: von 0 auf FIXED_DRIVE_SPEED in dieser
-// Zeit (und symmetrisch wieder herunter). Bewusst mild gewaehlt: der Roboter
+// Beschleunigungsrampe fuer Positionsfahrten: config.rampMs = Zeit, die der
+// Motor von 0 auf FIXED_DRIVE_SPEED braucht (symmetrisch wieder herunter).
+// 0 = aus, dann laeuft die Fahrt sofort mit voller Geschwindigkeit.
+// Die Werte selbst stehen in Config.h (RAMP_MS_MIN/MAX/DEFAULT) und werden
+// per RAMP:<ms> in der Web-UI gesetzt. Bewusst mild gewaehlt: der Roboter
 // reisst nicht mehr los, kurze Strecken (Rasterfeld) erreichen trotzdem fast
 // die volle Geschwindigkeit. Einziger Knopf fuer "mehr/weniger Beschleunigung".
 // Nur fuer Positions-Moves (Spiele, Bloecke, Einlern-Tests); das Fahren per
 // Taste/Linienfolger bleibt direkt und reagiert sofort.
-constexpr uint32_t MOTOR_RAMP_MS = 150;
-
-// Start-Signal nach dem Booten: Drehzahl und Dauer des StartupSpins.
-constexpr float STARTUP_SPIN_SPEED = 6000.0f;
-constexpr uint32_t STARTUP_SPIN_MS = 500;
 
 // TMC-Defaults (8HS11-0204S NEMA8: 0.2A Nennstrom, 24 Ohm, 8mH)
 // Strom = exakt Nennstrom (mehr -> Ueberhitzung, max. 80 Grad Rise im Stillstand).
@@ -104,12 +102,20 @@ constexpr uint32_t R9_SERIES_OHM = 1000;
 void initSteppers();
 
 // Schrittrate aus config.driveSpeedMM + Microsteps + Rad berechnen und den
-// AccelStepper mitteilen. Muss nach jeder Aenderung an Microsteps, Tempo oder
-// Geometrie aufgerufen werden.
+// AccelStepper mitteilen. Muss nach jeder Aenderung an Microsteps, Tempo,
+// Rampe oder Geometrie aufgerufen werden - auch wenn sich nur config.rampMs
+// geaendert hat: das Flag, das der Puls-Task liest, wird hier gesetzt.
 void motorUpdateSpeeds();
 
-// Start-Signal nach dem Booten: beide Motoren drehen kurz
-// (STARTUP_SPIN_SPEED fuer STARTUP_SPIN_MS), danach wieder Stillstand.
+// true, wenn Positionsfahrten mit Rampe laufen (config.rampMs > 0), false
+// bei "sofort volle Geschwindigkeit". Fuer Befehls-Antworten und Anzeigen.
+bool motorRampActive();
+
+// Start-Signal nach dem Booten: beide Motoren drehen kurz auf der Stelle
+// (config.spinSpeed Schritte/s fuer config.spinMs), danach wieder Stillstand.
+// Beide Werte kommen aus der NVS (Web-UI, SPIN:<s>,<ms>); ist einer davon 0,
+// entfaellt die Drehung komplett - ohne Wartezeit. Bereiche stehen als
+// SPIN_SPEED_* / SPIN_MS_* in Config.h.
 void startupSpin();
 
 // Geschwindigkeit setzen (steps/s, Vorzeichen = Richtung).
@@ -123,10 +129,11 @@ void setMotorSpeed(int motorIdx, float speed);
 void stopMotors();
 
 // Position-Move vorbereiten: 'physicalSteps' Schritte mit FIXED_DRIVE_SPEED
-// fahren (vorzeichenkorrigiert: positiv = CW). Mit sanfter Rampe (AccelStepper
-// run()/setAcceleration, MOTOR_RAMP_MS): der Motor beschleunigt am Anfang und
-// bremst vor dem Ziel ab. Die Schrittzahl bleibt exakt. Das Ende wird intern
-// automatisch erkannt (Rest-Zaehler == 0 -> Speed auf 0).
+// fahren (vorzeichenkorrigiert: positiv = CW). Mit sanfter Rampe, sofern
+// config.rampMs > 0 (AccelStepper run()/setAcceleration): der Motor
+// beschleunigt am Anfang und bremst vor dem Ziel ab, die Schrittzahl bleibt
+// exakt. Bei config.rampMs == 0 faehrt er sofort mit voller Geschwindigkeit.
+// Das Ende wird intern automatisch erkannt (Rest-Zaehler == 0 -> Speed auf 0).
 // Thread-sicher.
 void prepPositionMove(int motorIdx, long physicalSteps);
 

@@ -222,12 +222,26 @@ Microstep-Zahl (`configStepsPerS()` in `Config.cpp`, gedeckelt bei
 `setMotorSpeed()` legt den Betrag immer darauf fest.
 
 Positionsfahrten (Spiele, Programm-Blöcke, Einlern-Tests) haben eine sanfte
-**Rampe**: von 0 auf `FIXED_DRIVE_SPEED` in `MOTOR_RAMP_MS` (150 ms,
-`src/Motor.h`), auf- und abwärts. Sie kommt von AccelStepper
-(`run()`/`setAcceleration()`), die Schrittzahl bleibt exakt. Das freie Fahren
-(Tasten) und der Linienfolger bleiben bewusst **ohne Rampe**: dort zählt
-sofortige Reaktion - die Suchdrehungen des Linienfolgers schalten alle 140 ms
-um und würden von einer Rampe verschluckt.
+**Rampe**: von 0 auf `FIXED_DRIVE_SPEED` in `config.rampMs` (Werkwert 150 ms,
+per `RAMP:` und Web-UI einstellbar, 0..2000 ms), auf- und abwärts. Sie kommt
+von AccelStepper (`run()`/`setAcceleration()`), die Schrittzahl bleibt exakt.
+Bei `rampMs = 0` läuft derselbe Weg über `runSpeed()` - dann fährt der Roboter
+sofort mit voller Geschwindigkeit, also ohne jede Verzögerung. Das freie Fahren
+(Tasten) und der Linienfolger bleiben in **beiden** Fällen bewusst ohne Rampe:
+dort zählt sofortige Reaktion - die Suchdrehungen des Linienfolgers schalten
+alle 140 ms um und würden von einer Rampe verschluckt.
+
+Warum die Rampe in **Zeit** und nicht in Beschleunigung angegeben wird: nur die
+Zeit ergibt unabhängig von Microstep-Zahl und Tempo dasselbe Fahrgefühl. Eine
+mm/s²-Angabe müsste bei jedem Wechsel der Microsteps neu umgerechnet werden,
+sonst fährt derselbe Wert je nach Motor-Einstellung schneller oder langsamer -
+genau der Fehler, den die Geometrie-Umstellung in diesem Projekt vermeiden soll.
+
+Die **Anlaufdrehung** nach dem Boot (kurze Drehung auf der Stelle, damit der
+Roboter „lebt" und die Motoren ihre Ausgangsposition finden) hängt an
+`config.spinSpeed` / `config.spinMs` (Werkwerte 6000 Schritte/s und 500 ms,
+per `SPIN:<schritte/s>,<ms>` und Web-UI einstellbar). Ist einer der beiden
+Werte 0, entfällt die Drehung **ohne** Wartezeit.
 
 Deshalb bleiben **alle Längen unabhängig von der Microstep-Einstellung
 richtig**: gespeichert werden mm/Grad, die Schrittzahl wird bei jedem Bedarf
@@ -289,13 +303,24 @@ Dispatch-Liste am Ende von `handleCommand()` eintragen.
 | Befehl | Wirkung |
 |---|---|
 | `TMC?` | ausführlicher Status auf Serial |
-| `TMC:CURRENT:<100..800>` | RMS-Strom in mA |
+| `TMC:CURRENT:<100..200>` | RMS-Strom in mA (200 = Nennstrom des NEMA8, harte Grenze) |
 | `TMC:HOLD:<0..31>` | Haltestrom |
 | `TMC:MS:<1..256>` | Microsteps (verifiziert per Readback) |
 | `TMC:MODE:STEALTH` / `TMC:MODE:SPREAD` | leise / mehr Drehmoment |
 | `TMC:EN:1` / `TMC:EN:0` | Treiber ein/aus |
 | `TMC:INIT` | Konfiguration erneut senden (z. B. nachträglich, wenn VM kam) |
 | `UARTTEST` / `UARTNET` | UART- bzw. PDN-Netz-Diagnose |
+
+### Motor-Fahrgefühl (nicht der Treiber, sondern die Laufzeit)
+
+Gehört bewusst **nicht** ins `TMC:`-Raster: das sind Treiber-Register, hier
+wird die Firmware-Laufzeit eingestellt. Alles drei Werte liegen in der NVS
+und sind in der Web-UI unter **Motor & TMC → Fahrgefühl** einstellbar.
+
+| Befehl | Wirkung |
+|---|---|
+| `RAMP?` / `RAMP:<0..2000>` | Rampe für Positionsfahrten in **ms** bis zum vollen Tempo. Antwort `RAMP=<ms>,<0\|1>` - das zweite Feld sagt, ob die Rampe wirklich aktiv ist. `0` = keine Rampe (sofort volles Tempo) |
+| `SPIN?` / `SPIN:<0..20000>,<0..3000>` | Anlaufdrehung nach dem Boot: Drehzahl in Schritten/s und Dauer in ms. Beide Werte nur gemeinsam gültig; ist einer 0, entfällt die Drehung **ohne** Wartezeit |
 
 ### Spiele
 

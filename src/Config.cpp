@@ -42,6 +42,13 @@ void configLoad() {
   if (prefs.isKey("driveSpeed")) config.driveSpeedMM = prefs.getFloat("driveSpeed", 150.0f);
   else { config.driveSpeedMM = 150.0f; prefs.putFloat("driveSpeed", config.driveSpeedMM); }
 
+  // Motor-Fahrgefuehle. Ohne isKey()-Zweig wird der Wert nur gelesen und bei
+  // Bedarf von configValidate() geschrieben - das spart das Schreiben in die
+  // NVS bei jedem Boot eines Roboters, der die Vorgabe noch nie angefasst hat.
+  config.rampMs    = prefs.getUShort("rampMs", RAMP_MS_DEFAULT);
+  config.spinSpeed = prefs.getUShort("spinSpeed", SPIN_SPEED_DEFAULT);
+  config.spinMs    = prefs.getUShort("spinMs", SPIN_MS_DEFAULT);
+
   config.blackR        = prefs.getUShort("blackR", 152);
   config.blackG        = prefs.getUShort("blackG", 137);
   config.blackB        = prefs.getUShort("blackB", 98);
@@ -131,6 +138,16 @@ void configValidate() {
   if (!inRange(config.driveSpeedMM, SPEED_MM_S_MIN, SPEED_MM_S_MAX)) {
     config.driveSpeedMM = 150.0f; changed = true;
   }
+  // Rampe und Anlaufdrehung: 0 ist bei beiden ein gueltiger Wert ("aus"),
+  // deshalb hier UND statt < MIN || > MAX. Die Grenzen muessen mit
+  // RAMP_MS_MIN/MAX bzw. SPIN_*_MIN/MAX in Config.h uebereinstimmen -
+  // sonst waere ein per altem Build gespeicherter Wert weiterhin gueltig und
+  // die Grenze nur im UI, nicht in der Firmware.
+  if (config.rampMs < RAMP_MS_MIN || config.rampMs > RAMP_MS_MAX) {
+    config.rampMs = RAMP_MS_DEFAULT; changed = true;
+  }
+  if (config.spinSpeed > SPIN_SPEED_MAX) { config.spinSpeed = SPIN_SPEED_DEFAULT; changed = true; }
+  if (config.spinMs > SPIN_MS_MAX) { config.spinMs = SPIN_MS_DEFAULT; changed = true; }
   if (config.blackR >= config.whiteR || config.blackG >= config.whiteG || config.blackB >= config.whiteB) {
     config.blackR = 152; config.blackG = 137; config.blackB = 98;
     config.whiteR = 4143; config.whiteG = 4258; config.whiteB = 3036;
@@ -209,6 +226,9 @@ void configValidate() {
     prefs.putFloat("quizMM", config.quizForwardMM);
     prefs.putFloat("quizDeg", config.quizTurnDeg);
     prefs.putFloat("driveSpeed", config.driveSpeedMM);
+    prefs.putUShort("rampMs", config.rampMs);
+    prefs.putUShort("spinSpeed", config.spinSpeed);
+    prefs.putUShort("spinMs", config.spinMs);
     prefs.putUInt("geoSig", geoSignature());
     prefs.end();
     Serial.println("[NVS] Invalid config corrected");

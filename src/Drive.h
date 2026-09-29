@@ -2,7 +2,7 @@
 // Frei-Fahren-Modus: WASD/Touch -> linke/rechte Zielgeschwindigkeit.
 // Die Motoren fahren immer mit fester Geschwindigkeit (FIXED_DRIVE_SPEED).
 // Frei gefahren wird bewusst OHNE Rampe (sofortige Reaktion); nur
-// Positions-Moves (Spiele, Bloecke) haben eine sanfte Rampe (MOTOR_RAMP_MS).
+// Positions-Moves (Spiele, Bloecke) haben eine sanfte Rampe (config.rampMs).
 #pragma once
 
 #include <Arduino.h>

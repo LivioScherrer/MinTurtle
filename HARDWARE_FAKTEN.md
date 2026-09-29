@@ -47,8 +47,11 @@ nichts zu tun. Motor-Daten sind ausschliesslich Punkt 2.
 Brummen trat bei **alten und neuen** Motoren auf. Im Code war der
 wahrscheinlichste Kandidat: **keine Beschleunigungsrampe** - sofort volle
 Drehzahl. Seit dem Rampen-Umbau haben Positionsfahrten eine sanfte Rampe
-(`MOTOR_RAMP_MS = 150`, `src/Motor.h`, AccelStepper `run()`/`setAcceleration()`);
-das freie Fahren bleibt direkt. Ob das Brummen damit verschwindet, ist noch
+(`config.rampMs`, Werkwert 150 ms, `src/Motor.h` / `src/Config.h`, AccelStepper
+`run()`/`setAcceleration()`); das freie Fahren bleibt direkt. Die Rampe ist
+jetzt per `RAMP:<ms>` und in der Web-UI einstellbar, `0` schaltet sie ganz ab
+(sofort volle Drehzahl, exakt das alte Verhalten) - damit lässt sich der
+Zusammenhang ohne Neubau prüfen. Ob das Brummen damit verschwindet, ist noch
 nicht verifiziert.
 
 Ausgeschlossen:

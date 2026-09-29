@@ -168,7 +168,7 @@ async function connect() {
     log('Verbunden. Notifications aktiv.', 'dim');
     // Sofort den Grundzustand abfragen - so sieht man sofort, ob die
     // Firmware antwortet und welche Microsteps/Strom gelten.
-    for (const c of ['TMC?', 'GEO?', 'SPEED?']) await send(c);
+    for (const c of ['TMC?', 'GEO?', 'SPEED?', 'RAMP?', 'SPIN?']) await send(c);
   } catch (e) {
     log('Verbindung fehlgeschlagen: ' + e.message, 'er');
     setConn(false, 'nicht verbunden');
@@ -224,6 +224,13 @@ function showParsed(msg) {
   } else if (msg.startsWith('SPEED=')) {
     const f = msg.substring(6).split(',');
     out = [['Tempo', f[0] + ' mm/s'], ['Schrittrate', f[1] + ' /s']];
+  } else if (msg.startsWith('RAMP=')) {
+    const f = msg.substring(5).split(',');
+    out = [['Rampe', f[0] + ' ms'], ['aktiv', f[1] === '1']];
+  } else if (msg.startsWith('SPIN=')) {
+    const f = msg.substring(5).split(',');
+    out = [['Anlaufdrehung', f[0] + ' Schritte/s'], ['Dauer', f[1] + ' ms'],
+           ['aktiv', f[0] !== '0' && f[1] !== '0']];
   } else if (msg.startsWith('DRV:')) {
     const d = {};
     for (const kv of msg.substring(4).split(' ')) {
