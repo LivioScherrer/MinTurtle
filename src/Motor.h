@@ -13,7 +13,8 @@
 // Verdrahtung PCB Edu_V2.2: ESP-TX --1k (R9)--> PDN-Netz, ESP-RX direkt an PDN
 // (gemeinsam fuer BEIDE Treiber, kein Pull-up noetig).
 //
-// Feste Fahrgeschwindigkeit + sanfte Rampe fuer Positionsfahrten (config.rampMs).
+// Feste Fahrgeschwindigkeit + sanfte Rampe (config.rampMs) fuer Anfahren und
+// Abbremsen.
 // Die Step-Puls-Erzeugung laeuft in einem eigenen FreeRTOS-Task auf Core 0,
 // getaktet ueber einen 50us Hardware-Timer (esp_timer) + Task-Notification.
 // Die Main-Loop (Core 1) setzt nur noch Ziel-Geschwindigkeiten/Positionen
@@ -68,15 +69,23 @@ extern float FIXED_DRIVE_SPEED;
 // jeden Puls mit Reserve trifft (4x Oversampling, Jitter im us-Bereich).
 constexpr uint32_t MOTOR_TICK_US = 50;
 
-// Beschleunigungsrampe fuer Positionsfahrten: config.rampMs = Zeit, die der
-// Motor von 0 auf FIXED_DRIVE_SPEED braucht (symmetrisch wieder herunter).
-// 0 = aus, dann laeuft die Fahrt sofort mit voller Geschwindigkeit.
+// Beschleunigungsrampe: config.rampMs = Zeit, die der Motor von 0 auf
+// FIXED_DRIVE_SPEED braucht - und genauso lang wieder herunter. 0 = aus,
+// dann laeuft alles sofort mit voller Geschwindigkeit.
 // Die Werte selbst stehen in Config.h (RAMP_MS_MIN/MAX/DEFAULT) und werden
 // per RAMP:<ms> in der Web-UI gesetzt. Bewusst mild gewaehlt: der Roboter
 // reisst nicht mehr los, kurze Strecken (Rasterfeld) erreichen trotzdem fast
 // die volle Geschwindigkeit. Einziger Knopf fuer "mehr/weniger Beschleunigung".
-// Nur fuer Positions-Moves (Spiele, Bloecke, Einlern-Tests); das Fahren per
-// Taste/Linienfolger bleibt direkt und reagiert sofort.
+//
+// Die Rampe gilt an ZWEI Stellen, mit derselben Bedeutung:
+//   * Freies Fahren (WASD)  - als Software-Rampe im Motor-Task, weil es dort
+//     kein Ziel gibt, vor dem man bremsen koennte.
+//   * Positions-Moves       - als AccelStepper-Rampe (run()/setAcceleration),
+//     die zusaetzlich vor dem Ziel abbremst.
+// Alles, was auf eine SOFORTige Reaktion angewiesen ist, meldet das ueber
+// setMotorSpeed(..., false) ab: der Linienfolger (schaltet seine Suchdrehungen
+// alle 140 ms um) und zeitlich begrenzte Fahrten (gameDrive - die Rampe wuerde
+// die gewaehnte Fahrzeit auffressen).
 
 // TMC-Defaults (8HS11-0204S NEMA8: 0.2A Nennstrom, 24 Ohm, 8mH)
 // Strom = exakt Nennstrom (mehr -> Ueberhitzung, max. 80 Grad Rise im Stillstand).
@@ -120,9 +129,16 @@ void startupSpin();
 
 // Geschwindigkeit setzen (steps/s, Vorzeichen = Richtung).
 // Der Betrag wird IMMER auf FIXED_DRIVE_SPEED gelegt - egal was uebergeben wird.
-// speed == 0 bedeutet explizit STOPP.
+// speed == 0 bedeutet explizit SOFORT-STOP (die Rampe wird nicht abgewartet:
+// Not-Aus, Tasten loslassen und Befehls-Timeout muessen sofort greifen).
+//
+// useRamp == true (Vorgabe): faehrt an und bremst weich ueber config.rampMs.
+// useRamp == false: sofort die volle Geschwindigkeit. Nur fuer Stellen, die
+// wirklich auf SOFORTige Reaktion angewiesen sind - der Linienfolger und
+// zeitlich begrenzte Fahrten (gameDrive), bei denen die Rampe die
+// gewaehnte Fahrzeit auffressen wuerde.
 // Thread-sicher: kann von jedem Core aus aufgerufen werden.
-void setMotorSpeed(int motorIdx, float speed);
+void setMotorSpeed(int motorIdx, float speed, bool useRamp = true);
 
 // Beide Motoren sofort stoppen (auch laufende Positions-Fahrten abbrechen).
 // Thread-sicher.

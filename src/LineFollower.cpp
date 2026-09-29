@@ -5,7 +5,7 @@
 // der Linie: kurzes Stoppen, dann abwechselnd rechts/links Such-Drehungen.
 // Laeuft nicht-blockierend ueber lineFollowerTick() in der Main-Loop.
 // Feste Geschwindigkeit OHNE Rampe (die Suchdrehungen schalten alle 140 ms um -
-// eine Rampe wuerde sie verschlucken): die Pulse erzeugt der Motor-Task
+// eine Rampe wuerde sie verschlucken, siehe motorsForward): die Pulse erzeugt der Motor-Task
 // auf Core 0 selbststaendig, hier werden nur Ziel-Geschwindigkeiten gesetzt.
 #include "LineFollower.h"
 #include "Motor.h"
@@ -67,17 +67,23 @@ namespace {
   }
 
   // Setzt nur die Ziel-Geschwindigkeiten. Die Pulse macht der Motor-Task.
+  //
+  // useRamp = false, und das ist hier keine Geschmacksfrage: der Zustands-
+  // Automat schaltet seine Suchdrehungen alle 140 ms um. Eine Rampe von
+  // z. B. 150 ms wuerde den Richtungswechsel verschlucken - der Roboter
+  // kaeme nie von der Links- in die Rechtssuche. Freies Fahren per Taste
+  // faehrt dagegen mit Rampe (siehe Drive.cpp).
   void motorsForward(float v) {
-    setMotorSpeed(0, v);
-    setMotorSpeed(1, v);
+    setMotorSpeed(0, v, false);
+    setMotorSpeed(1, v, false);
   }
   void motorsTurnLeft(float v) {
-    setMotorSpeed(0, -v);
-    setMotorSpeed(1,  v);
+    setMotorSpeed(0, -v, false);
+    setMotorSpeed(1,  v, false);
   }
   void motorsTurnRight(float v) {
-    setMotorSpeed(0,  v);
-    setMotorSpeed(1, -v);
+    setMotorSpeed(0,  v, false);
+    setMotorSpeed(1, -v, false);
   }
   void motorsOff() {
     setMotorSpeed(0, 0);

@@ -46,13 +46,13 @@ nichts zu tun. Motor-Daten sind ausschliesslich Punkt 2.
 ## 4. Vibration ist kein Effekt der Mikrostep-Umstellung
 Brummen trat bei **alten und neuen** Motoren auf. Im Code war der
 wahrscheinlichste Kandidat: **keine Beschleunigungsrampe** - sofort volle
-Drehzahl. Seit dem Rampen-Umbau haben Positionsfahrten eine sanfte Rampe
-(`config.rampMs`, Werkwert 150 ms, `src/Motor.h` / `src/Config.h`, AccelStepper
-`run()`/`setAcceleration()`); das freie Fahren bleibt direkt. Die Rampe ist
-jetzt per `RAMP:<ms>` und in der Web-UI einstellbar, `0` schaltet sie ganz ab
-(sofort volle Drehzahl, exakt das alte Verhalten) - damit lässt sich der
-Zusammenhang ohne Neubau prüfen. Ob das Brummen damit verschwindet, ist noch
-nicht verifiziert.
+Drehzahl. Heute gibt es `config.rampMs` (Werkwert 150 ms, `src/Motor.h` /
+`src/Config.h`); sie gilt für freies Fahren als Software-Rampe im Motor-Task
+und für Fahrten nach Strecke als AccelStepper-Rampe. Per `RAMP:<ms>` und in
+der Web-UI einstellbar, `0` schaltet sie ganz ab (sofort volle Drehzahl, exakt
+das alte Verhalten) - damit lässt sich der Zusammenhang ohne Neubau prüfen.
+Das STOPP bleibt auch bei großer Rampe hart. Ob das Brummen damit
+verschwindet, ist noch nicht verifiziert.
 
 Ausgeschlossen:
 - **Vref-Poti am TMC2209**: irrelevant, weil `I_scale_analog(false)` den Strom

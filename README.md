@@ -221,15 +221,36 @@ Microstep-Zahl (`configStepsPerS()` in `Config.cpp`, gedeckelt bei
 `MAX_DRIVE_STEPS_S` = 20 000 Schritte/s durch den 50-µs-Puls-Task).
 `setMotorSpeed()` legt den Betrag immer darauf fest.
 
-Positionsfahrten (Spiele, Programm-Blöcke, Einlern-Tests) haben eine sanfte
-**Rampe**: von 0 auf `FIXED_DRIVE_SPEED` in `config.rampMs` (Werkwert 150 ms,
-per `RAMP:` und Web-UI einstellbar, 0..2000 ms), auf- und abwärts. Sie kommt
-von AccelStepper (`run()`/`setAcceleration()`), die Schrittzahl bleibt exakt.
-Bei `rampMs = 0` läuft derselbe Weg über `runSpeed()` - dann fährt der Roboter
-sofort mit voller Geschwindigkeit, also ohne jede Verzögerung. Das freie Fahren
-(Tasten) und der Linienfolger bleiben in **beiden** Fällen bewusst ohne Rampe:
-dort zählt sofortige Reaktion - die Suchdrehungen des Linienfolgers schalten
-alle 140 ms um und würden von einer Rampe verschluckt.
+Das **Anfahren** ist eine sanfte Rampe: von 0 auf `FIXED_DRIVE_SPEED` in
+`config.rampMs` (Werkwert 150 ms, per `RAMP:` und Web-UI einstellbar,
+0..2000 ms) - und genauso lang wieder herunter. `0` = aus, dann fährt der
+Roboter überall sofort mit voller Geschwindigkeit.
+
+Sie gilt an zwei Stellen, mit derselben Bedeutung:
+
+| Wo | Wie | Warum |
+|---|---|---|
+| Freies Fahren (WASD) | Software-Rampe im Motor-Task: die Ist-Geschwindigkeit wandert pro 50-µs-Tick um `Beschleunigung × dt` auf das Ziel | AccelStepper kann nur mit einem Ziel rampe(n) - beim Freifahren gibt es keins, es geht nur um „wie schnell gerade" |
+| Fahrten nach Strecke (Spiele, Blöcke, Einlern-Tests) | AccelStepper `run()`/`setAcceleration()`, die Schrittzahl bleibt exakt | bremst zusätzlich **vor** dem Ziel ab |
+
+Bewusst **ohne** Rampe: das STOPP, der Linienfolger und zeitlich begrenzte
+Fahrten (`gameDrive`).
+
+- **STOPP** (`setMotorSpeed(i, 0)`) ist immer hart. Not-Aus, losgelassene
+  Taste und Befehls-Timeout dürfen nicht warten; eine weiche Bremse würde den
+  Roboter bei Verbindungsausfall noch bis zu zwei Sekunden rollen lassen.
+  Anfahren ist also gerampt, Abbremsen auf Tastendruck nicht.
+- **Linienfolger** schaltet seine Suchdrehungen alle 140 ms um - eine Rampe
+  würde den Richtungswechsel verschlucken, der Roboter käme nie von der
+  Links- in die Rechtssuche.
+- **`gameDrive(400 ms)`**: dort ist die Zeit das Kommando. 150 ms Anlaufzeit
+  wären ein Drittel der gewünschten Fahrt. Wegstrecken über
+  `prepPositionMove()` fahren dagegen mit Rampe, weil dort die Strecke das
+  Kommando ist.
+
+Aufrufer melden die Ausnahme über `setMotorSpeed(idx, speed, /*useRamp=*/false)`
+an. Wer die Rampe selbst verstellt, muss den Weg über `motorUpdateSpeeds()`
+nehmen - dort - und nur dort - wird das Flag gesetzt, das der Puls-Task liest.
 
 Warum die Rampe in **Zeit** und nicht in Beschleunigung angegeben wird: nur die
 Zeit ergibt unabhängig von Microstep-Zahl und Tempo dasselbe Fahrgefühl. Eine
@@ -237,11 +258,12 @@ mm/s²-Angabe müsste bei jedem Wechsel der Microsteps neu umgerechnet werden,
 sonst fährt derselbe Wert je nach Motor-Einstellung schneller oder langsamer -
 genau der Fehler, den die Geometrie-Umstellung in diesem Projekt vermeiden soll.
 
-Die **Anlaufdrehung** nach dem Boot (kurze Drehung auf der Stelle, damit der
-Roboter „lebt" und die Motoren ihre Ausgangsposition finden) hängt an
-`config.spinSpeed` / `config.spinMs` (Werkwerte 6000 Schritte/s und 500 ms,
-per `SPIN:<schritte/s>,<ms>` und Web-UI einstellbar). Ist einer der beiden
-Werte 0, entfällt die Drehung **ohne** Wartezeit.
+Die **Einschalt-Drehung** (kurze Drehung auf der Stelle direkt nach dem Boot,
+damit der Roboter „lebt" und die Motoren ihre Ausgangsposition finden) hängt an
+`config.spinMs` (Werkwert 500 ms) und `config.spinSpeed` (Werkwert 6000
+Schritte/s, ein reiner Firmwarewert). Die Web-UI zeigt nur die Dauer, per
+`SPIN:<ms>` einstellbar; `0` schaltet die Drehung **ohne** Wartezeit ab. Über
+den Serial Monitor geht beides: `SPIN:<schritte/s>,<ms>`.
 
 Deshalb bleiben **alle Längen unabhängig von der Microstep-Einstellung
 richtig**: gespeichert werden mm/Grad, die Schrittzahl wird bei jedem Bedarf
@@ -311,16 +333,17 @@ Dispatch-Liste am Ende von `handleCommand()` eintragen.
 | `TMC:INIT` | Konfiguration erneut senden (z. B. nachträglich, wenn VM kam) |
 | `UARTTEST` / `UARTNET` | UART- bzw. PDN-Netz-Diagnose |
 
-### Motor-Fahrgefühl (nicht der Treiber, sondern die Laufzeit)
+### Anfahren und Einschalten (nicht der Treiber, sondern die Laufzeit)
 
 Gehört bewusst **nicht** ins `TMC:`-Raster: das sind Treiber-Register, hier
-wird die Firmware-Laufzeit eingestellt. Alles drei Werte liegen in der NVS
-und sind in der Web-UI unter **Motor & TMC → Fahrgefühl** einstellbar.
+wird die Firmware-Laufzeit eingestellt. Die Werte liegen in der NVS und sind
+in der Web-UI direkt unter dem Tempo einstellbar.
 
 | Befehl | Wirkung |
 |---|---|
-| `RAMP?` / `RAMP:<0..2000>` | Rampe für Positionsfahrten in **ms** bis zum vollen Tempo. Antwort `RAMP=<ms>,<0\|1>` - das zweite Feld sagt, ob die Rampe wirklich aktiv ist. `0` = keine Rampe (sofort volles Tempo) |
-| `SPIN?` / `SPIN:<0..20000>,<0..3000>` | Anlaufdrehung nach dem Boot: Drehzahl in Schritten/s und Dauer in ms. Beide Werte nur gemeinsam gültig; ist einer 0, entfällt die Drehung **ohne** Wartezeit |
+| `RAMP?` / `RAMP:<0..2000>` | Anfahrzeit in **ms** bis zum eingestellten Tempo - gilt für freies Fahren und für Fahrten nach Strecke. Antwort `RAMP=<ms>,<0\|1>`; das zweite Feld sagt, ob die Rampe wirklich aktiv ist. `0` = keine Rampe (sofort volles Tempo). Das STOPP bleibt immer hart |
+| `SPIN?` / `SPIN:<0..3000>` | Dauer der Einschalt-Drehung in ms, `0` = aus (dann wartet der Roboter auch nicht). Die Drehzahl bleibt, wie sie ist |
+| `SPIN:<0..20000>,<0..3000>` | Drehzahl (Schritte/s) **und** Dauer zusammen, für den Serial Monitor. Beide nur gemeinsam gültig: ein halb gesetzter Wert wäre eine Fahrt, die nie stattfindet, aber den Boot verzögert |
 
 ### Spiele
 

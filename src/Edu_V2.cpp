@@ -61,7 +61,7 @@ bool driveLockedByGame() { return currentGame != GAME_NONE; }
 // =====================================================
 // Einheitliche Zeiten: jedes Spiel (Memory, Quiz, Rennen) nutzt
 // dieselbe Vor/Zurueck- und Drehdauer -> konsistenter Bewegungsablauf.
-// Feste Geschwindigkeit; die Rampe fuer Positionsfahrten faehrt der
+// Feste Geschwindigkeit; die Anfahr-Rampe (config.rampMs) faehrt der
 // AccelStepper im Motor-Task auf Core 0, unabhaengig von dieser Loop.
 constexpr uint32_t GAME_TICK_MS    = 1;    // Polling-Intervall in blockierenden Moves (Pulse macht der Motor-Task)
 // Spiel-Fahrten laufen inzwischen POSITIONSBASIERT (mm -> Schritte), nicht
@@ -104,11 +104,17 @@ static void waitForStop(uint32_t maxExtraMs = 1000) {
 
 // Vorwaerts/Zurueck-Fahrt fuer 'ms'. Vorzeichen = Richtung (setMotorSpeed
 // ueberschreibt den Betrag ohnehin auf FIXED_DRIVE_SPEED).
+//
+// useRamp = false: hier ist die ZEIT das Kommando. Eine Rampe von z. B.
+// 150 ms wuerde die ersten 150 ms der gewaehnten Fahrzeit auffressen und der
+// Roboter kaeme nie auf die volle Geschwindigkeit - "fahre 400 ms" waere
+// dann eine 250-ms-Fahrt plus Anlauf. Wegstrecken ueber prepPositionMove()
+// (GameEngine) fahren dagegen mit Rampe, weil dort die Strecke das Kommando ist.
 void gameDrive(int32_t ms, bool bForward) {
   gameMoveBusy = true;
   const float target = bForward ? FIXED_DRIVE_SPEED : -FIXED_DRIVE_SPEED;
-  setMotorSpeed(0, target);
-  setMotorSpeed(1, target);
+  setMotorSpeed(0, target, false);
+  setMotorSpeed(1, target, false);
   waitWhileRunning((uint32_t)ms, true);
   setMotorSpeed(0, 0);
   setMotorSpeed(1, 0);
@@ -952,12 +958,13 @@ static bool cmdSpeed(const String& cmd) {
   return false;
 }
 
-// ---- Fahrgefuehl: Beschleunigungsrampe + Anlaufdrehung ----
-// Beide Werte kommen aus der NVS und sind in der Web-UI einstellbar. Sie sind
+// ---- Anfahrzeit + Einschalt-Drehung ----
+// Beide kommen aus der NVS und sind in der Web-UI einstellbar. Sie sind
 // bewusst NICHT im TMC:-Bereich: sie gehoeren nicht zum Treiber, sondern zur
 // Laufzeit des Motor-Tasks, und ein TMC:RESET soll sie nicht mit zuruecksetzen.
-//   RAMP:<ms>              Rampe fuer Positionsfahrten, 0 = aus (Werkwert 150)
-//   SPIN:<schritte/s>,<ms> Anlaufdrehung nach dem Boot, 0 = aus
+//   RAMP:<ms>            Anfahrzeit bis zum vollen Tempo, 0 = aus (Werkwert 150)
+//   SPIN:<ms>            Dauer der Einschalt-Drehung, 0 = aus
+//   SPIN:<schritte/s>,<ms>  beides zusammen (Serial-Monitor)
 static bool cmdMotorFeel(const String& cmd) {
   char buf[64];
   if (cmd == "RAMP?") {
@@ -989,11 +996,27 @@ static bool cmdMotorFeel(const String& cmd) {
     return true;
   }
   if (cmd.startsWith("SPIN:")) {
-    // Format: SPIN:<schritte/s>,<ms>. Beide muessen zusammen gesetzt werden:
-    // ein halb gesetzter Anlaufdreher (Drehzahl 0, Dauer 500) waere eine
-    // Fahrt, die nie stattfindet, aber den Boot um 500 ms verzoegert.
+    // Zwei Formen, absichtlich:
+    //   SPIN:<ms>            nur die Dauer, die Drehzahl bleibt wie sie ist
+    //   SPIN:<schritte/s>,<ms>  beide (Serial-Monitor, Feinabstimmung)
+    // Die Kurzform gibt es, weil die Web-UI nur EINE verstaendliche Zahl
+    // zeigen soll: "Schritte/s" in einer Grundschul-Einstellungsseite war
+    // unlesbar, und eine hartkodierte 6000 im JS haette den Firmware-Wert
+    // SPIN_SPEED_DEFAULT dupliziert - bei einer Aenderung dort wuerde die
+    // Seite stillschweigend zurueckschreiben.
+    //
+    // Drehzahl und Dauer muessen ZUSAMMEN gesetzt werden: ein halb gesetzter
+    // Anlaufdreher (Drehzahl 0, Dauer 500) waere eine Fahrt, die nie
+    // stattfindet, aber den Boot um 500 ms verzoegert.
+    const char* arg = cmd.c_str() + 5;
     int s1 = 0, ms = 0;
-    if (sscanf(cmd.c_str() + 5, "%d,%d", &s1, &ms) != 2) { sendStatus("SPIN:BAD"); return true; }
+    const int n = sscanf(arg, "%d,%d", &s1, &ms);
+    if (n == 1) {
+      // Nur Dauer - aktuelle Drehzahl unveraendert lassen.
+      ms = s1; s1 = (int)config.spinSpeed;
+    } else if (n != 2) {
+      sendStatus("SPIN:BAD"); return true;
+    }
     if (s1 < SPIN_SPEED_MIN || s1 > SPIN_SPEED_MAX ||
         ms < SPIN_MS_MIN   || ms > SPIN_MS_MAX)               { sendStatus("SPIN:BAD"); return true; }
     config.spinSpeed = (uint16_t)s1;
@@ -1003,7 +1026,7 @@ static bool cmdMotorFeel(const String& cmd) {
     snprintf(buf, sizeof(buf), "SPIN=%u,%u", (unsigned)config.spinSpeed,
              (unsigned)config.spinMs);
     sendStatus(buf);
-    Serial.printf("[SPIN] Anlaufdrehung: %u Schritte/s fuer %u ms%s\n",
+    Serial.printf("[SPIN] Einschalt-Drehung: %u Schritte/s fuer %u ms%s\n",
                   (unsigned)config.spinSpeed, (unsigned)config.spinMs,
                   (config.spinSpeed == 0 || config.spinMs == 0) ? " (aus)" : "");
     return true;
@@ -1537,7 +1560,7 @@ void setup() {
   configLoad();
 
   initSteppers();
-  Serial.println("[MOTOR] Motor-Task auf Core 0 gestartet (feste Geschwindigkeit, sanfte Rampe fuer Positionsfahrten)");
+  Serial.println("[MOTOR] Motor-Task auf Core 0 gestartet (feste Geschwindigkeit, sanftes Anfahren)");
   startupSpin();
   tmcBootDiag();
 

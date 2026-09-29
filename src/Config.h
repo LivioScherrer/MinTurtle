@@ -112,11 +112,13 @@ constexpr float FORWARD_MM_MIN = 5.0f,  FORWARD_MM_MAX = 150.0f;
 constexpr float TURN_DEG_MIN   = 10.0f,  TURN_DEG_MAX   = 360.0f;
 constexpr float SPEED_MM_S_MIN = 20.0f,  SPEED_MM_S_MAX = 600.0f;
 
-// ---------- Beschleunigungsrampe fuer Positionsfahrten ----------
-// Zeit, die der Motor von 0 auf das eingestellte Tempo braucht (und
-// symmetrisch wieder herunter). 0 = KEINE Rampe: dann laeuft die Fahrt mit
-// runSpeed() und sofort voller Geschwindigkeit (das Verhalten vor dem
-// Rampen-Umbau - lauter, aber ohne jede Verzoegerung).
+// ---------- Anfahrzeit (Beschleunigungsrampe) ----------
+// Zeit, die der Motor von 0 auf das eingestellte Tempo braucht - und
+// symmetrisch wieder herunter. Eine Zahl, eine Bedeutung, an beiden Stellen
+// an denen sie wirkt: freies Fahren (WASD) und Fahrten nach Strecke.
+// 0 = KEINE Rampe: dann fährt er überall sofort mit voller Geschwindigkeit
+// (das Verhalten vor dem Rampen-Umbau - lauter, aber ohne jede Verzoegerung).
+// Das STOPP ist auch bei grosser Rampe hart (setMotorSpeed(i, 0)).
 //
 // Warum ZEIT und nicht Beschleunigung in mm/s^2: die Zeit ist die einzige
 // Angabe, die unabhaengig von Microstep-Zahl und Tempo dasselbe Gefahr
@@ -126,13 +128,15 @@ constexpr float SPEED_MM_S_MIN = 20.0f,  SPEED_MM_S_MAX = 600.0f;
 // Umstellung in diesem Projekt vermeiden soll.
 constexpr uint16_t RAMP_MS_MIN = 0, RAMP_MS_MAX = 2000, RAMP_MS_DEFAULT = 150;
 
-// ---------- Anlaufdrehung nach dem Boot ----------
-// Drehzahl (Schritte/s) und Dauer der Drehung auf der Stelle direkt nach dem
-// Start: zeigt "der Roboter lebt" und holt die Motoren an ihre exakte
-// Ausgangsposition. 0 bei beiden Werten schaltet sie ganz ab.
-// Obergrenze der Drehzahl ist MAX_DRIVE_STEPS_S: der 50-us-Puls-Task kann
-// keine hoehere Rate erzeugen, ein groesserer Wert wuerde nur Steps
-// verschlucken.
+// ---------- Einschalt-Drehung nach dem Boot ----------
+// Kurze Drehung auf der Stelle direkt nach dem Start: zeigt "der Roboter
+// lebt" und holt die Motoren an ihre exakte Ausgangsposition. Dauer 0
+// schaltet sie ab - dann wartet der Roboter auch nicht.
+//
+// Die Dauer ist der einzige Wert, den die Web-UI anbietet ("Einschalten
+// (ms)"): eine Drehzahl in Schritten/s ist auf einer Grundschul-Seite nur
+// unlesbar. Die Drehzahl bleibt ein reiner Firmwarewert und ist ueber
+// SPIN:<schritte/s>,<ms> am Serial Monitor erreichbar.
 constexpr uint16_t SPIN_SPEED_MIN = 0, SPIN_SPEED_MAX = 20000, SPIN_SPEED_DEFAULT = 6000;
 constexpr uint16_t SPIN_MS_MIN = 0, SPIN_MS_MAX = 3000, SPIN_MS_DEFAULT = 500;
 

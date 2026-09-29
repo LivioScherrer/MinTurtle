@@ -10,16 +10,20 @@
 //    ColorSensor-Task und Idle bleiben unberuehrt)
 //  - ~20 kHz Abtastung >> benoetigte 5 kHz -> Jitter im Bereich von Mikrosekunden
 //
-// Beschleunigung: Positions-Moves laufen - sofern config.rampMs > 0 - ueber
-// AccelStepper.run() mit setAcceleration(), also sanft Rampe hoch und runter.
-// Bei config.rampMs == 0 laeuft derselbe Weg ueber runSpeed(): sofort volle
-// Geschwindigkeit, ohne jede Rampe.
-// Der eigene Rest-Schritt-Zaehler bleibt in BEIDEN Faellen: er zaehlt die
-// echten Pulse (Positionsaenderung) mit, erkennt das Ende und ist
-// gleichzeitig die Anzeige fuer motorStillRunning(). Der Speed-Modus (Tasten,
-// Linienfolger) faehrt immer direkt mit runSpeed(): dort zaehlt Reaktion, und
-// der Linienfolger schaltet seine Suchdrehungen alle 140 ms um - eine Rampe
-// wuerde sie verschlucken.
+// Beschleunigung (config.rampMs): an ZWEI Stellen, mit derselben Bedeutung -
+// "wie lange von 0 bis zum vollen Tempo".
+//   * Freies Fahren (WASD): Software-Rampe im Task. AccelStepper kann eine
+//     Rampe nur MIT einem Ziel (computeNewSpeed() braucht distanceToGo), beim
+//     Freifahren gibt es keins - also wandert die Ist-Geschwindigkeit s_cur
+//     pro Tick um s_accel*dt Richtung s_tgt.
+//   * Positions-Moves: AccelStepper-Rampe (run()/setAcceleration), die
+//     zusaetzlich vor dem Ziel abbremst.
+// Bei config.rampMs == 0 ist beides aus (sofort volle Geschwindigkeit).
+// NICHT gerampt ist das STOPP (setMotorSpeed(i, 0) ist immer hart) und alles,
+// was useRamp=false meldet: Linienfolger und zeitlich begrenzte Fahrten.
+// Der eigene Rest-Schritt-Zaehler gilt nur fuer Positions-Moves; er zaehlt die
+// echten Pulse (Positionsaenderung) mit, erkennt das Ende und ist gleichzeitig
+// die Anzeige fuer motorStillRunning().
 #include "Motor.h"
 #include "Config.h"
 #include "BLEManager.h"
@@ -61,12 +65,27 @@ namespace {
   volatile long remainingL = 0;   // offene Schritte im Position-Modus
   volatile long remainingR = 0;
 
-  // Rampe fuer Positionsfahrten an/aus (aus config.rampMs, in
-  // motorUpdateSpeedsLocked() berechnet). Hier bewusst eine Kopie und nicht
-  // direkt config.rampMs: der Puls-Task laeuft auf Core 0 und darf config
-  // nicht lesen, waehrend Core 1 es ueber einen RAMP:-Befehl schreibt.
-  // volatile bool = ein Byte = ein atomarer Zugriff auf dem ESP32.
+  // Anfahr-Rampe an/aus (aus config.rampMs, in motorUpdateSpeedsLocked()
+  // berechnet). Hier bewusst eine Kopie und nicht direkt config.rampMs: der
+  // Puls-Task laeuft auf Core 0 und darf config nicht lesen, waehrend Core 1
+  // es ueber einen RAMP:-Befehl schreibt. volatile bool = ein Byte = ein
+  // atomarer Zugriff auf dem ESP32.
   volatile bool s_rampOn = true;
+  // Beschleunigung in Schritte/s^2, ebenfalls von motorUpdateSpeedsLocked()
+  // aus config.rampMs und FIXED_DRIVE_SPEED berechnet. Der Task liest nur
+  // diese Zahl, nie config.
+  volatile float s_accel = 0.0f;
+
+  // Software-Rampe fuer das FREIE Fahren. AccelStepper kann eine Rampe nur
+  // zusammen mit einem Ziel (computeNewSpeed() braucht distanceToGo) - beim
+  // Freifahren gibt es kein Ziel, es geht nur um "wie schnell gerade".
+  // Also: Ist-Geschwindigkeit s_cur wird im Task um s_accel*dt pro Tick
+  // Richtung s_tgt gezogen; setSpeed() bekommt jeden Tick den neuen Wert.
+  //
+  // s_tgt wird von setMotorSpeed() gesetzt, s_cur nur hier. Beide werden
+  // ausschliesslich unter motorMutex gelesen und geschrieben.
+  volatile float s_curL = 0.0f, s_tgtL = 0.0f;
+  volatile float s_curR = 0.0f, s_tgtR = 0.0f;
 
   // Motor wirklich stilllegen: setCurrentPosition() loescht neben der
   // Geschwindigkeit auch ein (ggf. veraltetes) Ziel. Ohne das wuerde
@@ -77,8 +96,29 @@ namespace {
     s.setCurrentPosition(s.currentPosition());
   }
 
+  // Rampe einen Tick weiter. maxDelta = s_accel * dt in Schritte/s.
+  // maxDelta <= 0 heisst "Rampe aus" (RAMP:0, oder accel kam nicht zustande,
+  // z. B. bei Tempo 0) - dann wird ohne Verzoegerung auf das Ziel gesprungen.
+  void rampStep(AccelStepper& s, volatile float& cur, float tgt, float maxDelta) {
+    if (cur == tgt) return;               // steht schon: kein setSpeed noetig
+    if (!(maxDelta > 0.0f)) {             // auch NaN-sicher
+      cur = tgt; s.setSpeed(tgt); return;
+    }
+    const float diff = tgt - cur;
+    // In den letzten beiden Faellen wird cur EXAKT auf tgt gesetzt statt
+    // cur += diff: sonst schaukelt der Motor im letzten Bit um das Ziel.
+    if (diff > maxDelta)       cur += maxDelta;
+    else if (diff < -maxDelta) cur -= maxDelta;
+    else                       cur = tgt;
+    s.setSpeed(cur);
+  }
+
   // Motor-Task: wartet blockierend auf Timer-Ticks und erzeugt faellige Pulse.
   void motorTaskLoop(void* param) {
+    // Zeitbasis fuer die Rampe. Der Task rechnet die echte verstrichene Zeit,
+    // nicht die Tick-Anzahl: bei Mutex-Miss faellt schon mal ein Tick aus, und
+    // die Rampe darf dadurch nicht langsamer werden.
+    int64_t lastUs = esp_timer_get_time();
     for (;;) {
       ulTaskNotifyTake(pdTRUE, portMAX_DELAY);   // naechster 50us-Tick
       // motorMutex ist hier garantiert gesetzt: initSteppers() legt ihn an
@@ -89,6 +129,15 @@ namespace {
       if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
         // Einmal pro 50-us-Tick lesen, beide Motoren nutzen denselben Wert.
         const bool ramp = s_rampOn;
+        const int64_t nowUs = esp_timer_get_time();
+        float dt = (float)(nowUs - lastUs) / 1000000.0f;
+        lastUs = nowUs;
+        // Obergrenze: nach einem langen Stall (Task-Verzugszeit, Debugger)
+        // wuerde ein ungebremster Nachhol-Schritt sonst die ganze Rampe auf
+        // einmal nachholen und den Roboter einen Meter vorschiessen.
+        if (!(dt > 0.0f))      dt = 0.0f;
+        else if (dt > 0.05f)   dt = 0.05f;   // 50 ms
+        const float maxDelta = s_accel * dt;
         if (posActiveL) {
           // Position-Modus. WICHTIG: run() meldet true, solange Speed ODER
           // Restziel != 0 - NICHT pro Puls. Der Rest-Zaehler zaehlt deshalb
@@ -104,7 +153,10 @@ namespace {
             }
           }
         } else {
-          // Speed-Modus: runSpeed() macht nur was bei speed != 0.
+          // Speed-Modus: erst die Rampe weiterdrehen, dann die Pulse.
+          // Ohne Rampe sind cur und tgt gleich, rampStep() ist dann ein
+          // No-op und es bleibt exakt das alte Verhalten.
+          rampStep(stepperL, s_curL, s_tgtL, maxDelta);
           stepperL.runSpeed();
         }
         if (posActiveR) {
@@ -118,6 +170,7 @@ namespace {
             }
           }
         } else {
+          rampStep(stepperR, s_curR, s_tgtR, maxDelta);
           stepperR.runSpeed();
         }
         xSemaphoreGive(motorMutex);
@@ -231,26 +284,27 @@ static void motorUpdateSpeedsLocked() {
   FIXED_DRIVE_SPEED = configStepsPerS();
   stepperL.setMaxSpeed(FIXED_DRIVE_SPEED);
   stepperR.setMaxSpeed(FIXED_DRIVE_SPEED);
-  // Der Puls-Task liest nur dieses Flag, nicht config.rampMs (Core 0 gegen
-  // Core 1). Es wird deshalb HIER gesetzt - jede Aenderung an der Rampe muss
-  // ueber motorUpdateSpeeds() laufen.
+  // Der Puls-Task liest nur dieses Flag und s_accel, nicht config.rampMs
+  // (Core 0 gegen Core 1). Beide werden deshalb HIER gesetzt - jede Aenderung
+  // an der Rampe muss ueber motorUpdateSpeeds() laufen.
   s_rampOn = (config.rampMs > 0);
+  s_accel = motorAccelStepsS2();
   // setAcceleration() ignoriert 0 und ruft intern computeNewSpeed() - bei
   // noch stehendem Motor (Ziel == Position) ist das ein sicherer No-op. Bei
   // ausgeschalteter Rampe ist der Wert sowieso 0 und damit auch ein No-op:
-  // dann faehrt der Positions-Modus ueber runSpeed() (s. motorTaskLoop).
-  stepperL.setAcceleration(motorAccelStepsS2());
-  stepperR.setAcceleration(motorAccelStepsS2());
+  // dann fahren beide Wege ohne Rampe (Positions-Modus ueber runSpeed()).
+  stepperL.setAcceleration(s_accel);
+  stepperR.setAcceleration(s_accel);
   const float wanted = config.driveSpeedMM * configStepsPerMM();
   Serial.printf("[MOTOR] Tempo: %.0f mm/s -> %.0f Schritte/s (%u Schritte/Kreis, %u Microsteps)%s\n",
                 (double)config.driveSpeedMM, (double)FIXED_DRIVE_SPEED,
                 (unsigned)(MOTOR_FULL_STEPS_PER_REV * s_microsteps), s_microsteps,
                 wanted > MAX_DRIVE_STEPS_S ? " - am 50us-Puls-Task begrenzt" : "");
-  Serial.printf("[MOTOR] Rampe: %s\n", s_rampOn ? "an" : "aus");
   if (s_rampOn) {
-    Serial.printf("[MOTOR]   %.0f Schritte/s^2 (0 -> %.0f Schritte/s in %u ms)\n",
-                  (double)motorAccelStepsS2(), (double)FIXED_DRIVE_SPEED,
-                  (unsigned)config.rampMs);
+    Serial.printf("[MOTOR] Anfahren: %u ms (0 -> %.0f Schritte/s = %.0f Schritte/s^2)\n",
+                  (unsigned)config.rampMs, (double)FIXED_DRIVE_SPEED, (double)s_accel);
+  } else {
+    Serial.println("[MOTOR] Anfahren: aus (sofort volle Geschwindigkeit)");
   }
 }
 
@@ -402,7 +456,7 @@ void startupSpin() {
   }
 }
 
-void setMotorSpeed(int motorIdx, float speed) {
+void setMotorSpeed(int motorIdx, float speed, bool useRamp) {
   if (!motorReady) return;   // siehe motorReady
   if (speed == 0.0f) {
     // Stopp ist fail-safe: erst kurz warten, bei Fehlschlag blockieren, bis
@@ -413,8 +467,16 @@ void setMotorSpeed(int motorIdx, float speed) {
       xSemaphoreTake(motorMutex, portMAX_DELAY);
     }
     // Expliziter Stopp fuer diesen Motor (auch eine offene Positionsfahrt aborten)
-    if (motorIdx == 0) { posActiveL = false; remainingL = 0; stepperHalt(stepperL); }
-    else               { posActiveR = false; remainingR = 0; stepperHalt(stepperR); }
+    // Die Rampe wird hier NICHT abgewartet: Not-Aus, losgelassene Taste und
+    // Befehls-Timeout muessen sofort greifen. cur UND tgt auf 0, sonst zoege
+    // der Puls-Task nach dem Stopp noch auf ein altes Ziel hin.
+    if (motorIdx == 0) {
+      posActiveL = false; remainingL = 0; s_curL = 0.0f; s_tgtL = 0.0f;
+      stepperHalt(stepperL);
+    } else {
+      posActiveR = false; remainingR = 0; s_curR = 0.0f; s_tgtR = 0.0f;
+      stepperHalt(stepperR);
+    }
     xSemaphoreGive(motorMutex);
     return;
   }
@@ -428,8 +490,29 @@ void setMotorSpeed(int motorIdx, float speed) {
     const int sign = (motorIdx == 0) ? config.leftSign : config.rightSign;
     const float actual = (speed > 0.0f ? FIXED_DRIVE_SPEED : -FIXED_DRIVE_SPEED) * static_cast<float>(sign);
     // Altes Ziel der abgebrochenen Positionsfahrt loeschen, dann fahren.
-    if (motorIdx == 0) { posActiveL = false; remainingL = 0; stepperHalt(stepperL); stepperL.setSpeed(actual); }
-    else               { posActiveR = false; remainingR = 0; stepperHalt(stepperR); stepperR.setSpeed(actual); }
+    AccelStepper& s = (motorIdx == 0) ? stepperL : stepperR;
+    volatile float& cur = (motorIdx == 0) ? s_curL : s_curR;
+    volatile float& tgt = (motorIdx == 0) ? s_tgtL : s_tgtR;
+    if (motorIdx == 0) { posActiveL = false; remainingL = 0; }
+    else               { posActiveR = false; remainingR = 0; }
+    stepperHalt(s);
+    tgt = actual;
+    if (useRamp && s_rampOn) {
+      // WICHTIG: stepperHalt() hat oben auch das Schrittintervall genullt
+      // (setCurrentPosition() setzt _stepInterval = 0). Ohne dieses
+      // setSpeed() hier wuerde runSpeed() dauerhaft "nichts faellig" melden
+      // und der Motor stuende still - die Rampe haette dann als einzigen
+      // Effekt, dass gar nichts mehr passiert. Der Puls-Task uebernimmt den
+      // Wert danach ohnehin pro Tick neu.
+      //
+      // cur wird hier bewusst NICHT auf actual gesetzt: setMotorSpeed() ruft
+      // driveUpdate() in jedem Loop-Durchlauf auf, und jedes Anspringen auf
+      // die volle Geschwindigkeit wuerde die Rampe wirkungslos machen.
+      s.setSpeed(cur);
+    } else {
+      cur = actual;
+      s.setSpeed(actual);
+    }
     xSemaphoreGive(motorMutex);
   }
 }
@@ -441,8 +524,8 @@ void stopMotors() {
   if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(5)) != pdTRUE) {
     xSemaphoreTake(motorMutex, portMAX_DELAY);
   }
-  posActiveL = false; remainingL = 0; stepperHalt(stepperL);
-  posActiveR = false; remainingR = 0; stepperHalt(stepperR);
+  posActiveL = false; remainingL = 0; s_curL = 0.0f; s_tgtL = 0.0f; stepperHalt(stepperL);
+  posActiveR = false; remainingR = 0; s_curR = 0.0f; s_tgtR = 0.0f; stepperHalt(stepperR);
   xSemaphoreGive(motorMutex);
 }
 
@@ -450,6 +533,13 @@ void prepPositionMove(int motorIdx, long physicalSteps) {
   if (!motorReady) return;   // siehe motorReady
   if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
     AccelStepper& s = (motorIdx == 0) ? stepperL : stepperR;
+    volatile float& cur = (motorIdx == 0) ? s_curL : s_curR;
+    volatile float& tgt = (motorIdx == 0) ? s_tgtL : s_tgtR;
+    // Die Freifahr-Rampe wird hier bewusst stillgelegt (cur = tgt = 0).
+    // Sonst zoege der Puls-Task nach dem Ende der Positionsfahrt, sobald
+    // posActive wieder false ist, auf das Ziel eines ALTEN Freifahr-Befehls
+    // nach - der Roboter wuerde ohne neuen Befehl wieder losfahren.
+    cur = 0.0f; tgt = 0.0f;
     if (physicalSteps == 0) {
       if (motorIdx == 0) { posActiveL = false; remainingL = 0; stepperHalt(s); }
       else               { posActiveR = false; remainingR = 0; stepperHalt(s); }

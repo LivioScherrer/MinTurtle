@@ -1,8 +1,13 @@
 // EduBot V2 - Drive-Modul
 // Frei-Fahren-Modus: WASD/Touch -> linke/rechte Zielgeschwindigkeit.
 // Die Motoren fahren immer mit fester Geschwindigkeit (FIXED_DRIVE_SPEED).
-// Frei gefahren wird bewusst OHNE Rampe (sofortige Reaktion); nur
-// Positions-Moves (Spiele, Bloecke) haben eine sanfte Rampe (config.rampMs).
+// Das Anfahren und Abbremsen beim Tastendruck laufen ueber die Rampe aus
+// config.rampMs (Software-Rampe im Motor-Task). Das STOPP selbst ist NICHT
+// gerampt: setMotorSpeed(i, 0) ist immer sofort - Not-Aus, losgelassene
+// Taste und Befehls-Timeout duessen nicht warten.
+// Der Linienfolger faehrt dagegen bewusst OHNE Rampe (setMotorSpeed(..., false)):
+// er schaltet seine Suchdrehungen alle 140 ms um, die Rampe wuerde sie
+// verschlucken.
 #pragma once
 
 #include <Arduino.h>
