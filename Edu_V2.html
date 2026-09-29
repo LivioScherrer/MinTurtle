@@ -9215,6 +9215,9 @@ function slalomRefreshUi() {
         } else if (msg === 'PROG:NONE') {
           progUnlock();
           showFeedback('progFeedback', 'error', 'Kein Programm gesetzt!');
+        } else if (msg === 'PROG:NO_SETTLE') {
+          progUnlock();
+          showFeedback('progFeedback', 'error', 'Der Roboter konnte sich nicht bereitmachen. Bitte kurz STOP drücken und nochmal versuchen.');
         } else if (msg === 'PROG:MAXITER') {
           showFeedback('progFeedback', 'error', 'Schleifen-Limit erreicht – weiter geht\'s!');
         }
@@ -9235,6 +9238,24 @@ function slalomRefreshUi() {
         setTimeout(() => el.classList.remove('show'), 3000);
       }
 
+      // Meldung IM Assistenten anzeigen. showFeedback('parentCalState', ...)
+      // landet im Elternbereich, der hinter dem Modal liegt und während der
+      // Kalibrierung nicht sichtbar ist - die Meldung ging also ins Leere.
+      let calMsgTimer = null;
+      function calMsg(type, text) {
+        const el = document.getElementById('calWizardMsg');
+        if (!el) return;
+        if (calMsgTimer) { clearTimeout(calMsgTimer); calMsgTimer = null; }
+        el.className = 'feedback-msg show feedback-' + type;
+        el.textContent = text;
+        calMsgTimer = setTimeout(() => { el.className = 'feedback-msg'; }, 4000);
+      }
+      function calMsgClear() {
+        const el = document.getElementById('calWizardMsg');
+        if (el) el.className = 'feedback-msg';
+        if (calMsgTimer) { clearTimeout(calMsgTimer); calMsgTimer = null; }
+      }
+
       // ==========================================
       // CALIBRATION WIZARD
       // ==========================================
@@ -9247,6 +9268,7 @@ function slalomRefreshUi() {
       // Antwort als erledigt gezaehlt.
       function calStartStep(cmd, expect) {
         calWaitingFor = expect;
+        calMsgClear();
         renderCalWizard();
         sendCommand(cmd);
         // Sicherheitsnetz: kommt gar keine Antwort (Roboter haengt, Kabel
@@ -9257,8 +9279,8 @@ function slalomRefreshUi() {
           if (calWaitingFor) {
             calWaitingFor = null;
             calWaitTimer = null;
-            showFeedback('parentCalState', 'error', 'Keine Antwort vom Roboter. Schritt bitte wiederholen.');
             renderCalWizard();
+            calMsg('error', 'Keine Antwort vom Roboter. Schritt bitte wiederholen.');
           }
         }, 5000);
       }
@@ -9272,7 +9294,7 @@ function slalomRefreshUi() {
           // Im Assistenten selbst anzeigen - nicht nur im Elternbereich, der
           // ist waehrend des Assistenten nicht sichtbar.
           renderCalWizard();
-          showFeedback('parentCalState', 'error', 'Roboter beschaeftigt - nichts gespeichert. Bitte wiederholen.');
+          calMsg('error', 'Roboter beschaeftigt - nichts gespeichert. Bitte wiederholen.');
           return true;
         }
         if (msg === calWaitingFor || msg.startsWith(calWaitingFor + ',') ||
@@ -9281,6 +9303,9 @@ function slalomRefreshUi() {
           calWaitingFor = null;
           calStep++;
           renderCalWizard();
+          // Beim letzten Schritt nicht mehr "Gespeichert." melden - dort
+          // steht schon die Abschlussmeldung.
+          if (calStep < calStepsData.length) calMsg('success', 'Gespeichert.');
           return true;
         }
         return false;
@@ -9364,6 +9389,8 @@ function slalomRefreshUi() {
           return;
         }
         calStep = 0;
+        calWaitingFor = null;
+        if (calWaitTimer) { clearTimeout(calWaitTimer); calWaitTimer = null; }
         renderCalWizard();
         document.getElementById('calWizardModal').classList.add('open');
       }
@@ -9375,6 +9402,15 @@ function slalomRefreshUi() {
       function renderCalWizard() {
         const body = document.getElementById('calWizardBody');
         if (!body) return;
+        // Der Schritt-Knopf wird per addEventListener gebunden, NICHT per
+        // onclick="...${JSON.stringify(expect)}...". JSON.stringify erzeugt
+        // doppelte Anfuehrungszeichen und damit wurde das onclick-Attribut
+        // schon beim Rendern abgeschnitten: der Browser kompilierte
+        // "calStartStep('CAL:BLACK', " nie zu einer Funktion (onclick === null).
+        // Der Knopf "Schwarz messen" war damit ein toter Knopf - es wurde
+        // gar kein CAL:BLACK gesendet und der Assistent blieb auf Schritt 1
+        // stehen. Datenattribut + addEventListener kann nicht an Anfuehrungs-
+        // zeichen zerbrechen.
         // Wartender Schritt: der Knopf wurde gedrueckt, die Firmware hat den
         // Befehl bekommen, die Antwort steht noch aus. Frueher wurde stur
         // nach 300 ms ein Schritt weitergezaehlt - ohne je zu fragen, ob die
@@ -9388,9 +9424,17 @@ function slalomRefreshUi() {
               <div style="font-size:32px;margin-bottom:8px;">⏳</div>
               <div style="font-weight:700;margin-bottom:8px;">Einen Moment ...</div>
               <p style="color:var(--ink-mute);">Warte auf den Roboter (${calWaitingFor}).</p>
-              <button class="btn btn-grey" onclick="calWaitingFor=null; renderCalWizard();">Abbrechen</button>
+              <button class="btn btn-grey" id="calBtnCancelWait">Abbrechen</button>
             </div>
+            <div id="calWizardMsg" class="feedback-msg"></div>
           `;
+          const cw = document.getElementById('calBtnCancelWait');
+          if (cw) cw.addEventListener('click', () => {
+            if (calWaitTimer) { clearTimeout(calWaitTimer); calWaitTimer = null; }
+            calWaitingFor = null;
+            renderCalWizard();
+            calMsg('warning', 'Abgebrochen - es wurde nichts gespeichert.');
+          });
           return;
         }
         if (calStep >= calStepsData.length) {
@@ -9399,9 +9443,12 @@ function slalomRefreshUi() {
             <div style="font-size:32px;margin-bottom:8px;">🎉</div>
             <div style="font-size:20px;font-weight:700;margin-bottom:8px;">Kalibrierung abgeschlossen!</div>
             <p style="color:var(--ink-mute);margin-bottom:16px;">Alle Werte wurden im NVS des Roboters gespeichert.</p>
-            <button class="btn btn-primary" onclick="closeCalWizard()">Fertig</button>
+            <button class="btn btn-primary" id="calBtnDone">Fertig</button>
           </div>
+          <div id="calWizardMsg" class="feedback-msg"></div>
         `;
+          const dn = document.getElementById('calBtnDone');
+          if (dn) dn.addEventListener('click', closeCalWizard);
           return;
         }
         const s = calStepsData[calStep];
@@ -9409,11 +9456,18 @@ function slalomRefreshUi() {
         <div style="font-size:18px;font-weight:700;color:var(--ink);">${s.title}</div>
         <p style="font-size:14px;color:var(--ink-mute);line-height:1.4;">${s.desc}</p>
         <div style="display:flex;gap:10px;margin-top:10px;justify-content:space-between;">
-          <button class="btn btn-primary" onclick="calStartStep('${s.cmd}', ${JSON.stringify(s.expect)});">${s.btnText}</button>
-          ${calStep > 0 ? '<button class="btn btn-grey" onclick="calStep--; renderCalWizard();">Zurück</button>' : ''}
+          <button class="btn btn-primary" id="calBtnStep" data-cmd="${s.cmd}" data-expect="${s.expect}">${s.btnText}</button>
+          ${calStep > 0 ? '<button class="btn btn-grey" id="calBtnBack">Zurück</button>' : ''}
         </div>
+        <div id="calWizardMsg" class="feedback-msg"></div>
         <div style="font-size:12px;color:var(--ink-mute);margin-top:6px;text-align:right;">Schritt ${calStep + 1} von ${calStepsData.length}</div>
       `;
+        const st = document.getElementById('calBtnStep');
+        if (st) st.addEventListener('click', () => {
+          calStartStep(st.getAttribute('data-cmd'), st.getAttribute('data-expect'));
+        });
+        const bk = document.getElementById('calBtnBack');
+        if (bk) bk.addEventListener('click', () => { calStep--; calMsgClear(); renderCalWizard(); });
       }
     </script>
 </body>
