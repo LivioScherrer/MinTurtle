@@ -35,6 +35,18 @@
 #include <esp_timer.h>
 
 namespace {
+  // Einrasten vor dem Programmstart: wie viele VOLLschritte hin und zurueck.
+  // 2 gibt Reserve gegen einen verlorenen Puls; 1 wuerde reichen. Bewusst
+  // nicht als Web-UI-Wert: das ist eine Sache, die einfach funktionieren
+  // soll, und eine Zahl mehr auf der Einstellungsseite ist nur eine weitere
+  // Stelle, an der jemand etwas verstellen kann, das er nicht versteht.
+  constexpr int32_t SETTLE_FULL_STEPS = 2;
+  // Harte Obergrenze fuer das Warten. Bei 2 Vollschritten (32 Microsteps bei
+  // 16) und 150 mm/s ist das nach ~30 ms ohne Rampe bzw. ~200 ms mit Rampe
+  // weit ueberdimensioniert. Es geht nur darum, nicht ewig zu haengen,
+  // wenn der Motor-Task klemmt.
+  constexpr uint32_t SETTLE_TIMEOUT_MS = 1000;
+
   // Stepper-Treiber - bewusst NUR hier sichtbar: Ausserhalb dieses Moduls darf
   // niemand direkt run()/runSpeed()/stop() o.ae. aufrufen (Race Conditions).
   AccelStepper stepperL(AccelStepper::DRIVER, PIN_STEP_L, PIN_DIR_L);
@@ -78,8 +90,7 @@ namespace {
 
   // Software-Rampe fuer das FREIE Fahren. AccelStepper kann eine Rampe nur
   // zusammen mit einem Ziel (computeNewSpeed() braucht distanceToGo) - beim
-  // Freifahren gibt es kein Ziel, es geht nur um "wie schnell gerade".
-  // Also: Ist-Geschwindigkeit s_cur wird im Task um s_accel*dt pro Tick
+  // Freifahren gibt es kein Ziel, es geht nur um "wie schnell gerade".  // Also: Ist-Geschwindigkeit s_cur wird im Task um s_accel*dt pro Tick
   // Richtung s_tgt gezogen; setSpeed() bekommt jeden Tick den neuen Wert.
   //
   // s_tgt wird von setMotorSpeed() gesetzt, s_cur nur hier. Beide werden
@@ -646,6 +657,59 @@ void prepPositionMove(int motorIdx, long physicalSteps) {
 
 bool motorStillRunning() {
   return (posActiveL && remainingL != 0) || (posActiveR && remainingR != 0);
+}
+
+// ---- EINRASTEN: Rastpunkt suchen, bevor es losgeht ----
+// Zwei VOLLschritte vor und exakt zwei zurueck, beide Raeder gleich. Beide
+// Wege sind symmetrisch, also entsteht durch das Einrasten kein Schwenk.
+//
+// Warum ueberhaupt: die Treiber schalten nach TMC_STANDBY_MS Stillstand ab
+// (kein Haltestrom, kuehl). Danach kann ein Rad von Hand, durch eine Stosse
+// oder durch das Aufsetzen verrutscht sein - und zwar jedes um einen anderen
+// Betrag. Der Roboter steht dann schief, und die erste programmierten Fahrt
+// faehrt in diesem Winkel weiter, statt sauber gerade. Genau das ist als
+// "am Anfang faehrt einer frueher los" aufgefallen.
+//
+// Warum ein Schritt reicht: Microsteps sind gleichmaessig verteilt, also
+// liegt der Rotor nach einem Pulses zwingend auf einer Rastung - unabhaengig
+// davon, wo er vorher lag. Zwei Vollschritte geben Reserve gegen einen
+// verlorenen Puls.
+//
+// Warum zurueck: der Roboter soll danach genau da stehen, wo das Kind ihn
+// hingestellt hat.
+//
+// blockiert ca. 30 ms (ohne Rampe) bis ~200 ms (Rampe 150 ms), je nach
+// config.rampMs und Tempo. Bewusst OHNE bleProcessEvents(): eine Re-Entranz
+// waehrend einer mechanischen Bewegung ist schlechter als 200 ms ohne
+// Befehlsannahme - das 256-Byte-Eingangsfeld traegt das bequem.
+bool motorSettle() {
+  if (!motorReady) {
+    Serial.println("[MOTOR] Einrasten uebersprungen (Motor nicht bereit)");
+    return false;
+  }
+  const int32_t n = geoStepsForFullSteps(SETTLE_FULL_STEPS, config.tmcMicrosteps);
+  if (n <= 0) return false;
+  for (int leg = 0; leg < 2; leg++) {
+    const long dir = (leg == 0) ? (long)n : -(long)n;
+    prepPositionMove(0, dir);
+    prepPositionMove(1, dir);
+    const uint32_t t0 = millis();
+    while (motorStillRunning()) {
+      if (millis() - t0 > SETTLE_TIMEOUT_MS) {
+        // Der Motor-Task kommt nicht voran - dann ist mehr kaputt als die
+        // Startposition. Lieber stehen bleiben und melden als ein Programm zu
+        // starten, das auf einem unkontrollierten Roboter laeuft.
+        Serial.printf("[MOTOR] Einrasten: nach %u ms nicht fertig - Abbruch\n",
+                      (unsigned)SETTLE_TIMEOUT_MS);
+        stopMotors();
+        return false;
+      }
+      vTaskDelay(1);
+    }
+  }
+  Serial.printf("[MOTOR] Eingerastet (%d Vollschritte hin und zurueck, %ld Schritte/Rad)\n",
+                (int)SETTLE_FULL_STEPS, (long)n);
+  return true;
 }
 
 // ---- TMC2209-Laufzeit-API (Adresse siehe TMC_ADDR_L / TMC_ADDR_R) ----

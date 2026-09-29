@@ -170,6 +170,21 @@ void prepPositionMove(int motorIdx, long physicalSteps);
 // Thread-sicher (liest volatile Zaehler).
 bool motorStillRunning();
 
+// EINRASTEN vor dem Start eines Programms: zwei Vollschritte vor und
+// exakt zwei zurueck, beide Raeder gleich, also ohne Schwenk.
+//
+// Wozu: die Treiber schalten nach TMC_STANDBY_MS Stillstand ab (kein
+// Haltestrom). Danach kann ein Rad verrutscht sein - jedes um einen anderen
+// Betrag. Der Roboter steht dann schief und die erste programmierten Fahrt
+// faehrt schief weiter. Ein Schritt holt den Rotor zwingend auf eine
+// Rastung, weil Microsteps gleichmaessig verteilt sind.
+//
+// Blockiert ca. 30 ms (ohne Rampe) bis ~200 ms (Rampe 150 ms). Setzt
+// voraus, dass der Aufrufer den Spiel-Slot schon belegt hat, damit das
+// Freifahren nicht dazwischenfunkt. false = nicht fertig geworden, die
+// Motoren sind gestoppt und der Aufrufer soll NICHT losfahren.
+bool motorSettle();
+
 // ---- TMC2209-Laufzeit-API (UART, BEIDE Treiber) ----
 // Die Adressen stehen als TMC_ADDR_L / TMC_ADDR_R bei den #defines oben.
 // Alle Set-Befehle wirken auf BEIDE Treiber gleichzeitig.

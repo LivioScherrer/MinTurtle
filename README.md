@@ -276,6 +276,33 @@ neu berechnet (`configForwardSteps()` / `configTurnSteps()`). Microsteps
 `Motor.h` hält die Stepper-Instanzen privat - direkte `stepper.run()`-Aufrufe
 ausserhalb von `Motor.cpp` sind dadurch unmöglich.
 
+### Einrasten vor dem Programmstart
+
+`PROG:RUN` rastet vorher beide Motoren ein (`motorSettle()` in `Motor.cpp`):
+zwei Vollschritte vor und exakt zwei zurück, beide Räder gleich.
+
+**Warum.** Die Treiber schalten nach `TMC_STANDBY_MS` (3 s) Stillstand ab —
+kein Haltestrom, kühl. Danach kann ein Rad verrutscht sein, etwa von Hand,
+durch eine Stöße oder beim Aufsetzen — und zwar jedes um einen anderen Betrag.
+Der Roboter steht dann schief, und die erste programmierte Fahrt fährt in
+diesem Winkel weiter, statt sauber gerade. Das war als „am Anfang fährt einer
+früher los" aufgefallen. Die Strecke selbst stimmt danach, sie ist nur
+verdreht.
+
+**Warum ein Schritt reicht.** Microsteps sind gleichmäßig verteilt, also liegt
+der Rotor nach einem Puls zwingend auf einer Rastung — unabhängig davon, wo er
+vorher lag. Zwei Vollschritte geben Reserve gegen einen verlorenen Puls.
+
+**Warum zurück.** Der Roboter soll danach genau da stehen, wo das Kind ihn
+hingestellt hat. Beide Wege sind symmetrisch, es entsteht also kein Schwenk.
+
+Dauer ca. 30 ms ohne Rampe bis ~200 ms bei `rampMs = 150`; blockiert bewusst
+ohne `bleProcessEvents()` (lieber 200 ms keine Befehle annehmen als eine
+Re-Entranz mitten in einer mechanischen Bewegung). Schafft es `motorSettle()`
+nicht innerhalb von `SETTLE_TIMEOUT_MS`, bleiben die Motoren stehen, es kommt
+`PROG:NO_SETTLE`, und das Programm startet **nicht** — auf einem unkontrollierten
+Roboter kein Programm zu starten ist schlechter als eine Fehlermeldung.
+
 ---
 
 ## Befehlsreferenz
@@ -366,7 +393,8 @@ in der Web-UI direkt unter dem Tempo einstellbar.
 | `SLALOM:STOP` / `SLALOM:UNPAIR` | Slalom abbrechen / trennen |
 | `LINE:START` / `LINE:STOP` | Linienfolger |
 | `MEMORY:START` / `MEMORY:START:<n>` / `MEMORY:INPUT:<n>` / `MEMORY:STOP` | Memory (3..`MEMORY_MAX_LEN`) |
-| `PROG:SET:<enc>` / `PROG:RUN` / `PROG:STOP` | Programmierung |
+| `PROG:SET:<enc>` / `PROG:RUN` / `PROG:STOP` | Programmierung. `PROG:RUN` rastet vorher beide Motoren ein (siehe unten) |
+| `PROG:NO_SETTLE` | Antwort auf `PROG:RUN`, wenn das Einrasten nicht fertig wurde — das Programm startet dann **nicht** |
 
 ---
 
