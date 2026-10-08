@@ -179,10 +179,6 @@ constexpr float MAX_DRIVE_STEPS_S = 20000.0f;
 constexpr int32_t geoStepsForFullSteps(int32_t fullSteps, uint16_t microsteps) {
   return fullSteps * (int32_t)microsteps;
 }
-// Vollschritte <-> mm.
-constexpr float fullStepsToMM(int32_t fullSteps) {
-  return (float)fullSteps * MM_PER_FULL_STEP;
-}
 // Schritte fuer eine Strecke in mm (Microsteps einbezogen).
 constexpr int32_t geoStepsForMM(float mm, uint16_t microsteps) {
   return (int32_t)((mm < 0.0f ? -mm : mm)
@@ -244,7 +240,7 @@ struct Config {
   float quizTurnDeg    = TURN_DEG_DEFAULT; // 10..360 Grad, Werkseinstellung 195 (gemessen)
   // Fahrgeschwindigkeit in mm/s (NVS: driveSpeed, per SPEED:<mm/s>).
   // Die Schrittrate wird daraus und aus der Microstep-Zahl berechnet.
-  float driveSpeedMM   = 150.0f;          // 20..300 mm/s
+  float driveSpeedMM   = 150.0f;          // 20..600 mm/s
   // Beschleunigungsrampe fuer Positionsfahrten (NVS: rampMs, per RAMP:<ms>).
   // 0 = keine Rampe. Bereich RAMP_MS_MIN..RAMP_MS_MAX.
   uint16_t rampMs      = RAMP_MS_DEFAULT;

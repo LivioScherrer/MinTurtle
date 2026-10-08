@@ -1,5 +1,4 @@
 // EduBot V2 - Motor-Modul (2x TMC2209 via UART + STEP/DIR)
-// Stand: Neuaufbau auf EduV1.3-Basis - DRV8834 ersetzt durch TMC2209 (UART).
 // BEIDE Treiber am gemeinsamen Single-Wire-Bus. Die Zuordnung Motor ->
 // Platine -> GPIO -> TMC-Adresse steht ausfuehrlich bei den #defines weiter
 // unten (ab "Stepper-Pins") und ist dort die EINZIGE Wahrheit. Frueher
@@ -170,24 +169,15 @@ void prepPositionMove(int motorIdx, long physicalSteps);
 // Thread-sicher (liest volatile Zaehler).
 bool motorStillRunning();
 
-// EINRASTEN vor dem Start eines Programms: zwei Vollschritte vor und
-// exakt zwei zurueck, beide Raeder gleich, also ohne Schwenk.
-//
-// Wozu: die Treiber schalten nach TMC_STANDBY_MS Stillstand ab (kein
-// Haltestrom). Danach kann ein Rad verrutscht sein - jedes um einen anderen
-// Betrag. Der Roboter steht dann schief und die erste programmierten Fahrt
-// faehrt schief weiter. Ein Schritt holt den Rotor zwingend auf eine
-// Rastung, weil Microsteps gleichmaessig verteilt sind.
-//
-// Blockiert ca. 30 ms (ohne Rampe) bis ~200 ms (Rampe 150 ms). Setzt
-// voraus, dass der Aufrufer den Spiel-Slot schon belegt hat, damit das
-// Freifahren nicht dazwischenfunkt. false = nicht fertig geworden, die
-// Motoren sind gestoppt und der Aufrufer soll NICHT losfahren.
-bool motorSettle();
+// motorSettle() ist ABSICHTLICH nicht mehr vorhanden. Es fuhr vor dem
+// Programmstart zwei Vollschritte hin UND exakt zwei zurueck, "damit die
+// Raeder auf derselben Microstep-Index stehen" - das ist winkelneutral und
+// damit genau dann wirkungslos, wenn es gebraucht wuerde. Sie hat 30...200 ms
+// bei jedem Start blockiert und konnte im Timeout-Fall den Programmstart
+// komplett verhindern (PROG:NO_SETTLE). Siehe Motor.cpp.
 
 // ---- TMC2209-Laufzeit-API (UART, BEIDE Treiber) ----
 // Die Adressen stehen als TMC_ADDR_L / TMC_ADDR_R bei den #defines oben.
-// Alle Set-Befehle wirken auf BEIDE Treiber gleichzeitig.
 // Alle Set-Befehle wirken auf BEIDE Treiber gleichzeitig.
 // Treiber ein/ausschalten (EN-Pin). disable stoppt auch die Motoren.
 void tmcEnable();
@@ -201,7 +191,7 @@ void tmcAutoStandbyTick();
 void tmcReinit();
 
 // Strom / Haltestrom / Microsteps / Modus (fuer Diagnose + Tuning)
-bool tmcSetCurrent(uint16_t mA);      // 100...800, false bei ungueltig
+bool tmcSetCurrent(uint16_t mA);      // 100...200, false bei ungueltig
 bool tmcSetHold(uint8_t ihold);       // 0...31
 bool tmcSetMicrosteps(uint16_t ms);   // 1..256 (Liste), verifiziert per Readback
 void tmcSetSpreadCycle(bool spread);  // true=SpreadCycle, false=StealthChop

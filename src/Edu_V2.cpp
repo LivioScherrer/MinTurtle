@@ -1402,17 +1402,9 @@ static bool cmdProg(const String& cmd) {
     // Ein fremder Start, der waehrend des Laufs currentGame belegt haette,
     // wuerde dadurch wieder freigeraeumt, waehrend das neue Spiel weiterlaeuft.
     if (claimGameSlot("PROG:BUSY", "PROG")) return true;
-    // EINRASTEN, bevor das Programm losfaehrt. Der Slot ist schon belegt,
-    // deshalb blockiert driveUpdate() und das Freifahren kann nicht
-    // dazwischenfunken. Das Einrasten selbst dauert ~30...200 ms und ist fuer
-    // ein Kind genau die sichtbare Pause "der Roboter macht sich bereit".
-    if (!motorSettle()) {
-      // Slot wieder freigeben - progRun() wuerde das sonst am Ende tun, das
-      // laeuft hier aber gar nicht.
-      currentGame = GAME_NONE;
-      sendStatus("PROG:NO_SETTLE");
-      return true;
-    }
+    // Kein Einrasten mehr: es hat 30...200 ms blockiert und konnte im
+    // Timeout-Fall den Start verhindern, ohne den Schiefstand zu beheben
+    // (motorSettle war winkelneutral - siehe Motor.cpp).
     progRun();
   } else if (sub == "STOP") {
     progStop();

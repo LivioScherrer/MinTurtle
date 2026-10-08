@@ -9215,9 +9215,6 @@ function slalomRefreshUi() {
         } else if (msg === 'PROG:NONE') {
           progUnlock();
           showFeedback('progFeedback', 'error', 'Kein Programm gesetzt!');
-        } else if (msg === 'PROG:NO_SETTLE') {
-          progUnlock();
-          showFeedback('progFeedback', 'error', 'Der Roboter konnte sich nicht bereitmachen. Bitte kurz STOP drücken und nochmal versuchen.');
         } else if (msg === 'PROG:MAXITER') {
           showFeedback('progFeedback', 'error', 'Schleifen-Limit erreicht – weiter geht\'s!');
         }

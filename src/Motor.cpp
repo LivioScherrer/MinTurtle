@@ -35,17 +35,23 @@
 #include <esp_timer.h>
 
 namespace {
-  // Einrasten vor dem Programmstart: wie viele VOLLschritte hin und zurueck.
-  // 2 gibt Reserve gegen einen verlorenen Puls; 1 wuerde reichen. Bewusst
-  // nicht als Web-UI-Wert: das ist eine Sache, die einfach funktionieren
-  // soll, und eine Zahl mehr auf der Einstellungsseite ist nur eine weitere
-  // Stelle, an der jemand etwas verstellen kann, das er nicht versteht.
-  constexpr int32_t SETTLE_FULL_STEPS = 2;
-  // Harte Obergrenze fuer das Warten. Bei 2 Vollschritten (32 Microsteps bei
-  // 16) und 150 mm/s ist das nach ~30 ms ohne Rampe bzw. ~200 ms mit Rampe
-  // weit ueberdimensioniert. Es geht nur darum, nicht ewig zu haengen,
-  // wenn der Motor-Task klemmt.
-  constexpr uint32_t SETTLE_TIMEOUT_MS = 1000;
+  // KEIN Einrasten mehr. Es gab einmal motorSettle(): zwei Vollschritte hin
+  // UND exakt zwei zurueck vor dem Programmstart, "damit die Raeder auf
+  // derselben Microstep-Index stehen".
+  //
+  // Das ist winkelneutral - am Ende steht jeder Rotor genau wieder auf der
+  // Index, auf der er vorher stand, nur eben um den Schiefstand gegen das
+  // jeweils andere Rad versetzt. Der gewuenschte Effekt tritt genau dann NICHT
+  // ein, wenn er gebraucht wird, und kostet dafuer 30...200 ms blockiert bei
+  // jedem Start (mit dem Risiko eines Timeouts, in dem gar nichts mehr faehrt).
+  //
+  // Hintergrund, warum es den Schiefstand nicht geben kann, ihn aber auch nicht
+  // wegbekommt: bei einem direkt gekoppelten Stepper (Motor -> Rad ohne
+  // Getriebe) haengt die Fahrweg-Richtung an der Rad-/Achs-Montage am Chassis,
+  // nicht an der Rotorposition. Beide Raeder rollen exakt gleich weit, der
+  // Fahrweg ist eine exakt gerade Linie - sie liegt nur um h schraeg zur
+  // Roboterachse. Rotor-Schlupf verschiebt die Speichen, nicht die Radebene.
+  // "Die Raeder stehen anders" ist eine Baugroesse, keine Firmware-Groesse.
 
   // Stepper-Treiber - bewusst NUR hier sichtbar: Ausserhalb dieses Moduls darf
   // niemand direkt run()/runSpeed()/stop() o.ae. aufrufen (Race Conditions).
@@ -659,58 +665,14 @@ bool motorStillRunning() {
   return (posActiveL && remainingL != 0) || (posActiveR && remainingR != 0);
 }
 
-// ---- EINRASTEN: Rastpunkt suchen, bevor es losgeht ----
-// Zwei VOLLschritte vor und exakt zwei zurueck, beide Raeder gleich. Beide
-// Wege sind symmetrisch, also entsteht durch das Einrasten kein Schwenk.
-//
-// Warum ueberhaupt: die Treiber schalten nach TMC_STANDBY_MS Stillstand ab
-// (kein Haltestrom, kuehl). Danach kann ein Rad von Hand, durch eine Stosse
-// oder durch das Aufsetzen verrutscht sein - und zwar jedes um einen anderen
-// Betrag. Der Roboter steht dann schief, und die erste programmierten Fahrt
-// faehrt in diesem Winkel weiter, statt sauber gerade. Genau das ist als
-// "am Anfang faehrt einer frueher los" aufgefallen.
-//
-// Warum ein Schritt reicht: Microsteps sind gleichmaessig verteilt, also
-// liegt der Rotor nach einem Pulses zwingend auf einer Rastung - unabhaengig
-// davon, wo er vorher lag. Zwei Vollschritte geben Reserve gegen einen
-// verlorenen Puls.
-//
-// Warum zurueck: der Roboter soll danach genau da stehen, wo das Kind ihn
-// hingestellt hat.
-//
-// blockiert ca. 30 ms (ohne Rampe) bis ~200 ms (Rampe 150 ms), je nach
-// config.rampMs und Tempo. Bewusst OHNE bleProcessEvents(): eine Re-Entranz
-// waehrend einer mechanischen Bewegung ist schlechter als 200 ms ohne
-// Befehlsannahme - das 256-Byte-Eingangsfeld traegt das bequem.
-bool motorSettle() {
-  if (!motorReady) {
-    Serial.println("[MOTOR] Einrasten uebersprungen (Motor nicht bereit)");
-    return false;
-  }
-  const int32_t n = geoStepsForFullSteps(SETTLE_FULL_STEPS, config.tmcMicrosteps);
-  if (n <= 0) return false;
-  for (int leg = 0; leg < 2; leg++) {
-    const long dir = (leg == 0) ? (long)n : -(long)n;
-    prepPositionMove(0, dir);
-    prepPositionMove(1, dir);
-    const uint32_t t0 = millis();
-    while (motorStillRunning()) {
-      if (millis() - t0 > SETTLE_TIMEOUT_MS) {
-        // Der Motor-Task kommt nicht voran - dann ist mehr kaputt als die
-        // Startposition. Lieber stehen bleiben und melden als ein Programm zu
-        // starten, das auf einem unkontrollierten Roboter laeuft.
-        Serial.printf("[MOTOR] Einrasten: nach %u ms nicht fertig - Abbruch\n",
-                      (unsigned)SETTLE_TIMEOUT_MS);
-        stopMotors();
-        return false;
-      }
-      vTaskDelay(1);
-    }
-  }
-  Serial.printf("[MOTOR] Eingerastet (%d Vollschritte hin und zurueck, %ld Schritte/Rad)\n",
-                (int)SETTLE_FULL_STEPS, (long)n);
-  return true;
-}
+// ---- motorSettle() geloescht ----
+// Die Funktion fuhr vor dem Programmstart zwei Vollschritte hin UND exakt
+// zwei zurueck, "damit die Raeder auf derselben Microstep-Index stehen".
+// Das ist winkelneutral - am Ende steht jeder Rotor genau wieder auf der
+// Index, auf der er vorher stand, nur eben um den Schiefstand gegen das
+// jeweils andere Rad versetzt. Also genau dann wirkungslos, wenn es gebraucht
+// wuerde. Sie hat dafuer 30...200 ms bei jedem Start blockiert und konnte im
+// Timeout-Fall den Programmstart komplett verhindern (PROG:NO_SETTLE).
 
 // ---- TMC2209-Laufzeit-API (Adresse siehe TMC_ADDR_L / TMC_ADDR_R) ----
 
@@ -878,48 +840,6 @@ void tmcBootDiag() {
     tmcL.mres(), s_currentMa, s_hold,
     s_spread ? "SpreadCycle" : "StealthChop", s_enabled ? "EIN" : "AUS");
   Serial.println("===================================");
-}
-
-// ---- UART-Diagnose (per Serial-Befehl "UARTTEST" triggern) ----
-// [2] Raw-Read an Adresse 0/1: Wir senden ein Read-Request und dumpen ALLE
-//     empfangenen Bytes. Da TX ueber 1k (PCB R9) auf dasselbe Netz wie RX geht,
-//     erwarten wir zunaechst ein Echo unserer 4 Bytes (Kontinuitaets-Test),
-//     danach 8 Bytes TMC-Antwort. Interpretation:
-//       4 Bytes            -> Leitung OK, TMC antwortet nicht (Strom/Addr/PDN-Pad)
-//       12 Bytes           -> alles perfekt
-//       0 Bytes            -> Bus offen (Widerstand fehlt / falscher Pin)
-// [3] Absolute Baudrate messen (ein blockierender 600-Byte-Write).
-// [4] Gleiches Protokoll auf Serial2 (UART2) auf denselben Pins testen.
-static uint8_t tmcCrc8(const uint8_t* d, uint8_t len) {
-  uint8_t crc = 0;
-  for (uint8_t i = 0; i < len; i++) {
-    uint8_t b = d[i];
-    for (uint8_t j = 0; j < 8; j++) {
-      if ((crc >> 7) ^ (b & 0x01)) crc = (crc << 1) ^ 0x07;
-      else crc = (crc << 1);
-      crc &= 0xFF;
-      b >>= 1;
-    }
-  }
-  return crc;
-}
-
-static uint32_t measureBaud(HardwareSerial& port, const char* name) {
-  while (port.available()) port.read();
-  static uint8_t burst[600];
-  memset(burst, 0x55, sizeof(burst));
-  const uint32_t t0 = micros();
-  port.write(burst, sizeof(burst));
-  const uint32_t tBlock = micros() - t0;
-  const uint32_t tDrain0 = micros();
-  while (port.available() && (micros() - tDrain0) < 100000UL) port.read();
-  uint32_t baud = 0;
-  if (tBlock > 1000) {
-    baud = (uint32_t)(((uint64_t)(sizeof(burst) - 128) * 10ULL * 1000000ULL) / tBlock);
-  }
-  Serial.printf("[3] %s: write(600) blockierte %lu us -> ~%lu Baud (115200: ~41000us)\n",
-    name, (unsigned long)tBlock, (unsigned long)baud);
-  return baud;
 }
 
 // "UARTNET": Charakterisiert das PDN-Netz elektrisch (ohne UART-Verkehr).

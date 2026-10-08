@@ -111,19 +111,6 @@ static inline bool gameAllowsMotorRun() {
   return currentGame == GAME_PROG || currentGame == GAME_SLALOM;
 }
 
-// Kurz warten bis Farbe stabil sichtbar (max timeoutMs), mit Abbruch-Check
-static bool colorSettled(uint8_t idx, uint32_t timeoutMs = 250) {
-  uint32_t start = millis();
-  while (millis() - start < timeoutMs) {
-    if (!gameAllowsMotorRun()) return false;
-    if (sensorPoll(idx)) return true;
-    bleProcessEvents();
-    espNowProcessEvents();
-    vTaskDelay(pdMS_TO_TICKS(20));
-  }
-  return false;
-}
-
 // =====================================================
 // Umrechnung Benutzer-Einheiten -> Stepper-Schritte
 // Immer aus der Geometrie (config.quizForwardMM / quizTurnDeg sind in mm

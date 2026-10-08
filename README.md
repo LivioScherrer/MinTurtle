@@ -276,32 +276,31 @@ neu berechnet (`configForwardSteps()` / `configTurnSteps()`). Microsteps
 `Motor.h` hält die Stepper-Instanzen privat - direkte `stepper.run()`-Aufrufe
 ausserhalb von `Motor.cpp` sind dadurch unmöglich.
 
-### Einrasten vor dem Programmstart
+### Kein Einrasten, und warum nicht
 
-`PROG:RUN` rastet vorher beide Motoren ein (`motorSettle()` in `Motor.cpp`):
-zwei Vollschritte vor und exakt zwei zurück, beide Räder gleich.
+Es gab einmal `motorSettle()`: **zwei** Vollschritte vor **und exakt zwei
+zurück** vor dem Programmstart, „damit die Räder auf derselben Microstep-Index
+stehen". Die Funktion ist gelöscht.
 
-**Warum.** Die Treiber schalten nach `TMC_STANDBY_MS` (3 s) Stillstand ab —
-kein Haltestrom, kühl. Danach kann ein Rad verrutscht sein, etwa von Hand,
-durch eine Stöße oder beim Aufsetzen — und zwar jedes um einen anderen Betrag.
-Der Roboter steht dann schief, und die erste programmierte Fahrt fährt in
-diesem Winkel weiter, statt sauber gerade. Das war als „am Anfang fährt einer
-früher los" aufgefallen. Die Strecke selbst stimmt danach, sie ist nur
-verdreht.
+**Warum sie nichts gebracht hat.** Zwei Vollschritte hin *und* zwei zurück sind
+**winkelneutral**: am Ende steht jeder Rotor genau wieder auf der Microstep-Index,
+auf der er vorher war — nur eben um den Schiefstand gegen das jeweils andere Rad
+versetzt. Der gewünschte Effekt (beide gleich) tritt genau dann **nicht** ein,
+wenn er gebraucht würde.
 
-**Warum ein Schritt reicht.** Microsteps sind gleichmäßig verteilt, also liegt
-der Rotor nach einem Puls zwingend auf einer Rastung — unabhängig davon, wo er
-vorher lag. Zwei Vollschritte geben Reserve gegen einen verlorenen Puls.
+**Warum es grundsätzlich nicht geht.** Bei einem **direkt gekoppelten Stepper**
+(Motor → Rad ohne Getriebe) hängt die *Fahrweg-Richtung* an der **Rad-/Achs-Montage**
+am Chassis, nicht an der Rotorposition. Beide Räder rollen exakt gleich weit →
+der Fahrweg ist eine exakt gerade Linie, sie liegt nur um `h` schräg zur
+Roboterachse („Krebsgang"). Rotor-Schlupf verschiebt die **Speichen**, nicht die
+**Radebene**. „Die Räder stehen anders" ist deshalb eine **Baustuffgröße**, keine
+Firmwaresache — man könnte sie nur durch eine Beilenscheibe unter einem Rad
+beseitigen, nicht durch Software.
 
-**Warum zurück.** Der Roboter soll danach genau da stehen, wo das Kind ihn
-hingestellt hat. Beide Wege sind symmetrisch, es entsteht also kein Schwenk.
+**Was es gekostet hat:** 30…200 ms blockiert bei jedem Programmstart, und im
+Timeout-Fall (`PROG:NO_SETTLE`) startete das Programm **gar nicht**.
 
-Dauer ca. 30 ms ohne Rampe bis ~200 ms bei `rampMs = 150`; blockiert bewusst
-ohne `bleProcessEvents()` (lieber 200 ms keine Befehle annehmen als eine
-Re-Entranz mitten in einer mechanischen Bewegung). Schafft es `motorSettle()`
-nicht innerhalb von `SETTLE_TIMEOUT_MS`, bleiben die Motoren stehen, es kommt
-`PROG:NO_SETTLE`, und das Programm startet **nicht** — auf einem unkontrollierten
-Roboter kein Programm zu starten ist schlechter als eine Fehlermeldung.
+`PROG:RUN` fährt deshalb direkt los.
 
 ---
 
@@ -393,8 +392,7 @@ in der Web-UI direkt unter dem Tempo einstellbar.
 | `SLALOM:STOP` / `SLALOM:UNPAIR` | Slalom abbrechen / trennen |
 | `LINE:START` / `LINE:STOP` | Linienfolger |
 | `MEMORY:START` / `MEMORY:START:<n>` / `MEMORY:INPUT:<n>` / `MEMORY:STOP` | Memory (3..`MEMORY_MAX_LEN`) |
-| `PROG:SET:<enc>` / `PROG:RUN` / `PROG:STOP` | Programmierung. `PROG:RUN` rastet vorher beide Motoren ein (siehe unten) |
-| `PROG:NO_SETTLE` | Antwort auf `PROG:RUN`, wenn das Einrasten nicht fertig wurde — das Programm startet dann **nicht** |
+| `PROG:SET:<enc>` / `PROG:RUN` / `PROG:STOP` | Programmierung. `PROG:RUN` fährt direkt los (ein Einrasten gab es einmal, ist aber gelöscht — siehe „Kein Einrasten") |
 
 ---
 

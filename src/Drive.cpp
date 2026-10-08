@@ -1,5 +1,5 @@
 // EduBot V2 - Drive-Implementierung (WASD / Touch)
-// Feste Geschwindigkeit aus Motor.h - keine Einstellung moeglich.
+// Zielgeschwindigkeit aus config.driveSpeedMM (per SPEED:<mm/s> einstellbar).
 #include "Drive.h"
 #include "Motor.h"
 #include "Config.h"
@@ -31,7 +31,7 @@ void driveUpdate() {
   // blockierend gesteuert - KEYS: vom Frontend werden ignoriert.
   if (driveLockedByGame()) return;
 
-  // Feste Geschwindigkeit - keine Einstellung irgendwo.
+  // Geschwindigkeit aus config.driveSpeedMM (per SPEED: einstellbar).
   // Drehen auf der Stelle: ein Motor still, der andere mit voller Geschwindigkeit.
   float targetL = 0.0;
   float targetR = 0.0;
