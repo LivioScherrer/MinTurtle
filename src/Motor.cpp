@@ -409,18 +409,16 @@ void configureOne(TMC2209Diag& d, bool& msOkOut) {
   // Register statt aus den MS-Pins - siehe den MRES-Hinweis am Ende.
   // multistep_filt = 1 (Glattung des Puffilings ueber 750 Hz).
   //
-  // i_scale_analog (Bit 0) = 1 ist GEMESSEN, nicht geraten. Mit Bit 0 = 0
-  // fuhr der Roboter nicht mehr: Zaehler laufen voll, Silizium fuehrt nur
-  // einen Bruchteil aus (MSCNT +136 von 2654), Motoren pfeifen, v = 0.
-  // Mit Bit 0 = 1 (Zustand vor dem Entfernen der Bibliotheks-Schreibzugriffe,
-  // GCONF las sich als 0x1C1) faehrt er.
-  // Physik: Bit 0 = 1 heisst "interner Messpfad" (fuer grosse
-  // Fuehlerwiderstaende). Wenn das Drehmoment braucht, stimmt die Annahme
-  // "560 mOhm" aus HARDWARE_FAKTEN.md nicht - dann sind die verbauten
-  // Fuehler deutlich groesser. OFFEN: Aufdruck der Stromfuehler auf der
-  // Platine ablesen und die Doku danach korrigieren.
+  // i_scale_analog (Bit 0) = 1: Der Roboter faehrt damit, mit Bit 0 = 0
+  // steht er (Zaehler laufen voll, Silizium fuehrt nur einen Bruchteil aus,
+  // Motoren pfeifen, v = 0). Der Aufdruck auf den Stromfuehlern ist R560,
+  // also stimmen die 560 mOhm aus HARDWARE_FAKTEN.md - warum Bit 0 = 1
+  // trotzdem das fahrende Bit ist, ist physikalisch OFFEN (vermutlich ist
+  // die Skalierungsrichtung andersherum als angenommen). Es gilt das
+  // gemessene Verhalten. Falls die Motoren heiss werden, ist das die
+  // erste Stelle zum Nachsehen.
   uint32_t gconf = GCONF_PDN_DISABLE | GCONF_MSTEP_REG_SELECT | GCONF_MULTISTEP_FILT
-                 | 0x01u;   // i_scale_analog, GEMESSEN (siehe oben)
+                 | 0x01u;   // i_scale_analog = 1: faehrt (GEMESSEN)
   if (s_spread) gconf |= GCONF_EN_SPREADCYCLE;
   tmcWriteChecked(d, TMC_REG_GCONF, gconf, GCONF_MASK, "GCONF");
 
