@@ -700,7 +700,8 @@ in der Web-UI direkt unter dem Tempo einstellbar.
 | `SLALOM:STOP` / `SLALOM:UNPAIR` | Slalom abbrechen / trennen |
 | `LINE:START` / `LINE:STOP` | Linienfolger |
 | `MEMORY:START` / `MEMORY:START:<n>` / `MEMORY:INPUT:<n>` / `MEMORY:STOP` | Memory (3..`MEMORY_MAX_LEN`) |
-| `PROG:SET:<enc>` / `PROG:RUN` / `PROG:STOP` | Programmierung. `PROG:RUN` fährt direkt los (ein Einrasten gab es einmal, ist aber gelöscht — siehe „Kein Einrasten") |
+| `PROG:SET:<enc>` / `PROG:RUN` / `PROG:STOP` | Programmierung. `PROG:SET` sendet das Encoding, `PROG:RUN` startet erst nach `PROG:READY:<n>` (Timeout 1,5 s). `PROG:STOP` bricht **jedes** laufende Programm ab (auch innerhalb von Schleifen). |
+| `PROG:AT:<pfad>` | Lauf-Anzeige: Pfad-Indizes statt flacher Index. `0` = 1. Top-Level-Baustein, `0.3` = 4. Baustein im Body des 1. Loops, `0.3.1` = 2. Baustein im Body einer darin verschachtelten Schleife. Ersetzt `PROG:STEP`/`PROG:SUB`. |
 
 ---
 
@@ -756,8 +757,45 @@ werden:
    ebenfalls nur gelesen: die Fehlerbits werden durch **Schreiben** gelöscht,
    und das unterbleibt absichtlich.
 10. **Kein Register-Read aus dem 50-µs-Puls-Task.** Ein Read auf dem
-   gemeinsamen Bus kostet ~2 ms und würde 40 Ticks verschlucken. Die Messung
-   liest deshalb genau ein Register pro Loop-Durchlauf.
+    gemeinsamen Bus kostet ~2 ms und würde 40 Ticks verschlucken. Die Messung
+    liest deshalb genau ein Register pro Loop-Durchlauf.
+
+---
+
+## Block-Programmierung (PROG): Lauf-Protokoll & Regeln (ab 2026-10)
+
+### `PROG:AT:<pfad>` — das neue Lauf-Protokoll
+Die Firmware sendet waehrend der Ausfuehrung `PROG:AT:<pfad>` statt der alten `PROG:STEP`/`PROG:SUB` Indizes.
+
+| Pfad | Bedeutung |
+|---|---|
+| `0` | 1. Top-Level-Baustein |
+| `0.3` | 4. Baustein im Body des 1. Loops |
+| `0.3.1` | 2. Baustein im Body einer darin verschachtelten Schleife |
+| `1` | 2. Top-Level-Baustein (nach einem Loop) |
+
+Der Pfad besteht aus den **Geschwister-Indizes** (0-basiert) auf jeder Ebene. Die UI baut daraus direkt die `data-path` der Baustein-Elemente und toggelt die Klassen `.running` (aktueller Baustein) und `.running-sub` (umgebender Loop-Kopf). Kein voller Re-Render pro Schritt mehr — nur Klassen-Wechsel.
+
+### `Q` (Vollstopp) bricht das **ganze** Programm ab
+Frueher war `Q` in einer Schleife wirkungslos (bremste 150 ms, dann weiter). Jetzt setzt `Q` `progActive = false` und `currentGame = GAME_NONE` — alle umgebenden Schleifen wickeln sich über `gameAllowsMotorRun()` ab und das Programm endet mit `PROG:ABORT`.
+
+### Bis-Schleife (`C`) — nur eigenes Ziel beenden
+Ein `C`-Block (z.B. `C2(F10)`) endet **nur**, wenn der *eigene* Farbslot (hier GRUEN) erkannt wird. Ein `P3` (fahre bis BLAU) im Koerper beendet die `C2`-Schleife **nicht** mehr — er meldet BLAU, die Schleife laeuft weiter. Das alte Verhalten (jeder Treffer beendet die Schleife und meldet deren Farbe) war verwirrend.
+
+### C-Schleifen brauchen einen Fahr-Block
+Eine `C`-Schleife ohne `F`/`B`/`M`/`N` im Koerper prüft die Bedingung nie (nur waehrend der Fahrt wird geprueft). Solche Schleifen laufen **hoechstens einmal** durch und melden `PROG:MAXITER`. Die UI verbietet sie bereits beim Bauen.
+
+### C direkt in C ist verboten
+Verschachtelte `C`-Schleifen (`C2(C3(...))`) sind fuer Kinder nicht verstehbar (welche Farbe gehoert zu welcher Schleife?). Die UI lehnt sie ab; die Firmware wuerde den inneren Stack-Eintrag ueberschreiben.
+
+### Schrittlimit 40 (flach)
+Jeder Baustein = 1 Schritt. Jede Schleife = 1 (Kopf) + Body + 1 (END). Beispiel: `U4(F10,L90)` = 1 + (1+1) + 1 = 4 Schritte. `U20(U20(F5))` = 1 + (1 + 1 + 1) + 1 = 41 -> **zu lang**. Die UI zaehlt exakt wie die Firmware (`progCountFlatSteps`) und warnt vor `PROG:BAD`.
+
+### `PROG:RUN` wartet auf `PROG:READY`
+Nach `PROG:SET:<enc>` schickt die UI **nicht** blind nach 400 ms `PROG:RUN`, sondern registriert einen temporaeren Handler fuer `PROG:READY:<n>`. Erst wenn der Roboter bestaetigt, geht `PROG:RUN` raus. Timeout 1,5 s -> Fallback `PROG:RUN` (falls SET doch durchlief) + Fehlermeldung.
+
+### LED-Licht bei Farblesern
+Vor jedem Baustein, der eine Farbe liest (`P`, `V`, `C`, und Fahr-Bloecke mit Farbziel) wird der Streifen kurz auf `PAT_OFF` gesetzt. Ein `S`-Block (Licht) bleibt also nur bis zum naechsten Farb-Leser an und blendet den Sensor nicht mehr.
 
 ---
 

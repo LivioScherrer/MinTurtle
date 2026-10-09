@@ -131,7 +131,10 @@ namespace {
     s.setSpeed(cur);
   }
 
-  // Motor-Task: wartet blockierend auf Timer-Ticks und erzeugt faellige Pulse.
+// 50-us-Schleife, setMotorSpeedLocked() und prepPositionMoveLocked() ebenfalls.
+static volatile bool s_emergency = false;
+
+// Motor-Task: wartet blockierend auf Timer-Ticks und erzeugt faellige Pulse.
   void motorTaskLoop(void* param) {
     // Zeitbasis fuer die Rampe. Der Task rechnet die echte verstrichene Zeit,
     // nicht die Tick-Anzahl: bei Mutex-Miss faellt schon mal ein Tick aus, und
@@ -144,6 +147,20 @@ namespace {
       // scheitert. Dieser Task kann also nie mit nullptr laufen. Ein
       // motorReady-Check ist hier deshalb nicht noetig (und waere in der
       // 50-us-Schleife auch unnoetiger Overhead).
+      //
+      // Not-Halt zuerst und noch VOR dem Mutex: motorEmergencyStop() schreibt
+      // die Zustandsvariablen absichtlich ohne Sperre. Ohne diesen Zweig
+      // wuerde die Rampe hier s_curL/R wieder hochzaehlen und die Motoren
+      // wieder anwerfen - der Waechter haelt sie dann fuer genau einen Tick
+      // still und laesst sie weiterfahren. Genau der Fehler, den es ohne
+      // diese Zeile gabe.
+      if (s_emergency) {
+        stepperHalt(stepperL);
+        stepperHalt(stepperR);
+        s_curL = 0.0f; s_curR = 0.0f;
+        s_tgtL = 0.0f; s_tgtR = 0.0f;
+        continue;
+      }
       if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
         // Einmal pro 50-us-Tick lesen, beide Motoren nutzen denselben Wert.
         const bool ramp = s_rampOn;
@@ -844,6 +861,10 @@ static void takeMotorMutex() {
 // unter EINEM Mutex-Halt gesetzt, sodass kein Zeitfenster zwischen zwei
 // Befehlen entstehen kann.
 static void setMotorSpeedLocked(int motorIdx, float speed, bool useRamp) {
+  // Not-Halt (Tischkante). Steht VOR allem, auch vor speed == 0: der
+  // Stopp-Zweig wuerde sonst weiterhin sauber abbremsen und damit den
+  // Zustand "die Motoren sind wirklich still" wieder aufloesen.
+  if (s_emergency) return;
   if (speed == 0.0f) {
     // ---- WEICHES ABBREMSEN (Taste losgelassen) ----
     // NUR das Ziel auf 0. Der Puls-Task laesst die Ist-Geschwindigkeit dann
@@ -1015,14 +1036,51 @@ bool motorSyncMicrosteps() {
 
 // Both wheels onto the same microstep index. See Motor.h for the why.
 void stopMotors() {
-  // Fail-Safe wie beim Stopp-Zweig in setMotorSpeed(): ein Stopp darf nie
-  // still scheitern, sonst laeuft der Roboter weiter.
-  if (!motorReady) return;   // siehe motorReady
+     // Fail-Safe wie beim Stopp-Zweig in setMotorSpeed(): ein Stopp darf nie
+     // still scheitern, sonst laeuft der Roboter weiter.
+     if (!motorReady) return;   // siehe motorReady
   takeMotorMutex();
   posActiveL = false; remainingL = 0; s_curL = 0.0f; s_tgtL = 0.0f; stepperHalt(stepperL);
   posActiveR = false; remainingR = 0; s_curR = 0.0f; s_tgtR = 0.0f; stepperHalt(stepperR);
   xSemaphoreGive(motorMutex);
 }
+
+// ---- Not-Halt: haelt die Motoren an, bis ausdruecklich freigegeben ----
+// Aufgerufen vom Tischkanten-Waechter im Sensor-Task (Core 1), mitten in
+// jeder denkbaren Betriebsart: freies Fahren, Positionsfahrt, Block-
+// programm, Linienfolger, Spiel, Slalom. Es gibt keinen Pfad, auf dem ein
+// Befehl am Not-Halt vorbeikommt - setMotorSpeedLocked() und
+// prepPositionMoveLocked() pruefen beide auf s_emergency und verwerfen das
+// Anfahren.
+// 50-us-Schleife, setMotorSpeedLocked() und prepPositionMoveLocked() ebenfalls.
+
+void motorEmergencyStop() {
+  s_emergency = true;
+  // Ohne den Mutex. Der wird vom 50-us-Puls-Task alle 50 us genommen; ein
+  // Wartender wuerde die Motoren womoeglich erst stoppen, wenn sie schon
+  // weitergefahren sind. Der Notfall-Stopp darf nicht warten.
+  //
+  // Der Preis: s_curL/R und die Positionszaehler koennen gerade halb
+  // aktualisiert sein. Das ist hier unkritisch - s_emergency blockiert jedes
+  // weitere Anfahren, und beim Freigeben wird ueber
+  // motorUpdateSpeeds()/setMotorSpeedLocked() sauber neu gesetzt.
+  if (!motorReady) return;
+  stepperHalt(stepperL);
+  stepperHalt(stepperR);
+  s_tgtL = 0.0f; s_tgtR = 0.0f;
+  s_curL = 0.0f; s_curR = 0.0f;
+  posActiveL = false; posActiveR = false;
+  remainingL = 0; remainingR = 0;
+}
+
+void motorReleaseEmergency() {
+  // Erst die Motoren anhalten, DANN den Zustand loeschen. Andersherum
+  // koennte ein Befehl zwischen dem Loeschen und dem Stopp durchrutschen.
+  stopMotors();
+  s_emergency = false;
+}
+
+bool motorEmergencyActive() { return s_emergency; }
 
 // Reihenfolge-Vorbereitung: prepPositionMoveLocked() wird von beiden
 // oeffentlichen Wegen gebraucht, steht aber weiter unten im Text.
@@ -1049,6 +1107,11 @@ void prepPositionMoves(long stepsL, long stepsR) {
 
 // Voraussetzung: motorMutex ist gehalten.
 static void prepPositionMoveLocked(int motorIdx, long physicalSteps) {
+  // Not-Halt (Tischkante): keine neue Position setzen. Das deckt jeden
+  // Fahrweg ab - Fahren, Drehen, Distanz- und Farbbausteine, Linienfolger,
+  // Spiele und Slalom laufen alle ueber prepPositionMove/prepPositionMoves
+  // bzw. setMotorSpeed. Es gibt keinen Pfad daran vorbei.
+  if (s_emergency) return;
   {
     AccelStepper& s = (motorIdx == 0) ? stepperL : stepperR;
     volatile float& cur = (motorIdx == 0) ? s_curL : s_curR;

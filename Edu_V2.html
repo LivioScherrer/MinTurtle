@@ -4301,6 +4301,12 @@ function updateConnectionUI(isConn, text) {
 
       // DIST-Schwellen mit Hysterese, per OBSDIST=/OBSREL= vom Roboter gelernt.
       let distStopMM = 100, distFreeMM = 130;
+      // Temporaere Status-Handler (z.B. fuer PROG:READY nach SET)
+      const statusHandlers = [];
+      function addStatusHandler(fn) {
+        statusHandlers.push(fn);
+        return () => { const i = statusHandlers.indexOf(fn); if (i >= 0) statusHandlers.splice(i, 1); };
+      }
       function handleStatusMessage(msg) {
         // ---- Kalibrier-Assistent: MUSS vor allem anderen kommen ----
         // Der Assistent zaehlt seinen Schritt erst nach bestaetigter Antwort
@@ -4521,6 +4527,8 @@ function updateConnectionUI(isConn, text) {
           // Befehl ankommt und was die Firmware antwortet, oeffnet
           // Edu_V2_dev.html (Entwicklerseite mit Protokoll-Ansicht).
         }
+        // Temporaere Handler ausfuehren (z.B. fuer PROG:READY nach SET)
+        statusHandlers.forEach(fn => fn(msg));
       }
       function currentViewId() {
         const a = document.querySelector('.view.active');
@@ -8446,7 +8454,7 @@ function slalomRefreshUi() {
 
       let progBlocks = [];      // [{op,val} | {op:'U',val,body:[...]} | {op:'C',color,body:[...]}]
       let progRunning = false;
-      let progRunStep = -1, progRunSub = -1;
+      
 let progPaletteEColor = 0;   // persistente Farbe des E-Blocks in der Palette
 let progPaletteColor = 0;    // persistente Farbe fuer P/V/C (Farb-Chip im Header)
 let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palette
@@ -8741,20 +8749,16 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
         // Rubrik am Baustein merken: die Farbe im Design richtet sich danach
         const catOfOp = PROG_CATS.find(c => c.ops.indexOf(b.op) >= 0);
         if (catOfOp) wrap.dataset.cat = catOfOp.id;
-        if (progRunning && ctx.where === 'prog' && progRunStep === ctx.idx) {
-          wrap.classList.add(progRunSub >= 0 ? 'running-sub' : 'running');
-        }
+        // Pfad fuer PROG:AT:<pfad> Highlighting: "0.3.1" etc.
+        const fullPath = (ctx.path || []).concat(typeof ctx.idx === 'number' ? [ctx.idx] : []).join('.');
+        if (fullPath) wrap.dataset.path = fullPath;
         wrap.appendChild(progBuildHead(b, ctx));
 
         if (def.loop && ctx.where !== 'palette') {
           const body = document.createElement('div');
           body.className = 'prog-blk-body';
-          // Pfad statt Index: damit ist JEDER Koerper erreichbar, auch der
-          // einer verschachtelten Schleife. Frueher trugen nur die Koerper der
-          // obersten Ebene eine Zielmarke - in eine zweite Schleife konnte man
-          // nichts ziehen.
-          body.dataset.path = (ctx.path || []).join('.');
-          if (ctx.path) body._bodyRef = b.body;
+          body.dataset.path = (ctx.path || []).concat(typeof ctx.idx === 'number' ? [ctx.idx] : []).join('.');
+          if (ctx.path || typeof ctx.idx === 'number') body._bodyRef = b.body;
           if (typeof ctx.idx === 'number') body.dataset.pidx = ctx.idx;
           if (b.body.length === 0) {
             const ph = document.createElement('div');
@@ -8767,10 +8771,9 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
             ph.appendChild(plus); ph.appendChild(txt);
             body.appendChild(ph);
           }
-          const childPath = (ctx.path || []).concat([ctx.idx]);
+          const childPath = (ctx.path || []).concat(typeof ctx.idx === 'number' ? [ctx.idx] : []);
           b.body.forEach((child, j) => {
             const cel = progBuildBlock(child, { where: 'body', pidx: ctx.idx, bidx: j, path: childPath });
-            if (progRunning && progRunStep === ctx.idx && progRunSub === j) cel.classList.add('running');
             body.appendChild(cel);
           });
           wrap.appendChild(body);
@@ -9168,6 +9171,19 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
         return b.op + b.val;
       }
 
+      // Zaehlt flache Schritte wie die Firmware: Block = 1, Schleife = 1 + Body + 1 END.
+      function progCountFlatSteps(blocks) {
+        let n = 0;
+        for (const b of blocks) {
+          n++;
+          if (PROG_DEFS[b.op].loop) {
+            n += progCountFlatSteps(b.body);
+            n++; // OP_END
+          }
+        }
+        return n;
+      }
+
       // Prueft ein Programm rekursiv. Gibt null zurueck, wenn alles passt,
       // sonst eine Meldung fuer die Anzeige.
       function progValidate(blocks, depth) {
@@ -9180,10 +9196,19 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
           if (PROG_DEFS[b.op].loop) {
             if (depth >= PROG_MAX_DEPTH) return 'Schleifen sind zu tief verschachtelt (max. ' + PROG_MAX_DEPTH + ').';
             if (!b.body || b.body.length === 0) return 'Ein „' + PROG_DEFS[b.op].label + '"-Block ist leer!';
+            // C-Schleife braucht mindestens einen Fahr-Baustein, sonst prüft sie nie
+            if (b.op === 'C') {
+              const hasDrivable = b.body.some(c => ['F','B','M','N'].includes(c.op));
+              if (!hasDrivable) return 'Eine „wiederhole bis"-Schleife braucht einen Fahr-Baustein (F, B, M, N).';
+            }
+            // C direkt in C ist verwirrend und wird abgelehnt
+            if (b.body.some(c => c.op === 'C')) return '„wiederhole bis" darf nicht direkt in eine andere „wiederhole bis"-Schleife.';
             const sub = progValidate(b.body, depth + 1);
             if (sub) return sub;
           }
         }
+        const flat = progCountFlatSteps(blocks);
+        if (flat > PROG_MAX_STEPS) return 'Programm zu lang (max. ' + PROG_MAX_STEPS + ' Schritte, hier ' + flat + ').';
         return null;
       }
 
@@ -9195,9 +9220,35 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
 
       function progUnlock() {
         progRunning = false;
-        progRunStep = -1; progRunSub = -1;
         progSetLocked(false);
+        // Highlights bleiben beim Stop/Ende sichtbar (Kind sieht wo es war)
+        // Nächstes RUN loescht sie beim Start
         progRender();
+      }
+
+      // Wartet auf PROG:READY nach SET, dann schickt RUN. Timeout 1500 ms.
+      function progStartAfterReady(enc) {
+        progRunning = true;
+        progSetLocked(true);
+        progRender();
+        sendCommand('PROG:SET:' + enc);
+        let ready = false;
+        const handler = (msg) => {
+          if (msg.startsWith('PROG:READY:')) {
+            ready = true;
+            sendCommand('PROG:RUN');
+          } else if (msg === 'PROG:BAD' || msg === 'PROG:NONE') {
+            ready = true; // Fehler -> Unlock passiert in handleProgMessage
+          }
+        };
+        const off = addStatusHandler(handler);
+        setTimeout(() => {
+          off();
+          if (!ready) {
+            // Timeout: vielleicht lief SET doch durch, RUN sicherheitshalber senden
+            sendCommand('PROG:RUN');
+          }
+        }, 1500);
       }
 
       document.getElementById('btnProgRun').addEventListener('click', () => {
@@ -9213,12 +9264,7 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
           showFeedback('progFeedback', 'error', 'Programm zu lang! Weniger Blöcke.');
           return;
         }
-        progRunning = true;
-        progRunStep = -1; progRunSub = -1;
-        progSetLocked(true);
-        progRender();
-        sendCommand('PROG:SET:' + enc);
-        setTimeout(() => sendCommand('PROG:RUN'), 400);
+        progStartAfterReady(enc);
         setStep('prog', 3);
       });
       // ---- Eigene Programme speichern und laden (nur lokal im Gerät) ----
@@ -9354,15 +9400,10 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
           showFeedback('progFeedback', 'success', 'Programm geladen – Roboter startet…');
         } else if (msg === 'PROG:RUNNING') {
           showFeedback('progFeedback', 'success', 'Roboter führt dein Programm aus!');
-        } else if (msg.startsWith('PROG:STEP:')) {
-          progRunStep = parseInt(msg.substring(10)) || 0;
-          progRunSub = -1;
-          progRender();
-        } else if (msg.startsWith('PROG:SUB:')) {
-          const d = msg.substring(9).split(',');
-          progRunStep = parseInt(d[0]) || 0;
-          progRunSub = parseInt(d[1]) || 0;
-          progRender();
+        } else if (msg.startsWith('PROG:AT:')) {
+          // Pfad-Highlighting: "0" oder "0.3" oder "0.3.1"
+          const path = msg.substring(8);
+          highlightProgPath(path);
         } else if (msg.startsWith('PROG:COLOR:')) {
           showFeedback('progFeedback', 'success', 'Erkannt: ' + msg.substring(11));
         } else if (msg === 'PROG:DONE') {
@@ -9379,8 +9420,28 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
         } else if (msg === 'PROG:NONE') {
           progUnlock();
           showFeedback('progFeedback', 'error', 'Kein Programm gesetzt!');
-        } else if (msg === 'PROG:MAXITER') {
+        } else if (msg.startsWith('PROG:MAXITER')) {
           showFeedback('progFeedback', 'error', 'Schleifen-Limit erreicht – weiter geht\'s!');
+        }
+      }
+
+      function highlightProgPath(path) {
+        const strip = document.getElementById('progStrip');
+        if (!strip) return;
+        // Vorherige Highlights entfernen
+        strip.querySelectorAll('.running, .running-sub').forEach(el => {
+          el.classList.remove('running', 'running-sub');
+        });
+        // Neues Element finden
+        const target = strip.querySelector('[data-path="' + path + '"]');
+        if (!target) return;
+        target.classList.add('running');
+        // Wenn es ein Body-Element ist (hat Punkte im Pfad), auch den Vorfahren-Loop-Kopf markieren
+        if (path.includes('.')) {
+          // Top-Level-Pfad = erster Teil vor dem ersten Punkt
+          const topIdx = path.split('.')[0];
+          const head = strip.querySelector('[data-path="' + topIdx + '"]');
+          if (head) head.classList.add('running-sub');
         }
       }
 

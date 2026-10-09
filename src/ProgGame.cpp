@@ -33,10 +33,10 @@ static inline bool irBlocked() {
   return distBlocked();
 }
 
-// Laufender Programmschritt (fuer die Statusanzeige PROG:STEP / PROG:SUB).
-static volatile uint8_t progCurStep = 0;
-static volatile uint8_t progCurSub  = 0;
-static volatile uint8_t progCurLoop = 0;
+// Laufender Programmschritt (fuer die Statusanzeige PROG:AT).
+// Pfad-Indizes statt flacher Index: path[0] = Top-Level-Index, path[1] = Body-Index, ...
+static volatile uint8_t progPath[4] = {0, 0, 0, 0};
+static volatile uint8_t progPathLen = 0;
 
 // =====================================================
 // Farb-Erkennung mit Haltezeit
@@ -94,9 +94,21 @@ static int8_t   colMatchIdx   = -1;
 // EDGE_RAW_C_RELEASE uebersteigen, bevor ueberhaupt gefahren wird. Ohne das
 // wuerde der Waechter direkt nach dem Anfahren wieder anschlagen, weil die
 // Kante noch im Sichtfeld liegt.
+// Alle Werte GEMESSEN (COM9, 2026-10, 38-mm-Roboter in Betriebshoehe):
+//
+//   Tischkante, Abgrund ............  85 ..  124
+//   schwarzes Papier .............. 489
+//   Tisch, nichts darunter ........ 575 .. 850  (laesst sich durch Licht veraendern!)
+//   Farbplaettchen ................ 12349 .. 16129
+//   weisses Papier ................ 16159
+//
+// Die Luecke zwischen Kante (124) und Tischminimum (575) betraegt 451.
+// EDGE_RAW_C_MAX = 300 liegt mittig dazwischen.
+// EDGE_RAW_C_RELEASE = 400 liegt sicher unter dem Tischminimum (575)
+// und ueber dem Maximum an der Kante (124).
 constexpr uint16_t EDGE_RAW_C_MAX   = 300;   // darunter = Kante
-constexpr uint16_t EDGE_RAW_C_RELEASE = 600; // darueber = wieder frei
-constexpr uint8_t  EDGE_CONFIRM_N   = 2;    // 2 Messungen in Folge (~300 ms)
+constexpr uint16_t EDGE_RAW_C_RELEASE = 400; // darueber = wieder frei (Tischminimum 575 - Puffer)
+constexpr uint8_t  EDGE_CONFIRM_N   = 2;     // 2 Messungen in Folge (~300 ms)
 
 static volatile uint8_t s_edgeCount = 0;    // aufeinanderfolgende Treffer
 static volatile bool    s_edgeLatched = false;   // Kante erkannt, gemeldet
@@ -185,6 +197,7 @@ void edgeGuardTick(uint16_t rawClear) {
     if (rawClear > EDGE_RAW_C_RELEASE) {
       s_edgeBlocked = false;
       s_edgeCount = 0;
+      motorReleaseEmergency();   // Not-Halt aufheben - erst jetzt darf wieder gefahren werden
       Serial.printf("[KANTE] Boden wieder da (Clear=%u > %u) - freigegeben\n",
                     rawClear, EDGE_RAW_C_RELEASE);
     }
@@ -194,7 +207,7 @@ void edgeGuardTick(uint16_t rawClear) {
   if (rawClear < EDGE_RAW_C_MAX) {
     if (s_edgeCount < 255) s_edgeCount++;
     if (s_edgeCount >= EDGE_CONFIRM_N) {
-      stopMotors();                       // sofort und ohne Rueckfrage
+      motorEmergencyStop();               // sofort und ohne Rueckfrage; bleibt bis zur Freigabe
       if (!s_edgeLatched) {
         Serial.printf("[KANTE] Tischkante nach %u Messungen (Clear=%u < %u) - "
                       "Motoren gestoppt\n", s_edgeCount, rawClear, EDGE_RAW_C_MAX);
@@ -671,115 +684,121 @@ static bool parseESlot(const char*& p, int8_t& slotOut) {
 }
 
 // Parst eine Folge von Bloecken.
-//   topLevel = true : bis Stringende
-//   topLevel = false: bis ')' (p wird dahinter positioniert)
-// Schreibt in progSteps[pc..] und laesst pc hinter dem letzten Eintrag stehen.
-static bool progParseRange(const char*& p, uint8_t& pc, uint8_t depth, bool topLevel) {
-  while (*p != '\0') {
-    if (!topLevel && *p == ')') { p++; return pc > 0 ? true : false; }
-    char c = *p;
-    if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
-    if (c == ',' || c == ' ' || c == ';') { p++; continue; }
-    p++;
+  //   topLevel = true : bis Stringende
+  //   topLevel = false: bis ')' (p wird dahinter positioniert)
+  // Schreibt in progSteps[pc..] und laesst pc hinter dem letzten Eintrag stehen.
+  static bool progParseRange(const char*& p, uint8_t& pc, uint8_t depth, bool topLevel) {
+    uint8_t sib = 0;  // Geschwister-Index innerhalb dieser Ebene
+    while (*p != '\0') {
+      if (!topLevel && *p == ')') { p++; return pc > 0 ? true : false; }
+      char c = *p;
+      if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+      if (c == ',' || c == ' ' || c == ';') { p++; continue; }
+      p++;
 
-    ProgStep st;
-    memset(&st, 0, sizeof(st));
-    st.color = -1;
-    st.endIdx = 0;
+      ProgStep st;
+      memset(&st, 0, sizeof(st));
+      st.color = -1;
+      st.endIdx = 0;
+      st.sibIdx = 0xFF;  // default, wird unten ueberschrieben
 
-    // ---------- Schleifen: U...(...) und C...(...) ----------
-    if (c == 'U' || c == 'C') {
-      if (depth >= PROG_MAX_DEPTH) { Serial.println("[PROG] Verschachtelung zu tief"); return false; }
-      if (pc + 1 >= PROG_MAX_STEPS) { Serial.println("[PROG] Programm zu lang"); return false; }
-      int8_t slot = -1;
-      if (c == 'U') {
-        st.op = OP_REPEAT;
-        if (parseESlot(p, slot)) {
-          st.color = slot;
-          st.val = -(int16_t)(slot + 1);   // negativer Marker: solange Sensor
+      // ---------- Schleifen: U...(...) und C...(...) ----------
+      if (c == 'U' || c == 'C') {
+        if (depth >= PROG_MAX_DEPTH) { Serial.println("[PROG] Verschachtelung zu tief"); return false; }
+        if (pc + 1 >= PROG_MAX_STEPS) { Serial.println("[PROG] Programm zu lang"); return false; }
+        int8_t slot = -1;
+        if (c == 'U') {
+          st.op = OP_REPEAT;
+          if (parseESlot(p, slot)) {
+            st.color = slot;
+            st.val = -(int16_t)(slot + 1);   // negativer Marker: solange Sensor
+          } else {
+            long v;
+            if (!parseUInt(p, v)) return false;
+            st.val = clampVal(OP_REPEAT, v);
+          }
         } else {
           long v;
           if (!parseUInt(p, v)) return false;
-          st.val = clampVal(OP_REPEAT, v);
+          if (v < 0 || v > 5) return false;
+          st.op = OP_UNTIL;
+          st.color = (int8_t)v;
         }
+        if (*p != '(') return false;
+        p++;
+        const uint8_t headIdx = pc;
+        st.sibIdx = sib++;
+        progSteps[pc++] = st;
+        if (!progParseRange(p, pc, (uint8_t)(depth + 1), false)) return false;
+        if (pc >= PROG_MAX_STEPS) { Serial.println("[PROG] Programm zu lang"); return false; }
+        progSteps[headIdx].endIdx = pc;            // Zielmarke merken
+        ProgStep e;                                  // OP_END anhaengen
+        memset(&e, 0, sizeof(e));
+        e.op = OP_END;
+        e.color = -1;
+        e.sibIdx = 0xFF;
+        progSteps[pc++] = e;
+        continue;
+      }
+
+      // ---------- einfache Bloecke ----------
+      uint8_t op;
+      if (!opFromChar(c, op)) { Serial.printf("[PROG] unbekannter Baustein '%c'\n", c); return false; }
+      st.op = op;
+
+      // P/V: der Wert ist der SENSOR-SLOT (0-5), keine Zahl zum Fahren.
+      // Das ist der ganze Unterschied zu den anderen Bloecken und deshalb hier
+      // VOR der allgemeinen Zahlenbehandlung - sonst wuerde P2 als "2 cm fahren"
+      // gelesen und der Baustein waere genau das, was er nicht soll.
+      if (op == OP_DRIVE_UNTIL || op == OP_WAIT_UNTIL) {
+        if (*p < '0' || *p > '5') { Serial.printf("[PROG] %c braucht eine Farbe/Sensor 0-5\n", c); return false; }
+        st.color = (int8_t)(*p - '0');
+        st.val = 0;
+        p++;
+        if (pc >= PROG_MAX_STEPS) { Serial.println("[PROG] Programm zu lang"); return false; }
+        st.sibIdx = sib++;
+        progSteps[pc++] = st;
+        continue;
+      }
+
+      int8_t slot = -1;
+      const bool hasSlot = parseESlot(p, slot);
+
+ // F mit E-Slot: die alte Schreibweise "FE<slot>" (nur aus Programmen, die
+      // vor dem P-Baustein gespeichert wurden). Wird HIER gleich auf OP_DRIVE_UNTIL
+      // // umgewandelt, statt es in zwei Interpretationen mitzuschleppen:
+      // "F10 mit Zielfarbe aus einer Bis-Schleife" und "bis Farbe mit 50 cm
+      // Suchstrecke" sind im Executor sonst nicht mehr zu unterscheiden - beide
+      // kommen als (F, val, colorCheck) an.
+      if (hasSlot && op == OP_FWD) {
+        st.op      = OP_DRIVE_UNTIL;
+        st.color   = slot;
+        st.val     = 500;                  // 50 cm Suchstrecke, in mm
+      } else if (hasSlot && op == OP_BACK) {
+        // Rueckwaerts "bis Farbe" ergibt keinen Sinn (der Sensor schaut nach
+        // vorn) und wurde nie in der Palette angeboten. Der Bestand bleibt
+        // unveraendert, damit alte Programme nicht anders laufen.
+        st.color = slot;
+        st.val = 50;                       // max. Suchstrecke in cm
+      } else if (hasSlot && op == OP_WAIT) {
+        st.val = -(int16_t)(slot + 1);     // warte bis Sensor == slot
+      } else if (hasSlot) {
+        return false;                      // E nur bei F/B/W/U erlaubt
+      } else if (op == OP_STOP) {
+        st.val = 0;                        // Q braucht keinen Wert
       } else {
         long v;
         if (!parseUInt(p, v)) return false;
-        if (v < 0 || v > 5) return false;
-        st.op = OP_UNTIL;
-        st.color = (int8_t)v;
+        st.val = clampVal(op, v);
       }
-      if (*p != '(') return false;
-      p++;
-      const uint8_t headIdx = pc;
-      progSteps[pc++] = st;
-      if (!progParseRange(p, pc, (uint8_t)(depth + 1), false)) return false;
       if (pc >= PROG_MAX_STEPS) { Serial.println("[PROG] Programm zu lang"); return false; }
-      progSteps[headIdx].endIdx = pc;            // Zielmarke merken
-      ProgStep e;                                  // OP_END anhaengen
-      memset(&e, 0, sizeof(e));
-      e.op = OP_END;
-      e.color = -1;
-      progSteps[pc++] = e;
-      continue;
-    }
-
-    // ---------- einfache Bloecke ----------
-    uint8_t op;
-    if (!opFromChar(c, op)) { Serial.printf("[PROG] unbekannter Baustein '%c'\n", c); return false; }
-    st.op = op;
-
-    // P/V: der Wert ist der SENSOR-SLOT (0-5), keine Zahl zum Fahren.
-    // Das ist der ganze Unterschied zu den anderen Bloecken und deshalb hier
-    // VOR der allgemeinen Zahlenbehandlung - sonst wuerde P2 als "2 cm fahren"
-    // gelesen und der Baustein waere genau das, was er nicht soll.
-    if (op == OP_DRIVE_UNTIL || op == OP_WAIT_UNTIL) {
-      if (*p < '0' || *p > '5') { Serial.printf("[PROG] %c braucht eine Farbe/Sensor 0-5\n", c); return false; }
-      st.color = (int8_t)(*p - '0');
-      st.val = 0;
-      p++;
-      if (pc >= PROG_MAX_STEPS) { Serial.println("[PROG] Programm zu lang"); return false; }
+      st.sibIdx = sib++;
       progSteps[pc++] = st;
-      continue;
     }
-
-    int8_t slot = -1;
-    const bool hasSlot = parseESlot(p, slot);
-
-// F mit E-Slot: die alte Schreibweise "FE<slot>" (nur aus Programmen, die
-    // vor dem P-Baustein gespeichert wurden). Wird HIER gleich auf OP_DRIVE_UNTIL
-    // // umgewandelt, statt es in zwei Interpretationen mitzuschleppen:
-    // "F10 mit Zielfarbe aus einer Bis-Schleife" und "bis Farbe mit 50 cm
-    // Suchstrecke" sind im Executor sonst nicht mehr zu unterscheiden - beide
-    // kommen als (F, val, colorCheck) an.
-    if (hasSlot && op == OP_FWD) {
-      st.op      = OP_DRIVE_UNTIL;
-      st.color   = slot;
-      st.val     = 500;                  // 50 cm Suchstrecke, in mm
-    } else if (hasSlot && op == OP_BACK) {
-      // Rueckwaerts "bis Farbe" ergibt keinen Sinn (der Sensor schaut nach
-      // vorn) und wurde nie in der Palette angeboten. Der Bestand bleibt
-      // unveraendert, damit alte Programme nicht anders laufen.
-      st.color = slot;
-      st.val = 50;                       // max. Suchstrecke in cm
-    } else if (hasSlot && op == OP_WAIT) {
-      st.val = -(int16_t)(slot + 1);     // warte bis Sensor == slot
-    } else if (hasSlot) {
-      return false;                      // E nur bei F/B/W/U erlaubt
-    } else if (op == OP_STOP) {
-      st.val = 0;                        // Q braucht keinen Wert
-    } else {
-      long v;
-      if (!parseUInt(p, v)) return false;
-      st.val = clampVal(op, v);
-    }
-    if (pc >= PROG_MAX_STEPS) { Serial.println("[PROG] Programm zu lang"); return false; }
-    progSteps[pc++] = st;
+    // Top-Level: Ende erreicht. Bei Unterebene muss jetzt ')' stehen.
+    if (!topLevel) { Serial.println("[PROG] Klammer fehlt"); return false; }
+    return true;
   }
-  // Top-Level: Ende erreicht. Bei Unterebene muss jetzt ')' stehen.
-  if (!topLevel) { Serial.println("[PROG] Klammer fehlt"); return false; }
-  return true;
-}
 
 bool progSetFromString(const char* s) {
   if (s == nullptr) return false;
@@ -812,19 +831,40 @@ static bool slalomFinish(uint8_t targetIdx);
 struct ProgCtx {
   bool    slalom      = false;   // Slalom-Modus
   uint8_t slalomTarget = 0;      // Zielfarbe im Slalom
-  int8_t  untilColor  = -1;      // Farbe, bei der ein Bis-Loop endet (-1 = keiner)
+  int8_t  untilStack[PROG_MAX_DEPTH];  // Stack der Bis-Farben (Tiefe = PROG_MAX_DEPTH)
+  uint8_t untilTop    = 0;             // Anzahl Eintraege
   int8_t  defaultColor = -1;     // Farbe fuer F/B ohne eigenes Ziel
   uint8_t headIndex   = 0;       // Index des umgebenden Loop-Kopfs (fuer SUB-Meldung)
+  uint8_t path[PROG_MAX_DEPTH + 1]; // Pfad-Indizes: path[0..pathLen-1], pathLen = aktuelle Tiefe
+  uint8_t pathLen     = 0;
 };
 
 // Fuehrt progSteps[from..to) aus (to ist exklusiv).
-// Rueckgabe: true, wenn ctx.untilColor gesehen wurde (beendet den Bis-Loop).
-static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
-  bool seen = false;
-  for (uint8_t i = from; i < to && gameAllowsMotorRun() && !seen; i++) {
+// Rueckgabe: Slot, der das Ende ausgeloest hat (>=0), oder -1 = normal beendet.
+static int8_t progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
+  int8_t hitSlot = -1;
+  bool bodyHadDrivable = false;  // fuer C-Schleifen: gab es ueberhaupt einen prufbaren Block?
+  for (uint8_t i = from; i < to && gameAllowsMotorRun(); i++) {
     ProgStep& s = progSteps[i];
     if (s.op == OP_END) continue;                 // gehoert zum umgebenden Loop
     esp_task_wdt_reset();
+
+    // Pfad fuer Meldung: ctx.path + s.sibIdx
+    uint8_t msgPath[PROG_MAX_DEPTH + 1];
+    uint8_t msgPathLen = ctx.pathLen;
+    memcpy(msgPath, ctx.path, ctx.pathLen);
+    if (s.sibIdx != 0xFF && msgPathLen < PROG_MAX_DEPTH + 1) {
+      msgPath[msgPathLen++] = s.sibIdx;
+    }
+    // Pfad als String: "0.3.1"
+    char pathBuf[32];
+    pathBuf[0] = '\0';
+    for (uint8_t pi = 0; pi < msgPathLen; pi++) {
+      char tmp[4];
+      snprintf(tmp, sizeof(tmp), "%s%u", (pi ? "." : ""), (unsigned)msgPath[pi]);
+      strcat(pathBuf, tmp);
+    }
+    sendStatusF("PROG:AT:%s", pathBuf);
 
     // ---------- Schleife ----------
     if (s.op == OP_REPEAT || s.op == OP_UNTIL) {
@@ -835,19 +875,28 @@ static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
       }
       ProgCtx inner = ctx;
       inner.headIndex = i;
+      // Pfad fuer Body-Bloecke: aktuellen Block anhaengen
+      if (inner.pathLen < PROG_MAX_DEPTH + 1) {
+        inner.path[inner.pathLen++] = s.sibIdx;
+      }
       if (s.op == OP_UNTIL) {
-        inner.untilColor = s.color;
+        // Bis-Farbe auf Stack pushen
+        if (inner.untilTop < PROG_MAX_DEPTH) {
+          inner.untilStack[inner.untilTop++] = s.color;
+        }
         inner.defaultColor = s.color;
         colorPollReset();
         Serial.printf("[PROG] Bis %s, %u..%u\n", PROG_COLOR_NAMES[s.color], i + 1, end);
       }
+      bodyHadDrivable = false;
 
       if (s.op == OP_REPEAT && s.val < 0) {
         // "solange Sensor == Slot"
         const uint8_t target = (uint8_t)(-(int)s.val - 1);
         for (uint8_t k = 0; k < PROG_UNTIL_MAX_ITER && gameAllowsMotorRun(); k++) {
           if (!sensorHitImmediate(target)) break;
-          if (progExecRange(i + 1, end, inner)) { seen = true; break; }
+          int8_t subHit = progExecRange(i + 1, end, inner);
+          if (subHit >= 0) hitSlot = subHit;
           bleProcessEvents(); espNowProcessEvents();
           ledStripTick();
           vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
@@ -855,18 +904,27 @@ static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
         }
       } else {
         const uint16_t reps = (s.op == OP_REPEAT) ? (uint16_t)s.val : PROG_UNTIL_MAX_ITER;
-        for (uint16_t k = 0; k < reps && gameAllowsMotorRun() && !seen; k++) {
-          if (progExecRange(i + 1, end, inner)) { seen = true; break; }
+        for (uint16_t k = 0; k < reps && gameAllowsMotorRun(); k++) {
+          int8_t subHit = progExecRange(i + 1, end, inner);
+          if (subHit >= 0) hitSlot = subHit;
           bleProcessEvents(); espNowProcessEvents();
           ledStripTick();
           vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
           esp_task_wdt_reset();
         }
-        if (s.op == OP_UNTIL && !seen && gameAllowsMotorRun()) {
+        if (s.op == OP_UNTIL && !bodyHadDrivable && gameAllowsMotorRun()) {
           sendStatusF("PROG:MAXITER:%s", PROG_COLOR_NAMES[s.color]);
         }
       }
-      if (s.op == OP_UNTIL && seen) sendStatusF("PROG:COLOR:%s", PROG_COLOR_NAMES[s.color]);
+      if (s.op == OP_UNTIL) {
+        if (inner.untilTop > 0) inner.untilTop--;  // Stack pop
+        // Wenn die EIGENE Bis-Farbe getroffen wurde -> Schleife beenden
+        if (hitSlot == s.color) {
+          sendStatusF("PROG:COLOR:%s", PROG_COLOR_NAMES[s.color]);
+          return hitSlot;  // eigenes bis-Ziel erreicht -> nach oben propagieren
+        }
+        // Anderer Slot (z.B. aus P/V in der Schleife) -> NICHT beenden, hitSlot weitergeben
+      }
       i = end;                                   // ueber das OP_END springen
       continue;
     }
@@ -875,28 +933,47 @@ static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
     // LED ticken: haelt einen Not-Aus-Alarm waehrend des Laufs sichtbar
     // (und animiert ein per S-Block gesetztes Licht weiter).
     ledStripTick();
-    sendStatusF("PROG:STEP:%u", i);
+
+    // Farb-Check fuer diesen Baustein
     int8_t cc = -1;
+    bool readsColor = false;
     if (s.op == OP_FWD || s.op == OP_BACK || s.op == OP_MM_FWD || s.op == OP_MM_BACK) {
-      cc = (s.color >= 0) ? s.color : ctx.defaultColor;
+      cc = (s.color >= 0) ? s.color : (ctx.untilTop > 0 ? ctx.untilStack[ctx.untilTop - 1] : ctx.defaultColor);
+      if (cc >= 0 && cc < (int8_t)PROG_SENSOR_IR_HIGH) readsColor = true;
     } else if (s.op == OP_DRIVE_UNTIL || s.op == OP_WAIT_UNTIL) {
-      // P/V tragen ihre Bedingung IMMER selbst im Block - sie sind genau die
-      // Bausteine, bei denen der Aufrufer die Farbe ausdruecklich waehlt.
-      // Deshalb NICHT ctx.defaultColor: ein "P3" in einer "bis GELB"-Schleife
-      // muss auf Blau reagieren, nicht auf Gelb.
       cc = s.color;
+      if (cc >= 0 && cc < (int8_t)PROG_SENSOR_IR_HIGH) readsColor = true;
+    } else if (s.op == OP_UNTIL) {
+      // shouldn't reach here (handled above), but for completeness
+      if (ctx.untilTop > 0) cc = ctx.untilStack[ctx.untilTop - 1];
     }
-    if (progExecSimple(s.op, s.val, cc)) seen = true;
+    if (readsColor) ledStripClear();  // eigenes Licht loeschen, damit Farbsensor nicht geblendet wird
+
+    // Drivability-Check fuer C-Schleife (Body ohne Fahrblock)
+    bool drivable = (s.op == OP_FWD || s.op == OP_BACK || s.op == OP_MM_FWD || s.op == OP_MM_BACK);
+    if (ctx.untilTop > 0 && drivable) bodyHadDrivable = true;
+
+    // Q (Vollstopp) bricht GANZES Programm ab
+    if (s.op == OP_STOP) {
+      progActive = false;
+      currentGame = GAME_NONE;
+      stopMotors();
+      return -1;  // -1 = abgebrochen, nicht "Farbe gesehen"
+    }
+
+    int8_t blockHit = progExecSimple(s.op, s.val, cc) ? cc : -1;
+    if (blockHit >= 0) hitSlot = blockHit;
 
     // Slalom: Zielfarbe nach jedem Baustein pruefen
     if (ctx.slalom && gameAllowsMotorRun() && slalomTargetStable(ctx.slalomTarget)) {
       slalomFinish(ctx.slalomTarget);
+      return -1;
     }
     bleProcessEvents();
     espNowProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(PROG_STEP_GAP_MS));
   }
-  return seen;
+  return hitSlot;
 }
 
 void progRun() {

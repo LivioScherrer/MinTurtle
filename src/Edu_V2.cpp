@@ -510,8 +510,8 @@ static bool cmdDist(const String& cmd) {
   // Tischkanten-Schwellen fuer die Anzeige in EDGE?. Die WAECHTER-LOGik und
   // damit die Wahrheit liegt in ProgGame.cpp (EDGE_RAW_C_MAX,
   // EDGE_RAW_C_RELEASE, EDGE_CONFIRM_N, edgeGuardTick). Hier nur gespiegelt.
-  constexpr uint16_t EDGE_RAW_C_MAX_DISP    = 300;   // darunter = Kante
-  constexpr uint16_t EDGE_RAW_C_RELEASE_DISP = 600;   // darueber = wieder frei
+constexpr uint16_t EDGE_RAW_C_MAX_DISP    = 300;   // darunter = Kante
+constexpr uint16_t EDGE_RAW_C_RELEASE_DISP = 400;  // darueber = wieder frei
 
   // Tischkanten-Waechter. Der Sensor sitzt nach unten; ueber der Kante faellt
   // die Gesamthelligkeit auf fast 0, zwei Messungen in Folge -> sofortiger Halt.
@@ -531,6 +531,7 @@ static bool cmdDist(const String& cmd) {
   }
   if (cmd == "EDGE:RESET") {
     edgeGuardReset();
+    motorReleaseEmergency();   // Not-Halt aufheben - sonst fahren die Motoren nie wieder
     sendStatus("EDGE:RESET");
     Serial.println("[KANTE] Zaehler zurueckgesetzt - Roboter wieder freigegeben");
     return true;

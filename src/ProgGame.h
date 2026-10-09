@@ -70,6 +70,7 @@ struct ProgStep {
   int16_t val;     // cm / Grad / s / mm / Anzahl; bei W und U auch negativer Sensor-Marker
   int8_t  color;   // Zielfarbe fuer F/B (=-1 wenn keine); bei C die Farbe des Bis-Loops
   uint8_t endIdx;  // nur OP_REPEAT/OP_UNTIL: Index des zugehoerigen OP_END
+  uint8_t sibIdx;  // Index innerhalb der Eltern-Liste (Top-Level: 0.., Loop-Body: 0..). 0xFF = OP_END.
 };
 
 extern ProgStep progSteps[PROG_MAX_STEPS];

@@ -339,6 +339,24 @@ constexpr uint16_t MOTOR_SYNC_TOLERANCE = 1;     // 1 Mikroschritt Toleranz
 // Thread-sicher.
 void stopMotors();
 
+// NOT-STOPP: haelt die Motoren an, bis motorReleaseEmergency() folgt.
+//
+// Anders als stopMotors() ist das nicht rueckgaengig: ein nachfolgender
+// Befehl kann die Motoren nicht wieder anwerfen. Genau das braucht der
+// Tischkanten-Waechter - "an der Kante" darf durch den naechsten
+// Fahrbefehl nicht sofort wieder aufgehoben werden.
+//
+// Blockiert NICHT auf dem Motor-Mutex: der wird mit 0 ms versucht und im
+// Zweifel uebergangen. Grund: der Aufrufer ist der Sensor-Task, und der
+// 50-us-Puls-Task haelt den Mutex alle 50 us. Ein Wartender wuerde die
+// Motoren womoeglich erst stoppen, wenn sie schon weitergefahren sind. Die
+// Motion ist ohnehin harmlos, wenn der letzte Puls ausbleibt.
+void motorEmergencyStop();
+// Nachfuehrlich: Not-Halt aufheben. Ruft motorEmergencyStop() selbst auf,
+// damit nach einer Kante zwingend die Motoren erstmal still sind.
+void motorReleaseEmergency();
+bool motorEmergencyActive();
+
 // Position-Move vorbereiten: 'physicalSteps' Schritte mit FIXED_DRIVE_SPEED
 // fahren (vorzeichenkorrigiert: positiv = CW). Mit sanfter Rampe, sofern
 // config.rampMs > 0 (AccelStepper run()/setAcceleration): der Motor
