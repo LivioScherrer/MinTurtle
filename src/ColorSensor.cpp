@@ -30,6 +30,47 @@ int calibrateColor(uint16_t raw, uint16_t blackVal, uint16_t whiteVal) {
   return static_cast<int>(value);
 }
 
+// ---- Eingelernte Farbreferenzen als erste Instanz -------------------
+//
+// CAL:RED/YELLOW/GREEN/BLUE legt den kalibrierten Messwert dieses Moments
+// ab. Verglichen wird NICHT absolut: ein naechster Nachbar im RGB-Wuerfel
+// waere genauso an die Helligkeit des Einlernzeitpunkts gekoppelt wie die
+// festen Schwellen, die vorher allein entschieden haben.
+//
+// Verglichen wird die Chromazitaet (r,g,b)/Summe. Die bleibt bei
+// gleichmaessig veraenderter Beleuchtung konstant - nachgerechnet fuer ein
+// GELB: bei 40 % Licht 0,430/0,394/0,176 gegenueber 0,426/0,388/0,186, ein
+// Drift von 0,026. Zum Vergleich: die alte Heuristik fiel bei 21 % weniger
+// Licht schon aus und meldete bei 70 % weniger Licht ein Farbplaettchen als
+// SCHWARZ - was der Tischkanten-Waechter als Kante liest.
+//
+// Warum das noetig war: die Heuristik allein erkennt nicht jede echte Farbe.
+// Ein real gemessenes Gelb (28,212,101) hat einen so starken Gruenanteil, dass
+// der alte Test "r > 100" scheitert und "g > 1.25*r && g > 1.25*b" greift - es
+// wurde als GRUEN gemeldet. Der Abstand im Farbraum zwischen diesem Gelb und
+// echtem Gruen (52,94,61) betraegt aber 0,34 und ist damit sauber trennbar.
+//
+// Nur wirklich eingelernte Referenzen wirken. Ohne CAL:ROT.. ist das
+// Verhalten bitweise unveraendert. Reine Rechnung, kein I2C, keine Sperre,
+// kein delay - der 150-ms-Task wartet nicht.
+static const char* refColorName(int r, int g, int b, float tol) {
+  const float sm = (float)(r + g + b);
+  if (sm < 1.0f) return nullptr;
+  const char* const names[4] = { "ROT", "GELB", "GRUEN", "BLAU" };
+  const ColorRef* const refs[4] = { &config.calRot, &config.calGelb,
+                                    &config.calGruen, &config.calBlau };
+  for (int i = 0; i < 4; i++) {
+    if (!refs[i]->calibrated) continue;
+    const float sr = (float)(refs[i]->r + refs[i]->g + refs[i]->b);
+    if (sr < 1.0f) continue;
+    const float d = fabsf((float)r / sm - (float)refs[i]->r / sr)
+                  + fabsf((float)g / sm - (float)refs[i]->g / sr)
+                  + fabsf((float)b / sm - (float)refs[i]->b / sr);
+    if (d <= tol) return names[i];
+  }
+  return nullptr;
+}
+
 const char* detectColorName(int r, int g, int b) {
   // Erst pruefen ob ueberhaupt eine Farbe erkannt wird (sehr dunkel)
   int total = r + g + b;
@@ -39,6 +80,17 @@ const char* detectColorName(int r, int g, int b) {
       abs(r - g) < 60 && abs(g - b) < 60 && abs(r - b) < 60) {
     return "WEISS";
   }
+  // Eingelernte Referenzen schlagen die festen Heuristiken. Steht bewusst
+  // HINTER SCHWARZ und WEISS: sonst wuerde eine eingelernte Zielfarbe die
+  // Referenzflaeche wegfangen und Linienfolger, Tischkanten-Waechter und die
+  // weisse Flaeche beim Einlernen verlieren ihr Weiss. Findet sich keine
+  // Referenz, laeuft es unveraendert in die Heuristik.
+  //
+  // Toleranz 0,18: die kleinste Trennung zweier eingelernter Farben liegt bei
+  // 0,34 (Gelb gegen Gruen), also bei 53 % davon - und rund siebenmal so gross
+  // wie der groesste beobachtete Helligkeits-Drift von 0,075.
+  const char* ref = refColorName(r, g, b, 0.18f);
+  if (ref) return ref;
   // dominant channel
   int maxC = r > g ? (r > b ? r : b) : (g > b ? g : b);
   if (maxC < 50) return "UNBEKANNT";  // zu dunkel fuer echte Farbe

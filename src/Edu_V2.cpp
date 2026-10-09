@@ -507,10 +507,11 @@ static bool cmdDist(const String& cmd) {
   if (cmd == "DISTAUTO:ON") { distSetAuto(true); sendStatus("DISTAUTO:ON"); return true; }
   if (cmd == "DISTAUTO:OFF") { distSetAuto(false); sendStatus("DISTAUTO:OFF"); return true; }
 
-  // Tischkanten-Schwelle in Rohwerten. Gehoert zur Waechter-Logik in
-  // ProgGame.cpp (dort auch EDGE_CONFIRM_N und edgeGuardTick); hier nur fuer
-  // die Anzeige in EDGE? und fuer die Web-UI.
-  constexpr uint16_t EDGE_RAW_C_MAX = 500;
+  // Tischkanten-Schwellen fuer die Anzeige in EDGE?. Die WAECHTER-LOGik und
+  // damit die Wahrheit liegt in ProgGame.cpp (EDGE_RAW_C_MAX,
+  // EDGE_RAW_C_RELEASE, EDGE_CONFIRM_N, edgeGuardTick). Hier nur gespiegelt.
+  constexpr uint16_t EDGE_RAW_C_MAX_DISP    = 300;   // darunter = Kante
+  constexpr uint16_t EDGE_RAW_C_RELEASE_DISP = 600;   // darueber = wieder frei
 
   // Tischkanten-Waechter. Der Sensor sitzt nach unten; ueber der Kante faellt
   // die Gesamthelligkeit auf fast 0, zwei Messungen in Folge -> sofortiger Halt.
@@ -539,9 +540,10 @@ static bool cmdDist(const String& cmd) {
     snprintf(eb, sizeof(eb), "EDGE=%u,%u,%u",
              edgeGuardActive() ? 1u : 0u, (unsigned)rawSensorC, (unsigned)rawSensorR);
     sendStatus(eb);
-    Serial.printf("[KANTE] %s | Clear=%u (Schwelle %u) | Rot=%u\n",
+    Serial.printf("[KANTE] %s | Clear=%u (Kante < %u, frei ab %u) | Rot=%u\n",
                   edgeGuardActive() ? "aktiv" : "aus",
-                  (unsigned)rawSensorC, (unsigned)EDGE_RAW_C_MAX, (unsigned)rawSensorR);
+                  (unsigned)rawSensorC, (unsigned)EDGE_RAW_C_MAX_DISP,
+                  (unsigned)EDGE_RAW_C_RELEASE_DISP, (unsigned)rawSensorR);
     return true;
   }
   // Diagnose: kompakte Zeile nach BLE + ausfuehrlicher Status auf Serial.

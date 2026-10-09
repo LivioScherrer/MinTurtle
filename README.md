@@ -395,6 +395,27 @@ Microstep-Zahl (`configStepsPerS()` in `Config.cpp`, gedeckelt bei
 `MAX_DRIVE_STEPS_S` = 20 000 Schritte/s durch den 50-µs-Puls-Task).
 `setMotorSpeed()` legt den Betrag immer darauf fest.
 
+Die Geometrie dahinter: Rad **38 mm**, Umfang `pi * 38` = 119,3805 mm, mit Trim
+`119,3805 * 1,0101` = 120,5863 mm, also **0,6029 mm pro Vollschritt**
+(`MM_PER_FULL_STEP` in `Config.h`). Daraus folgen bei 32 Microsteps
+`6400 / 120,5863` = **53,07 Schritte/mm**, also **5 307 Schritte für 100 mm**.
+
+Weil `MAX_DRIVE_STEPS_S` die Obergrenze ist, begrenzt sie je Microstep-Zahl das
+tatsächlich fahrbare Tempo:
+
+| Microsteps | Schritte/mm | 20 000 Schritte/s ergeben |
+|---|---|---|
+| 16 | 26,54 | ~753 mm/s |
+| 32 | 53,07 | ~377 mm/s |
+| 128 | 212,30 | ~94 mm/s |
+
+**Deshalb ist `MICROSTEPS_MAX = 32`.** Oberhalb davon braucht schon 240 mm/s
+mehr Schritte/s, als der 50-µs-Puls-Task schafft; der Motor bekommt nur jeden
+fünften Puls, dreht dann nicht, sondern pfeift, weil SpreadCycle bei so
+sporadischen Pulsen kein Drehmoment aufbaut. `configValidate()` senkt zu große
+NVS-Werte beim Booten darauf ab. Feinere Auflösung kostet Tempo — das ist eine
+bewusste Entscheidung, kein Versehen.
+
 Das **Anfahren und Abbremsen** ist eine sanfte Rampe: von 0 auf
 `FIXED_DRIVE_SPEED` in `config.rampMs` (Werkwert 150 ms, per `RAMP:` und
 Web-UI einstellbar, 0..2000 ms) - und genauso lang wieder herunter.

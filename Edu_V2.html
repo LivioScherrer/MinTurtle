@@ -4799,14 +4799,6 @@ function updateConnectionUI(isConn, text) {
                    (mm / 10) + ' cm nochmal messen', false);
       }
 
-      // Diagnose anfordern. Ausfuehrliche Ausgabe kommt ueber Serial (115200),
-      // die kompakte Zeile hier zur schnellen Kontrolle.
-      function distDiag() {
-        const out = document.getElementById('distDiagOut');
-        if (out) out.textContent = 'frage ab ... (Serial-Log zeigt Details)';
-        sendCommand('DISTDIAG');
-      }
-
       const DIST_STATUS_TEXT = ['Range OK', 'Sigma-Fehler', 'Signal-Fehler',
                                 'Min-Range-Fehler', 'Phasen-Fehler', 'Hardware-Fehler', 'kein Update'];
 
@@ -5366,7 +5358,8 @@ function updateConnectionUI(isConn, text) {
         if (st) {
           st.textContent = active
             ? 'Der Wächter ist aktiv. Gemessene Helligkeit unten: ' +
-              (clear === undefined ? '?' : clear) + ' (Kante bei unter 500).'
+              (clear === undefined ? '?' : clear) +
+              ' — Abgrund liegt unter 300, freigegeben wird er ab 600.'
             : 'Der Wächter ist ausgeschaltet — der Roboter fährt über die Tischkante hinaus.';
         }
       }
@@ -5903,18 +5896,6 @@ function updateConnectionUI(isConn, text) {
       function topicName(id) { return (TOPICS[id] && TOPICS[id].name) || id; }
       function topicIco(id) { return (TOPICS[id] && TOPICS[id].ico) || '•'; }
 
-      // ---- 4) Zufall (seedbar: beide Roboter koennen spaeter denselben Seed
-      //         benutzen und damit dieselben Aufgaben bekommen) ----
-      function mulberry32(seed) {
-        let a = seed >>> 0;
-        return function () {
-          a = (a + 0x6D2B79F5) >>> 0;
-          let t = a;
-          t = Math.imul(t ^ (t >>> 15), t | 1);
-          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-        };
-      }
       let _rnd = Math.random;
       function rnd() { return _rnd(); }
       // Ganzzahl in [min..max] (min<=max wird vorher sichergestellt)
@@ -5941,7 +5922,6 @@ function updateConnectionUI(isConn, text) {
       }
       function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = a % b; a = b; b = t; } return a || 1; }
       function fracText(n, d) { return (n === d) ? '1' : n + '/' + d; }
-      function fracVal(n, d) { return Math.round((n / d) * 1000) / 1000; }
       function moneyText(cents) {
         return (Math.round(cents) / 100).toFixed(2).replace('.', ',') + ' ' + CURRENCY;
       }
@@ -5982,19 +5962,6 @@ function updateConnectionUI(isConn, text) {
       }
       function numOptions(a, count, spread) {
         return shuffle([a].concat(distractors(a, count || 3, spread))).map(num);
-      }
-      function moneyOptions(cents, count, step) {
-        const st = (step || 5);
-        const out = [];
-        let guard = 0;
-        while (out.length < (count || 3) && guard++ < 80) {
-          const d = cents + R(-6, 6) * st;
-          if (d < 0 || d === cents || out.indexOf(d) >= 0) continue;
-          out.push(d);
-        }
-        let k = 1;
-        while (out.length < (count || 3)) out.push(cents + k++ * st);
-        return shuffle([cents].concat(out)).map(moneyText);
       }
       // Aufgabe mit Auswahlkarten: Optionen mischen, Antwort als Text
       // 'symbolSet' erweitert eine Auswahlfrage auf die drei Vergleichszeichen.
@@ -7165,11 +7132,6 @@ function updateConnectionUI(isConn, text) {
         resetRaceBtn();
         if (text) showFeedback('raceFeedback', 'info', text);
       }
-      function showRaceWinner(text, color) {
-        const w = document.getElementById('raceWinnerMsg');
-        w.textContent = text; w.style.color = color; w.style.display = 'block';
-        resetRaceBtn();
-      }
       function resetRaceBtn() {
         document.getElementById('raceSetupArea').style.display = 'block';
         document.getElementById('raceStartBtnArea').style.display = 'block';
@@ -7551,17 +7513,6 @@ function updateConnectionUI(isConn, text) {
       });
       // Sammelt die einzelnen Pruefschritte fuer eine abschliessende Anzeige
       let cqCheckSteps = [];
-      function showCqResultSummary() {
-        const wrong = cqCheckSteps.filter(s => !s.ok);
-        if (wrong.length === 0) return;
-        let detail = 'Falsch: ';
-        wrong.forEach((s, i) => {
-          detail += 'Plättchen ' + (s.idx + 1) + ' (erw. ' + s.expected + ', gef. ' + s.found + ')';
-          if (i < wrong.length - 1) detail += '; ';
-        });
-        showFeedback('cqFeedback', 'error', detail);
-      }
-
       function showCqResultModal(ok, total, wrong, aborted) {
         const emoji = document.getElementById('cqResultEmoji');
         const title = document.getElementById('cqResultTitle');
@@ -9786,15 +9737,7 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
           };
         }
 
-        // Erfolge: Rennen-Sieger und volle Punktzahl im Farbquiz
-        const origRace = window.showRaceWinner;
-        if (typeof origRace === 'function') {
-          window.showRaceWinner = function () {
-            const r = origRace.apply(this, arguments);
-            celebrate();
-            return r;
-          };
-        }
+        // Erfolge: volle Punktzahl im Farbquiz
         const origCq = window.showCqResultModal;
         if (typeof origCq === 'function') {
           window.showCqResultModal = function (ok, total, wrong, aborted) {

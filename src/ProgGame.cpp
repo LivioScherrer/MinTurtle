@@ -69,12 +69,39 @@ static int8_t   colMatchIdx   = -1;
 //  - Eine schwarze Linie auf dem Tisch liest sich vermutlich aehnlich dunkel
 //    wie die Kante. Deshalb EDGE_CONFIRM_N: es zaehlt die Dauer, nicht den
 //    Einzelwert.
-constexpr uint16_t EDGE_RAW_C_MAX   = 500;   // auch in Edu_V2.cpp fuer EDGE? gespiegelt
+// Alle Werte GEMESSEN (COM9, 2026-10, 38-mm-Roboter in Betriebshoehe):
+//
+//   Tischkante, Abgrund ............  85 ..  124
+//   schwarzes Papier .............. 489
+//   Tisch, nichts darunter ........ 849 / 823 / 3928
+//   rotes Plaettchen .............. 12349
+//   gruenes Plaettchen ............ 12365
+//   blaues Plaettchen ............. ~16000
+//   gelbes Plaettchen ............. 16129
+//   weisses Papier ................ 16159
+//
+// Die Luecke zwischen echter Kante (124) und schwarzem Papier (489) betraegt
+// 365 Rohwerte. EDGE_RAW_C_MAX liegt mit 300 mittig darin: schwarzes Papier und
+// alles Bunte bleiben sicher darueber, echter Abgrund sicher darunter.
+//
+// Die erste Fassung stand auf 500 und war damit ZU HOCH - sie lag ueber dem
+// schwarzen Papier. Gemessen wurde damals 124 gegen 2092, aber die 2092 stammten
+// von einem hellen Blatt; der Tisch selbst liefert nur 849. Der Waechter hat
+// daraufhin bei jedem dunklen Plaettchen angeschlagen und den Roboter
+// mitten in der Strecke gestoppt - das war die Ursache der zu kurzen Strecken.
+//
+// HYSTERESE: Nach einem Halt muss die Helligkeit erst wieder deutliche
+// EDGE_RAW_C_RELEASE uebersteigen, bevor ueberhaupt gefahren wird. Ohne das
+// wuerde der Waechter direkt nach dem Anfahren wieder anschlagen, weil die
+// Kante noch im Sichtfeld liegt.
+constexpr uint16_t EDGE_RAW_C_MAX   = 300;   // darunter = Kante
+constexpr uint16_t EDGE_RAW_C_RELEASE = 600; // darueber = wieder frei
 constexpr uint8_t  EDGE_CONFIRM_N   = 2;    // 2 Messungen in Folge (~300 ms)
 
 static volatile uint8_t s_edgeCount = 0;    // aufeinanderfolgende Treffer
-static volatile bool    s_edgeLatched = false;   // Kante erkannt, Motoren gestoppt
-static volatile bool    s_edgeGuardOn = false;   // Schalter aus dem Web-UI
+static volatile bool    s_edgeLatched = false;   // Kante erkannt, gemeldet
+static volatile bool    s_edgeGuardOn = false;   // Schalter aus der NVS
+static volatile bool    s_edgeBlocked = false;   // Hysterese: gesperrt bis zum Boden
 
 // Einmalige Kantenmeldung: der Motor-Stopp darf nicht bei jedem Sensor-Tick
 // erneut in den Log schreiben, aber die UEBERGANG in den Zustand "Kante"
@@ -85,7 +112,7 @@ bool edgeGuardTripped() {
   return true;
 }
 bool edgeGuardActive()   { return s_edgeGuardOn; }
-void edgeGuardReset()    { s_edgeCount = 0; s_edgeLatched = false; }
+void edgeGuardReset()    { s_edgeCount = 0; s_edgeLatched = false; s_edgeBlocked = false; }
 void edgeGuardSet(bool on) {
   s_edgeGuardOn = on;
   edgeGuardReset();
@@ -143,8 +170,25 @@ static bool tableEdgeDetected() {
 // aufeinanderfolgende Messungen unterhalb der Schwelle und loest genau einmal
 // aus. Wird hier - nicht im Fahrpfad - ausgewertet, damit der 50-us-Puls-Task
 // nichts auf dem Weg hat.
+//
+// s_edgeBlocked ist die Hysterese: einmal ausgeloest, bleibt der Roboter
+// gesperrt, bis die Helligkeit wieder ueber EDGE_RAW_C_RELEASE liegt. Ohne
+// das wuerde der Waechter nach dem Anfahren sofort wieder anschlagen, weil die
+// Kante noch im Sichtfeld des nachlaufenden Sensors ist - der Roboter stuende
+// dann still und koennte nie wieder losfahren.
 void edgeGuardTick(uint16_t rawClear) {
-  if (!s_edgeGuardOn) { s_edgeCount = 0; return; }
+  if (!s_edgeGuardOn) { s_edgeCount = 0; s_edgeBlocked = false; return; }
+
+  if (s_edgeBlocked) {
+    if (rawClear > EDGE_RAW_C_RELEASE) {
+      s_edgeBlocked = false;
+      s_edgeCount = 0;
+      Serial.printf("[KANTE] Boden wieder da (Clear=%u > %u) - freigegeben\n",
+                    rawClear, EDGE_RAW_C_RELEASE);
+    }
+    return;
+  }
+
   if (rawClear < EDGE_RAW_C_MAX) {
     if (s_edgeCount < 255) s_edgeCount++;
     if (s_edgeCount >= EDGE_CONFIRM_N) {
@@ -154,6 +198,7 @@ void edgeGuardTick(uint16_t rawClear) {
                       "Motoren gestoppt\n", s_edgeCount, rawClear, EDGE_RAW_C_MAX);
       }
       s_edgeLatched = true;
+      s_edgeBlocked = true;               // erst bei Clear > RELEASE wieder frei
     }
   } else {
     s_edgeCount = 0;
