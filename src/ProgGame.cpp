@@ -202,22 +202,37 @@ void edgeGuardTick(uint16_t rawClear) {
   // der Wächter zurückkommen - aber in Stufen, je mit Fahrprobe.
   if (!s_edgeGuardOn) { s_edgeCount = 0; s_edgeBlocked = false; return; }
 
-  // SCHRITT 1: kein s_edgeBlocked-Latch, kein motorEmergencyStop.
-  // Zwei Messungen unter der Schwelle halten die Motoren an (stopMotors) und
-  // melden einmal. Danach ist der nächste Fahrbefehl sofort wieder möglich;
-  // solange der Sensor über der Kante bleibt, hält jeder Tick erneut an.
+  // SCHRITT 2: Latch + Hysterese. Einmal ausgeloest, bleibt der Roboter
+  // gesperrt, bis die Helligkeit wieder ueber EDGE_RAW_C_RELEASE liegt - erst
+  // dann ist der Sensor sicher wieder ueber der Platte. Solange die Sperre
+  // steht, haelt jeder Tick die Motoren erneut an (falls doch ein Fahrbefehl
+  // durchkommt) und neue Fahrbefehle werden verworfen (s_emergency in
+  // setMotorSpeedLocked/prepPositionMoveLocked). Freigabe auf zwei Wegen:
+  // von selbst bei Boden (Hysterese) oder von Hand per EDGE:RESET.
+  if (s_edgeBlocked) {
+    if (rawClear > EDGE_RAW_C_RELEASE) {
+      s_edgeBlocked = false;
+      s_edgeCount = 0;
+      motorReleaseEmergency();
+      Serial.printf("[KANTE] Boden wieder da (Clear=%u > %u) - freigegeben\n",
+                    rawClear, EDGE_RAW_C_RELEASE);
+    } else {
+      stopMotors();   // Sperre steht: trotzdem losgefahren -> sofort wieder anhalten
+    }
+    return;
+  }
+
   if (rawClear < EDGE_RAW_C_MAX) {
     if (s_edgeCount < 255) s_edgeCount++;
     if (s_edgeCount == EDGE_CONFIRM_N) {
       stopMotors();                       // sofort und ohne Rueckfrage
+      motorEmergencyStop();               // neue Befehle verwerfen, bis freigegeben
       Serial.printf("[KANTE] Tischkante nach %u Messungen (Clear=%u < %u) - "
-                    "Motoren gestoppt\n", s_edgeCount, rawClear, EDGE_RAW_C_MAX);
+                    "Motoren gestoppt, gesperrt bis zum Boden\n",
+                    s_edgeCount, rawClear, EDGE_RAW_C_MAX);
+      s_edgeBlocked = true;
     }
   } else {
-    if (s_edgeCount >= EDGE_CONFIRM_N) {
-      Serial.printf("[KANTE] Boden wieder da (Clear=%u) - Zaehler zurueckgesetzt\n",
-                    rawClear);
-    }
     s_edgeCount = 0;
   }
 }

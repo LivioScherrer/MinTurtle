@@ -862,7 +862,11 @@ static void takeMotorMutex() {
 // unter EINEM Mutex-Halt gesetzt, sodass kein Zeitfenster zwischen zwei
 // Befehlen entstehen kann.
 static void setMotorSpeedLocked(int motorIdx, float speed, bool useRamp) {
-  // Not-Halt-Prüfung DEAKTIVIERT (Wächter komplett raus): siehe edgeGuardTick.
+  // Not-Halt (Tischkante): kein Anfahren, bis motorReleaseEmergency().
+  // SCHRITT 2 des Wächter-Rückbaus. Vom Bisect belegt ungefährlich, solange
+  // der Halt nicht klemmt: false verzweigt hier nie hinein. Falls der Roboter
+  // trotzdem steht, EDGE? lesen - "NOT-HALT aktiv" zeigt den klemmenden Halt.
+  if (s_emergency) return;
   if (speed == 0.0f) {
     // ---- WEICHES ABBREMSEN (Taste losgelassen) ----
     // NUR das Ziel auf 0. Der Puls-Task laesst die Ist-Geschwindigkeit dann
@@ -1105,7 +1109,8 @@ void prepPositionMoves(long stepsL, long stepsR) {
 
 // Voraussetzung: motorMutex ist gehalten.
 static void prepPositionMoveLocked(int motorIdx, long physicalSteps) {
-  // Not-Halt-Prüfung DEAKTIVIERT (Wächter komplett raus): siehe edgeGuardTick.
+  // Not-Halt (Tischkante): keine neue Position setzen. SCHRITT 2, siehe oben.
+  if (s_emergency) return;
   {
     AccelStepper& s = (motorIdx == 0) ? stepperL : stepperR;
     volatile float& cur = (motorIdx == 0) ? s_curL : s_curR;
