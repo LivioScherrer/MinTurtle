@@ -53,9 +53,24 @@ static int8_t   colMatchIdx   = -1;
 // Beleuchtung dreistellige Werte; ueber der Kante bleiben ein bis zwei zweistellige
 // Werte uebrig. Die Schwelle liegt bewusst tief, damit eine dunkle Stelle auf dem
 // Tisch (schwarze Linie, Schatten) NICHT als Kante gilt - zaehlt wird die Dauer.
-constexpr uint16_t EDGE_RAW_C_MAX   = 60;   // darunter = kein Boden mehr
-constexpr uint8_t  EDGE_CONFIRM_N   = 3;    // 3 Messungen in Folge unter der Schwelle
-constexpr uint8_t  EDGE_TASK_TICKS  = 3;    // Sensor-Task liest alle ~150 ms
+// GEMESSEN (COM9, 2026-10, Sensor in ca. X mm Hoehe):
+//   sicher auf dem Tisch, 20 cm von der Kante .... Clear = 2092 (stabil)
+//   Roboter an der Tischkante ................... Clear =  85 .. 124
+//
+// Das ist Faktor 20 zwischen beiden Zustaenden. EDGE_RAW_C_MAX liegt mit 500
+// mittig im Logarithmus: 4x ueber dem hoechsten Kantenwert, 4x unter dem
+// Tischwert. Nach oben bleibt damit genug Luft fuer Schatten und dunkle
+// Tischkanten, nach unten genug Abstand zur Streuung an der Kante.
+//
+// WICHTIG - Grenzen, die man kennen muss:
+//  - Die Werte gelten fuer diesen Sensor in dieser Hoehe auf diesem Tisch.
+//    Auf dunklem Teppich oder bei starker Abschattung liegt der Tischwert
+//    niedriger. Im Zweifel EDGE? lesen und die Schwelle nachziehen.
+//  - Eine schwarze Linie auf dem Tisch liest sich vermutlich aehnlich dunkel
+//    wie die Kante. Deshalb EDGE_CONFIRM_N: es zaehlt die Dauer, nicht den
+//    Einzelwert.
+constexpr uint16_t EDGE_RAW_C_MAX   = 500;
+constexpr uint8_t  EDGE_CONFIRM_N   = 2;    // 2 Messungen in Folge (~300 ms)
 
 static volatile uint8_t s_edgeCount = 0;    // aufeinanderfolgende Treffer
 static volatile bool    s_edgeLatched = false;   // Kante erkannt, Motoren gestoppt
