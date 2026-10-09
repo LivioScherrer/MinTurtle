@@ -136,10 +136,12 @@ static bool sensorPoll(uint8_t idx) {
   return (millis() - colMatchStart) >= 40;
 }
 
-// Sofort-Check ohne Haltezeit: 1x Lesung reicht.
-// Genutzt fuer Sensor-Bedingung waehrend der Bewegung (Sensor muss MOTOREN
-// stoppen BEVOR der Roboter darueber hinausfaehrt -> Haltezeit sei 0.
-// Distanz: letzter VL53L0X-Wert.
+// Prueft ob der Sensor-Wert-Slot erfuellt ist. Distanz: 4=NAH/blockiert,
+// 5=FREI (letzter VL53L0X-Wert, keine Haltezeit noetig). Farbe 0-3:
+// Sofort-Check ohne Haltezeit, 1x Lesung reicht. Genutzt fuer die
+// Sensor-Bedingung waehrend der Bewegung (Sensor muss MOTOREN stoppen BEVOR
+// der Roboter darueber hinausfaehrt -> Haltezeit sei 0) und fuer
+// OP_REPEAT im Sensor-Modus ("solange Sensor == Slot").
 static bool sensorHitImmediate(uint8_t idx) {
   if (idx >= PROG_SENSOR_IR_HIGH) return (irBlocked() == (idx == PROG_SENSOR_IR_HIGH));
   if (!colorSensorOk) return false;
@@ -285,10 +287,10 @@ static int32_t degToSteps(int16_t deg) {
 // Kein globaler ROT-Stop: ROT haelt nur an, wenn das Programm es verlangt
 // ("bis ROT" / "fahre bis ROT" -> colorCheck). Ohne roten Baustein ist ROT
 // eine normale Farbe auf dem Boden und stoppt nichts.
+// Farbe wird waehrend der Fahrt mit sensorHitImmediate geprueft.
 // Rueckgabe: true wenn die Ziel-Farbe die Fahrt beendet hat.
 // =====================================================
-static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
-  (void)speed;   // Feste Geschwindigkeit - der Motor-Task faehrt immer FIXED_DRIVE_SPEED.
+static bool progMove(int32_t sL, int32_t sR, int8_t colorCheck) {
   // EIN Aufruf fuer beide Seiten: der Blockprogramm-Befehl ist die Stelle, an
 // der ein Zeitversatz zwischen den Raedern am auffaelligsten waere - die
 // Schrittzahlen beider Seiten stimmen zwar, aber bei unterschiedlichem Start
@@ -470,16 +472,15 @@ static void progLogDist(const char* op, int16_t val, float mm, int32_t steps) {
 // Einfachen Baustein ausfuehren (kein Loop). Rueckgabe: true wenn Farbe ausgeloest.
 static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
   int32_t steps;
-// Feste Geschwindigkeit - keine Einstellung irgendwo.
   switch (op) {
     case OP_FWD:
       steps = cmToSteps(val);
       progLogDist("F", val, (float)val * 10.0f, steps);
-      return progMove(steps, steps, FIXED_DRIVE_SPEED, colorCheck);
+      return progMove(steps, steps, colorCheck);
     case OP_BACK:
       steps = cmToSteps(val);
       progLogDist("B", val, (float)val * 10.0f, steps);
-      return progMove(-steps, -steps, FIXED_DRIVE_SPEED, colorCheck);
+      return progMove(-steps, -steps, colorCheck);
     case OP_DRIVE_UNTIL:
       // "fahre bis Farbe/Sensor". val > 0 = Suchstrecke in mm (kommt aus der
       // alten Schreibweise F50E2, im Parser bereits hierher umgewandelt),
@@ -493,18 +494,18 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
       // dadurch unabhaengig von der Microstep-Einstellung.
       steps = geoStepsForMM((float)val, config.tmcMicrosteps);
       progLogDist("M", val, (float)val, steps);
-      return progMove(steps, steps, FIXED_DRIVE_SPEED, colorCheck);
+      return progMove(steps, steps, colorCheck);
     case OP_MM_BACK:
       steps = geoStepsForMM((float)val, config.tmcMicrosteps);
       progLogDist("N", val, (float)val, steps);
-      return progMove(-steps, -steps, FIXED_DRIVE_SPEED, colorCheck);
+      return progMove(-steps, -steps, colorCheck);
     case OP_LEFT:
       steps = degToSteps(val);
-      progMove(-steps, steps, FIXED_DRIVE_SPEED, -1);
+      progMove(-steps, steps, -1);
       return false;
     case OP_RIGHT:
       steps = degToSteps(val);
-      progMove(steps, -steps, FIXED_DRIVE_SPEED, -1);
+      progMove(steps, -steps, -1);
       return false;
     case OP_DRIVE_DIST:
       // "Fahre, bis der Abstand <= val ist." Dieselbe Routine wie "bis
@@ -598,16 +599,6 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
     default:
       return false;
   }
-}
-
-// Prueft ob der Sensor-Wert-Slot erfuellt ist (1) oder nicht (0).
-// Wird fuer OP_REPEAT im Sensor-Modus genutzt. Distanz: 4=NAH/blockiert, 5=FREI.
-static bool sensorMatches(uint8_t idx) {
-  if (idx >= PROG_SENSOR_IR_HIGH) return (irBlocked() == (idx == PROG_SENSOR_IR_HIGH));
-  if (!colorSensorOk) return false;
-  char name[16];
-  getCurrentColorName(name, sizeof(name));
-  return strcasecmp(name, PROG_COLOR_NAMES[idx]) == 0;
 }
 
 // =====================================================
@@ -855,7 +846,7 @@ static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
         // "solange Sensor == Slot"
         const uint8_t target = (uint8_t)(-(int)s.val - 1);
         for (uint8_t k = 0; k < PROG_UNTIL_MAX_ITER && gameAllowsMotorRun(); k++) {
-          if (!sensorMatches(target)) break;
+          if (!sensorHitImmediate(target)) break;
           if (progExecRange(i + 1, end, inner)) { seen = true; break; }
           bleProcessEvents(); espNowProcessEvents();
           ledStripTick();

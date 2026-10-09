@@ -306,10 +306,16 @@ während die Firmware für beide 32 rechnet.
 **Strom:** `IRUN` (Bit 12..8) und `IHOLD` (Bit 4..0) des Registers 0x10 sind
 Strom-*Skalen* 0..31 (0 = 1/32, 31 = 32/32). Die Widerstände und VREF legen die
 **Obergrenze** fest (~396 mA bei 560 mΩ und `vsense = 0`), `IRUN` skaliert nur
-darunter. Für 200 mA folgt `IRUN = 16` → **210 mA**. Das Datenblatt empfiehlt
-ausdrücklich „IRUN is 16 to 31 for best microstep performance" — darunter
-wird deshalb gekappt. `IHOLD > IRUN` heißt: im Stillstand fließt **mehr** Strom
-als beim Fahren; `tmcPrintStatus()` warnt davor.
+darunter. Für die festen 200 mA folgt `IRUN = 16` → **210 mA**. Das Datenblatt
+empfiehlt ausdrücklich „IRUN is 16 to 31 for best microstep performance" —
+darunter wird deshalb gekappt.
+
+**Beide Werte sind nicht mehr einstellbar.** `IRUN` ist die feste Konstante
+`TMC_CURRENT_MA_FIXED = 200`, `IHOLD` ist der **halbe** Fahrstrom und wird
+mitberechnet. Es gab einmal `TMC:CURRENT:` und `TMC:HOLD:`; die sind entfernt
+(siehe Befehlsreferenz). Damals konnte `IHOLD > IRUN` gesetzt werden - also
+im Stillstand **mehr** Strom als beim Fahren, was der Treiber mit Dauerlast
+quittiert. `tmcPrintStatus()` warnt weiterhin davor.
 
 ### `MOT:SPD?` — Momentaufnahme mitten in der Fahrt
 
@@ -401,20 +407,22 @@ Die Geometrie dahinter: Rad **38 mm**, Umfang `pi * 38` = 119,3805 mm, mit Trim
 `6400 / 120,5863` = **53,07 Schritte/mm**, also **5 307 Schritte für 100 mm**.
 
 Weil `MAX_DRIVE_STEPS_S` die Obergrenze ist, begrenzt sie je Microstep-Zahl das
-tatsächlich fahrbare Tempo:
+tatsächlich fahrbare Tempo. **Einstellbar sind nur die ersten beiden Zeilen** -
+die dritte steht als Rechenbeispiel dafür, warum es bei ihr bleibt:
 
-| Microsteps | Schritte/mm | 20 000 Schritte/s ergeben |
-|---|---|---|
-| 16 | 26,54 | ~753 mm/s |
-| 32 | 53,07 | ~377 mm/s |
-| 128 | 212,30 | ~94 mm/s |
+| Microsteps | Schritte/mm | 20 000 Schritte/s ergeben | einstellbar |
+|---|---|---|---|
+| 16 | 26,54 | ~753 mm/s | ja |
+| 32 | 53,07 | ~377 mm/s | ja |
+| 128 | 212,30 | ~94 mm/s | **nein** (Beispiel) |
 
 **Deshalb ist `MICROSTEPS_MAX = 32`.** Oberhalb davon braucht schon 240 mm/s
 mehr Schritte/s, als der 50-µs-Puls-Task schafft; der Motor bekommt nur jeden
 fünften Puls, dreht dann nicht, sondern pfeift, weil SpreadCycle bei so
 sporadischen Pulsen kein Drehmoment aufbaut. `configValidate()` senkt zu große
-NVS-Werte beim Booten darauf ab. Feinere Auflösung kostet Tempo — das ist eine
-bewusste Entscheidung, kein Versehen.
+NVS-Werte beim Booten darauf ab. `TMC:MS:` lehnt 64/128/256 mit `TMC:BAD_MS`
+ab. Feinere Auflösung kostet Tempo — das ist eine bewusste Entscheidung, kein
+Versehen.
 
 Das **Anfahren und Abbremsen** ist eine sanfte Rampe: von 0 auf
 `FIXED_DRIVE_SPEED` in `config.rampMs` (Werkwert 150 ms, per `RAMP:` und
@@ -520,7 +528,7 @@ Dispatch-Liste am Ende von `handleCommand()` eintragen.
 |---|---|
 | `STEPS?` / `STEPS:<5..150>` | Vorwärtsstrecke je Farbe in **mm** (setzt + fährt Test) |
 | `ANG?` / `ANG:<10..360>` | Drehung im Spiel in **Grad** (setzt + dreht Test) |
-| `GEO?` / `GEO:RESET` | Geometrie melden / Einlernung auf 27,8 mm + 195 Grad zurücksetzen |
+| `GEO?` / `GEO:RESET` | Geometrie melden / Einlernung auf 30,15 mm + 195 Grad zurücksetzen |
 | `SPEED?` / `SPEED:<20..600>` | Fahrgeschwindigkeit in mm/s (wird zur Schrittrate umgerechnet) |
 | `SAT?` / `SAT:<0..1>` | Mindest-Sättigung für warme Farbtöne (GELB/ROT). Wirkt **nur** auf die warmen Töne: eine blasse, warme Fläche (Parkett, Karton, warmes Licht) fällt sonst als GELB/ROT durch. Blaue und grüne Marker sind nie betroffen. `SAT:0` schaltet die Schranke ab. |
 
@@ -543,20 +551,91 @@ Dispatch-Liste am Ende von `handleCommand()` eintragen.
 | `CAL:BLACK` / `CAL:WHITE` | Referenz auf aktuelle Rohwerte setzen |
 | `CAL:RED` / `CAL:YELLOW` / `CAL:GREEN` / `CAL:BLUE` | Farbreferenz kalibrieren |
 | `CAL:?` | alle Kalibrierungen anzeigen (`*` = gesetzt) |
+| `CAL:COLOR` (auch `CAL:FARBE`) | aktuelle Farberkennung ausgeben: `CAL:COLOR=<r>,<g>,<b>,<Name>`, zusätzlich `[CAL] erkannt: …` auf Serial |
+
+> **Warum `CAL:COLOR` extra existiert, obwohl die Web-UI schon Farben
+> bekommt.** `detectColorName()` läuft im Sensor-Task, das Ergebnis liegt
+> nur im Speicher. Ueber BLE kommt zwar `COLOR:<r>,<g>,<b>,<Name>` - aber
+> BLE sieht man im seriellen Monitor nicht. Genau beim Kalibrieren will
+> man aber wissen, **was der Sensor gerade erkennt**, sonst kalibriert man
+> ins Blaue. Dieser Befehl gibt deshalb denselben Wert auf beiden Wegen
+> aus.
+
+### Tischkanten-Wächter
+
+**Standardmäßig eingeschaltet.** Der Sensor sitzt nach unten; über der
+Kante fällt die Gesamthelligkeit auf fast null, zwei Messungen in Folge
+genügen für den sofortigen Halt. Der Schalter steht in der NVS
+(`edgeGuard`) und wird beim Boot übernommen - die Wächter-Logik selbst
+liegt in `ProgGame.cpp`.
+
+| Befehl | Wirkung |
+|---|---|
+| `EDGE:ON` | Wächter einschalten (NVS-persistent) |
+| `EDGE:OFF` | Wächter abschalten (NVS-persistent) |
+| `EDGE:RESET` | Kanten-Zähler und Sperre löschen - der Roboter wird wieder freigegeben |
+| `EDGE?` | `EDGE=<aktiv 0\|1>,<Clear>,<Rot>` plus ausführliche Zeile auf Serial |
+
+Nach dem Auslösen bleibt der Roboter **gesperrt**, bis die Helligkeit
+wieder über `EDGE_RAW_C_RELEASE` liegt oder `EDGE:RESET` kommt. Wer den
+Roboter von Hand wieder auf den Tisch stellt, schickt deshalb
+`EDGE:RESET`.
 
 ### TMC2209-Treiber
 
 | Befehl | Wirkung |
 |---|---|
 | `TMC?` | ausführlicher Status auf Serial |
-| `TMC:CURRENT:<100..200>` | RMS-Strom in mA (200 = Nennstrom des NEMA8, harte Grenze) |
-| `TMC:HOLD:<0..31>` | Haltestrom |
-| `TMC:MS:<1..256>` | Microsteps (verifiziert per Readback) |
+| `TMC:MS:<1\|2\|4\|8\|16\|32>` | Microsteps (verifiziert per Readback). **Obergrenze 32** (`MICROSTEPS_MAX` in `Config.h`) |
 | `TMC:MODE:STEALTH` / `TMC:MODE:SPREAD` | leise / mehr Drehmoment |
 | `TMC:EN:1` / `TMC:EN:0` | Treiber ein/aus |
 | `TMC:INIT` | Konfiguration erneut senden (z. B. nachträglich, wenn VM kam) |
-| `UARTTEST` / `UARTNET` | UART- bzw. PDN-Netz-Diagnose |
+| `TMC:REG` | Register-Dump mit Schreibtest (Beleg über `IFCNT`) |
+| `UARTTEST` / `UARTNET` | UART- bzw. PDN-Netz-Diagnose. **`UARTTEST` ist gesperrt** (antwortet `UARTTEST:GESPERRT`): der Befehl schreibt an die Adressen 0..3, und der TMC2209 zählt seine UART-Adresse pro Datagram hoch - danach wären beide Treiber unerreichbar bis zum Neustart. Nur `UARTNET` (rein lesend) ist erlaubt |
 | `MOT:DIAG` | Treiber-Messung (siehe unten) |
+| `MOT:SYNC` | beide Motoren auf denselben Mikroschritt bringen (läuft bei jedem Moduswechsel automatisch) |
+| `MOT:SPD?` | Momentaufnahme `VACTUAL` + `MSCNT` mitten in der Fahrt (siehe eigener Abschnitt) |
+
+#### Motorstrom: fest 200 mA, nicht mehr einstellbar
+
+**`TMC:CURRENT:` und `TMC:HOLD:` sind entfernt.** Es gibt keinen Befehl,
+kein NVS-Feld und kein UI-Feld mehr, den Strom zu ändern:
+
+- **Fahrstrom fest 200 mA RMS** - der Nennstrom des NEMA8. Konstante
+  `TMC_CURRENT_MA_FIXED` in `src/Motor.h`, in `configureOne()` nach
+  `IRUN` übersetzt.
+- **Haltestrom = halber Fahrstrom** (`IHOLD = IRUN / 2`), ebenfalls
+  automatisch abgeleitet. Ein Haltestrom gleich dem Fahrstrom liefe im
+  Stillstand auf denselben Strom wie beim Fahren - das ist genau der
+  Fehler, den die alte Einstellbarkeit erlaubt hat.
+
+Die Firmware **lehnt** beide Befehle ab, statt sie zu ignorieren, und
+antwortet mit **`TMC:FEST=<mA>`**. Grund: eine alte Web-UI oder ein altes
+Skript soll eine klare Antwort bekommen und nicht stillschweigend
+glauben, der Strom sei jetzt so eingestellt. Wer ihn ändern will, ändert
+die Konstante im Code - und sieht es beim Booten im Log.
+
+| Alter Befehl | Status | Antwort der Firmware |
+|---|---|---|
+| `TMC:CURRENT:<100..200>` | **entfernt** | `TMC:FEST=200` |
+| `TMC:HOLD:<0..31>` | **entfernt** | `TMC:FEST=200` |
+
+#### Microsteps: Obergrenze 32
+
+`TMC:MS:` akzeptiert nur die Zweierpotenzen **1, 2, 4, 8, 16, 32**
+(`validMicrosteps()` in `Motor.cpp`). Alles andere - auch Zwischenwerte
+wie 3 oder 24 - wird mit `TMC:BAD_MS` abgelehnt.
+
+**Warum 64, 128 und 256 abgelehnt werden:** sie sind nicht "ungenau",
+sie sind **funktional unbrauchbar**. Oberhalb von 32 Microsteps braucht
+der Roboter für einTempo, das er überhaupt fahren soll, so viele Schritte
+pro Sekunde, dass der 50-µs-Puls-Task sie nicht mehr erzeugen kann
+(`MAX_DRIVE_STEPS_S` = 20 000 Schritte/s). Der Motor bekommt dann nur
+noch jeden fünften Puls und **pfeift, statt zu drehen**, weil
+SpreadCycle bei so sporadischen Pulsen kein Drehmoment aufbaut - auf dem
+Roboter so gemessen. `configValidate()` senkt zu große NVS-Werte beim
+Booten auf 32 ab. Feinere Auflösung kostet Tempo: das ist eine bewusste
+Entscheidung, kein Versehen.
 
 #### Treiber-Messung: Schrittverlust und Schlupf **beobachten**
 

@@ -52,29 +52,12 @@ static_assert(RIGHT_MOTOR_SIGN == 1 || RIGHT_MOTOR_SIGN == -1,
 // Soll-Distanzen mehr.
 constexpr uint16_t MOTOR_FULL_STEPS_PER_REV = 200;
 
-// ---------- Motorgstrom: 200 mA sind das ECHTE Maximum ----------
-// Der NEMA8 8HS11-0204S hat laut Datenblatt 0,2 A Nennstrom. Mehr laesst den
-// Motor vibrieren, heizt ihn auf und kostet Schritte - das ist keine
-// Tuning-Option, sondern eine Spezifikationsgrenze.
-//
-// Diese beiden Werte sind die EINZIGE Quelle der Wahrheit. Alles, was den
-// Strom setzt, haelt sich daran:
-//   * tmcSetCurrent()      -> Befehl TMC:CURRENT: (BLE und Serial-Monitor)
-//   * configValidate()     -> NVS-Wert beim Boot, wird NOTFALLS auch
-//                             nach unten korrigiert
-//   * die Web-Einstellseite (max/min-Attribute + Pruefung)
-// Frueher stand hier "100...800" - das waren 4x Nennstrom, und ein einmal so
-// gespeicherter Wert blieb in der NVS erhalten.
-//
-// Warum die Grenze echt ist und nicht nur Anzeige: configureOne() setzt
-// I_scale_analog(false), der Strom laeuft also digital ueber IHOLD_IRUN und
-// wird von tmcSetCurrent() geschrieben. Nachgerechnet fuer R_sense 0,56 Ohm:
-//     Soll 200 mA -> CS 28 -> 198,9 mA tatsaechlich (0,99-fach Nennstrom)
-// Die 5-Bit-Quantisierung UEBERSCHREITET den Sollwert dabei nie; die
-// Saettigung CS 31 entspraeche 396 mA und ist durch die Grenze ausgeschlossen.
-constexpr uint16_t TMC_CURRENT_MA_MIN     = 100;  // darunter haelt der Motor nicht
-constexpr uint16_t TMC_CURRENT_MA_MAX     = 200;  // = Nennstrom laut Datenblatt
-constexpr uint16_t TMC_CURRENT_MA_DEFAULT = TMC_CURRENT_MA_MAX;
+// Der Motorstrom steht NICHT hier, sondern als feste Groesse in Motor.h
+// (TMC_CURRENT_MA_FIXED = 200 mA): es gibt keinen Befehl, kein NVS-Feld und
+// kein UI-Feld. Vorher standen hier MIN/MAX/DEFAULT und die Web-UI liess den
+// Strom einstellen - was wirkungslos war, weil die IRUN-Klemme auf 16 jede
+// Einstellung von 100 bis 200 mA auf dieselben 210 mA gebracht hat.
+
 // Rad-Durchmesser 38 mm (2026-10: neue Raeder montiert). Wird nur noch fuer
 // die Umrechnung Schritte <-> mm gebraucht; Drehungen kommen ohne den
 // Radwert aus.
@@ -90,10 +73,10 @@ constexpr float WHEEL_CIRCUMFERENCE_MM = 3.14159265358979f * WHEEL_DIAMETER_MM;
 constexpr float DRIVE_TRIM = 1.0101f;
 // Effektiver (gerollter) Radumfang fuer die Schritt-Rechnung.
 constexpr float EFFECTIVE_CIRCUMFERENCE_MM = WHEEL_CIRCUMFERENCE_MM * DRIVE_TRIM;
-// Weg pro EINEM Vollschritt: 0,5553 mm (effektiv, inkl. Trim).
+// Weg pro EINEM Vollschritt: 0,6029 mm (effektiv, inkl. Trim).
 constexpr float MM_PER_FULL_STEP = EFFECTIVE_CIRCUMFERENCE_MM / (float)MOTOR_FULL_STEPS_PER_REV;
 
-// Spielfeld-Raster: ein Viertel Radumdrehung = 50 Vollschritte = 27,77 mm.
+// Spielfeld-Raster: ein Viertel Radumdrehung = 50 Vollschritte = 30,15 mm.
 // Das ist bewusst derselbe Wert wie eine 90-Grad-Drehung, denn die ist
 // ebenfalls genau MOTOR_FULL_STEPS_PER_REV/4 = 50 Vollschritte. Vorwaerts
 // und Drehen sind damit geometrisch gleich - reines Motorraster, kein
@@ -246,13 +229,6 @@ struct Config {
   int8_t rightSign    = RIGHT_MOTOR_SIGN;
 
   uint32_t commandTimeoutMs = 500;
-  // TMC2209-Laufzeitwerte (NVS: tmcCur/tmcHold/tmcMS/tmcSpread, per TMC:*-Befehl setzbar)
-  // 200 mA sind der Nennstrom des NEMA8 laut Datenblatt - HARTE Obergrenze,
-  // definiert als TMC_CURRENT_MA_MAX weiter oben in dieser Datei. Wer den Wert
-  // "optimiert", laeuft den Motor ueber seine Spezifikation: er vibriert,
-  // heizt sich auf und verliert Schritte. Der Bereich ist bewusst eng.
-  uint16_t tmcCurrent = TMC_CURRENT_MA_DEFAULT;  // mA RMS, 100...200
-  uint8_t  tmcHold = 16;        // 0...31 (halber Haltestrom: kuehl, reicht flach)
   uint16_t tmcMicrosteps = 16;  // 1,2,4,8,16,32,64,128,256
   bool     tmcSpread = false;   // false=StealthChop (leise), true=SpreadCycle
   // Tischkanten-Waechter. Standard ist EINGESCHALTET: der Roboter soll nicht
@@ -263,7 +239,7 @@ struct Config {
   bool     edgeGuard = true;
   // Einlernung in PHYSIKALISCHEN Einheiten - dadurch von der Microstep-Zahl
   // unabhaengig (NVS: quizMM/quizDeg, per STEPS:<mm>/ANG:<grad>).
-  float quizForwardMM  = QUIZ_STEP_MM;    // 5..150 mm, Werkseinstellung 27,8 (ein Rasterfeld)
+  float quizForwardMM  = QUIZ_STEP_MM;    // 5..150 mm, Werkseinstellung 30,15 (ein Rasterfeld)
   float quizTurnDeg    = TURN_DEG_DEFAULT; // 10..360 Grad, Werkseinstellung 195 (gemessen)
   // Fahrgeschwindigkeit in mm/s (NVS: driveSpeed, per SPEED:<mm/s>).
   // Die Schrittrate wird daraus und aus der Microstep-Zahl berechnet.

@@ -236,15 +236,12 @@ namespace {
   TMC2209Diag tmcR(&Serial1, TMC_R_SENSE, TMC_ADDR_R);
 
   // ---- TMC-Laufzeit-State (nur Core 1, kein Mutex noetig) ----
-  uint16_t s_currentMa = TMC_CURRENT_MA_DEFAULT;
-  uint8_t  s_hold = TMC_HOLD_DEFAULT;
   uint16_t s_microsteps = TMC_MICROSTEPS_DEFAULT;
 // Off-time und Standstill-Leistungsreduktion. Beide gehoeren in CHOPCONF
 // (0x08) bzw. TPOWER (0x11) - im alten Code ueber TMCStepper gesetzt, was
 // an den falschen Adressen landete (siehe configureOne()).
 uint8_t  s_toff   = 5;      // 2..15; 1 nur mit TBL>=2, 0 schaltet den Treiber ab
 uint8_t  s_tpower = 20;     // TPOWERDOWN: Standstill-Reduktion nach ~2^20/n Schritten
-uint8_t  s_iholddelay = 4;  // Stufen je Stromabsenkung, glaettet den Runterfahr-Bock
 bool     motorDiagQuiet = false;   // Boot: nur eine Zeile statt sechs Pruefzeilen
 bool     s_initPhase = false;          // waehrend initSteppers(): nicht doppelt konfigurieren
 bool s_spread = true;
@@ -366,12 +363,16 @@ static uint8_t irunForMilliAmp(uint16_t mA) {
   float cs = (float)mA / 1000.0f * 32.0f * (TMC_R_SENSE + 0.02f) * 1.41421356f / vfs - 1.0f;
   if (cs < 0.0f) cs = 0.0f;
   if (cs > 31.0f) cs = 31.0f;
-  // Das Datenblatt raeumt ausdruecklich: "IRUN is 16 to 31 for best
-  // microstep performance" und "choose sense resistors in a way that normal
-  // IRUN is 16 to 31". Darunter faellt die Mikroschritt-Qualitaet ab. Also
-  // unten kappen - und die Luecke melden, statt still einen anderen Strom
-  // zu fahren als der Nutzer eingestellt hat.
-  return (uint8_t)(cs < 16.0f ? 16.0f : cs);
+  // ABRUNDEN, nicht auf 16 kappen. Mit 560 mOhm ergibt sich fuer 200 mA
+  // Sollstrom cs = 15,15 -> IRUN 15 -> 198 mA.
+  //
+  // Vorher stand hier eine Klemme auf 16 (das Datenblatt empfiehlt "IRUN is
+  // 16 to 31 for best microstep performance"). Die hat jede Einstellung
+  // zwischen 100 und 200 mA auf dieselben 210 mA gebracht: Der Regler sah
+  // beweglich aus und war es nicht. Wir runden ab, damit der eingestellte
+  // Strom nie UEBERSCHRITTEN wird - das ist die Zusage, die auch in Config.h
+  // steht. 198 statt 210 mA sind 6 % weniger Drehmoment und messbar kuehler.
+  return (uint8_t)cs;
 }
 
 // Reihenfolge-Vorbereitung: configureOne() steht weiter unten im Text und
@@ -412,26 +413,29 @@ void configureOne(TMC2209Diag& d, bool& msOkOut) {
                   CHOP_MRES_MASK | CHOP_INTPOL | CHOP_TOFF_MASK, "CHOPCONF");
 
   // ---- IHOLD_IRUN (0x10): Motorstrom ----
-  // OHNE diesen Schritt laeuft der Treiber auf dem OTP-Vorgabewert IRUN = 31,
-  // also auf voller Skala. Das ist bei 560 mOhm und vsense = 0 rund 396 mA RMS
-  // - das Doppelte dessen, was ein NEMA8 mit 0,2 A verträgt. Genau das ist
-  // vorher passiert, weil der Aufruf ueber die Bibliothek auf 0x06 (IOIN)
-  // gelandet ist. Auf der Platten ist das ein Hitzeproblem, kein Wohlbehagen.
-  const uint8_t irun = irunForMilliAmp(s_currentMa);
-  const uint8_t ihold = (uint8_t)(s_hold > 31 ? 31 : s_hold);
+  // Der Strom ist FEST und nicht einstellbar: TMC_CURRENT_MA_FIXED = 200 mA,
+  // der Nennstrom des NEMA8 laut Datenblatt. Nicht "einstellbar, aber
+  // versteckt" - es gibt keinen Befehl, kein NVS-Feld und kein UI-Feld mehr.
+  // Wer ihn aendern will, aendert die Konstante im Code, und dann sieht man
+  // es beim Booten im Log.
+  //
+  // IHOLD ist der halbe Fahrstrom. Ein Haltestrom gleich dem Fahrstrom laesst
+  // den Motor im Stillstand heissen, ohne dass er mehr Moment haelt als im
+  // Stand - er haelt nur mehr Waerme.
+  const uint8_t irun  = irunForMilliAmp(TMC_CURRENT_MA_FIXED);
+  const uint8_t ihold = (uint8_t)(irun / 2u);
   uint32_t iholdIrun = ((uint32_t)irun << 8) & 0x0001F000u;   // IRUN  bits 12..8
   iholdIrun |= ((uint32_t)ihold & 0x1Fu);                     // IHOLD bits 4..0
-  iholdIrun |= ((uint32_t)s_iholddelay << 16) & 0x000F0000u;  // IHOLDDELAY 19..16
-  tmcWriteChecked(d, 0x10, iholdIrun, 0x001FFFFFu, "IHOLD/IRUN");
+  iholdIrun |= ((uint32_t)TMC_IHOLDDELAY << 16) & 0x000F0000u; // IHOLDDELAY 19..16
+  tmcWriteChecked(d, TMC_REG_IHOLD_IRUN, iholdIrun, 0x001FFFFFu, "IHOLD/IRUN");
   if (motorDiagQuiet) {
-    // Beim Booten eine Zeile mit dem tatsaechlich eingestellten Strom - die
-    // Zahl im Web-UI ist eine Vorgabe, die Ausgabe hier ist die Wahrheit.
-    Serial.printf("[TMC] Strom: IRUN=%u -> %.0f mA RMS (vorgegeben %u mA), IHOLD=%u -> %.0f mA, "
-                  "maximal moeglich %.0f mA\n",
-                  irun, (double)milliAmpForIrun(irun), s_currentMa,
+    Serial.printf("[TMC] Strom fest: IRUN=%u -> %.0f mA RMS (Soll %u mA), "
+                  "IHOLD=%u -> %.0f mA, moeglich bis %.0f mA\n",
+                  irun, (double)milliAmpForIrun(irun), (unsigned)TMC_CURRENT_MA_FIXED,
                   ihold, (double)milliAmpForIrun(ihold),
                   (double)milliAmpForIrun(31));
   }
+
 
   // ---- TPOWER (0x11) ----
   tmcWriteChecked(d, TMC_REG_TPOWER, s_tpower, 0xFFu, "TPOWER");
@@ -580,7 +584,7 @@ float FIXED_DRIVE_SPEED = 0.0f;
 
 // Beschleunigung fuer Positionsfahrten (Schritte/s^2): von 0 auf
 // FIXED_DRIVE_SPEED in config.rampMs. Bewusst mild - kein Ruck, aber auch
-// keine spuerbare Verzoegerung auf kurzen Strecken (27,8-mm-Feld erreicht
+// keine spuerbare Verzoegerung auf kurzen Strecken (30,15-mm-Feld erreicht
 // praktisch noch die volle Geschwindigkeit). Haengt an FIXED_DRIVE_SPEED,
 // damit die Rampe ihre Zeit in mm/s^2 trotzdem einhaelt, egal wie die
 // Microsteps stehen.
@@ -687,8 +691,6 @@ void motorStepPositions(long& outL, long& outR) {
 
 void initSteppers() {
   // Laufzeitwerte zuerst: die Schrittrate haengt an den Microsteps.
-  s_currentMa = config.tmcCurrent;
-  s_hold = config.tmcHold;
   s_microsteps = config.tmcMicrosteps;
   s_spread = config.tmcSpread;
   motorUpdateSpeeds();
@@ -1500,42 +1502,23 @@ void tmcReinit() {
   Serial.printf("[TMC] Reinit: %s\n", ok ? "OK" : "FEHLER - Register nicht bestaetigt");
 }
 
-bool tmcSetCurrent(uint16_t mA) {
-  // HARTE Grenze 100..200 mA, siehe die Begruendung bei TMC_CURRENT_MA_MAX
-  // in Motor.h. Auch der Serial-Monitor kann nichts groesseres setzen: der
-  // Aufrufer (cmdTmc) speichert config.tmcCurrent nur bei true, ein
-  // abgelehnter Wert erreicht die NVS also gar nicht erst.
-  if (mA < TMC_CURRENT_MA_MIN || mA > TMC_CURRENT_MA_MAX) {
-    Serial.printf("[TMC] Strom %u mA abgelehnt (erlaubt %u..%u mA)\n",
-                  mA, TMC_CURRENT_MA_MIN, TMC_CURRENT_MA_MAX);
-    return false;
-  }
-  s_currentMa = mA;
-  // Ueber configureOne(), NICHT ueber TMCStepper::rms_current()/ihold().
-  //
-  // Beide Bibliotheksaufrufe haben denselben Fehler, belegt in
-  // IHOLD_IRUN.cpp:4 -  #define SET_REG(SETTING) ... write(address, sr)
-  // Sie schreiben das KOMPLETTE Register aus dem Bibliotheks-Schatten, nicht
-  // nur das eine Bit. Den Schatten pflegt aber nur die Bibliothek selbst;
-  // configureOne() schreibt Register 0x10 direkt und laesst ihn unberuehrt, wo
-  // noch die Defaults stehen - darunter irun = 0.
-  //
-  // Praktische Folge: TMC:HOLD:20 schrieb nicht "Haltestrom 20", sondern
-  // "Haltestrom 20, Fahrstrom 0". Das sind rund 12 mA statt 210 mA, die
-  // Motoren drehen nicht mehr. rms_current() ruft zusaetzlich vsense() auf,
-  // das CHOPCONF an die TMC2130-Adresse 0x6C schreibt statt an 0x08.
-  return tmcConfigureBothDrivers();
-}
-
-bool tmcSetHold(uint8_t ihold) {
-  if (ihold > 31) return false;
-  // IHOLD darf nie ueber IRUN liegen: sonst fliesst im Stillstand mehr Strom
-  // als beim Fahren - das ist Waerme, kein zusaetzliches Moment. Die Firmware
-  // hat im Stillstand nichts zu halten, wofoehr es 210 mA braeuchte.
-  const uint8_t irun = irunForMilliAmp(s_currentMa);
-  s_hold = (uint8_t)(ihold > irun ? irun : ihold);
-  return tmcConfigureBothDrivers();
-}
+// tmcSetCurrent() und tmcSetHold() sind ersatzlos entfallen. Der Motorstrom ist
+// fest 200 mA (TMC_CURRENT_MA_FIXED), IHOLD ist der halbe Fahrstrom - beides
+// wird in configureOne() aus der einen Konstanten abgeleitet. Es gibt keinen
+// Befehl, kein NVS-Feld und kein UI-Feld, ueber das man daran kommen koennte.
+//
+// Grund der Loeschung, nicht nur der Aufraeumwunsch: beide gingen ueber
+// TMCStepper und schrieben damit das KOMPLETTE Register IHOLD_IRUN (0x10)
+// aus dem Bibliotheks-Schatten. Den Schatten pflegt nur die Bibliothek selbst
+// - configureOne() schreibt 0x10 direkt und laesst ihn unberuehrt, wo noch
+// die Defaults stehen, darunter irun = 0. TMC:HOLD:20 schrieb deshalb nicht
+// "Haltestrom 20", sondern "Haltestrom 20, Fahrstrom 0": rund 12 mA statt
+// 210 mA, die Motoren drehten nicht mehr. rms_current() rief zusaetzlich
+// vsense() auf, das CHOPCONF an die TMC2130-Adresse 0x6C schreibt statt an
+// 0x08 (IHOLD_IRUN.cpp:4 belegt das Schreiben des ganzen Registers).
+//
+// Ausserdem waren die Regler wirkungslos: die IRUN-Klemme auf 16 hat jede
+// Einstellung von 100 bis 200 mA auf dieselben 210 mA gebracht.
 
 bool tmcSetMicrosteps(uint16_t ms) {
   if (!validMicrosteps(ms)) return false;
@@ -1589,8 +1572,8 @@ void tmcSetSpreadCycle(bool spread) {
 }
 
 bool tmcSpreadCycle() { return s_spread; }
-uint16_t tmcGetCurrent() { return s_currentMa; }
-uint8_t tmcGetHold() { return s_hold; }
+uint16_t tmcGetCurrent() { return TMC_CURRENT_MA_FIXED; }
+uint8_t tmcGetHold() { return (uint8_t)(irunForMilliAmp(TMC_CURRENT_MA_FIXED) / 2u); }
 uint16_t tmcGetMicrosteps() { return s_microsteps; }
 bool tmcMicrostepsConfirmed() { return s_msConfirmed; }
 
@@ -1601,7 +1584,7 @@ void tmcSendCompactStatus() {
   snprintf(m, sizeof(m), "TMC:STAT:%u,%u,%u,%u,%u,%u,%u,%u",
     cL == 0 ? 1 : 0, cR == 0 ? 1 : 0,
     tmcL.version(), tmcR.version(),
-    s_currentMa, s_microsteps, s_spread ? 1 : 0, s_enabled ? 1 : 0);
+    TMC_CURRENT_MA_FIXED, s_microsteps, s_spread ? 1 : 0, s_enabled ? 1 : 0);
   sendStatus(m);
 }
 
@@ -1617,14 +1600,15 @@ void tmcPrintStatus() {
     TMC_ADDR_R, connR == 0 ? "OK" : "FEHLER");
   Serial.printf("Version L=0x%X R=0x%X (erwartet 0x21)\n", tmcL.version(), tmcR.version());
   Serial.printf("Treiber-EN (GPIO%d): %s\n", PIN_EN, s_enabled ? "EIN" : "AUS");
-  Serial.printf("Strom: IRUN=%u -> %.0f mA RMS (zugefuehrt war config mit %u mA), "
-              "IHOLD=%u -> %.0f mA\n",
-              irunForMilliAmp(s_currentMa), (double)milliAmpForIrun(irunForMilliAmp(s_currentMa)),
-              s_currentMa, (uint8_t)(s_hold > 31 ? 31 : s_hold),
-              (double)milliAmpForIrun((uint8_t)(s_hold > 31 ? 31 : s_hold)));
-  Serial.printf("  Obergrenze durch die 560-mOhm-Fuehler: %.0f mA (IRUN=31). "
-                "Ueber IRUN/IHOLD wird nur darunter skaliert.\n",
-                (double)milliAmpForIrun(31));
+  Serial.printf("Strom fest: IRUN=%u -> %.0f mA RMS (Soll %u mA), IHOLD=%u -> %.0f mA\n",
+              irunForMilliAmp(TMC_CURRENT_MA_FIXED),
+              (double)milliAmpForIrun(irunForMilliAmp(TMC_CURRENT_MA_FIXED)),
+              (unsigned)TMC_CURRENT_MA_FIXED, tmcGetHold(),
+              (double)milliAmpForIrun(tmcGetHold()));
+  Serial.printf("  Nicht einstellbar - Nennstrom des NEMA8. Obergrenze durch die "
+                "560-mOhm-Fuehler waere %.0f mA (IRUN=31); davon fahren wir %.0f mA.\n",
+                (double)milliAmpForIrun(31),
+                (double)milliAmpForIrun(irunForMilliAmp(TMC_CURRENT_MA_FIXED)));
   Serial.printf("Microsteps: %u %s\n", s_microsteps, s_msConfirmed ? "(OK)" : "(NICHT UEBERNOMMEN!)");
   Serial.printf("Modus: %s\n", s_spread ? "SpreadCycle" : "StealthChop");
   Serial.printf("IFCNT: L=%u R=%u\n", tmcL.IFCNT(), tmcR.IFCNT());
@@ -1652,14 +1636,6 @@ void tmcPrintStatus() {
   Serial.printf("Schwellen gesetzt: SpreadCycle ab %.0f mm/s, StallGuard ab %.0f mm/s "
                 "(Konfiguration bestaetigt ueber IFCNT)\n",
                 (double)TMC_SPREADCYCLE_AB_MM_S, (double)TMC_STALLGUARD_AB_MM_S);
-  if (s_hold > irunForMilliAmp(s_currentMa)) {
-    Serial.printf("  ! ACHTUNG: IHOLD=%u liegt ueber IRUN=%u - im Stillstand fliesst "
-                  "MEHR Strom als beim Fahren (%.0f statt %.0f mA). Das Motor-Datenblatt "
-                  "nennt 0,2 A; Hold kleiner setzen (z.B. 12), sonst wird der Motor heiss.\n",
-                  (uint8_t)(s_hold > 31 ? 31 : s_hold), irunForMilliAmp(s_currentMa),
-                  (double)milliAmpForIrun((uint8_t)(s_hold > 31 ? 31 : s_hold)),
-                  (double)milliAmpForIrun(irunForMilliAmp(s_currentMa)));
-  }
   Serial.printf("DRV_STATUS: L=0x%08lX R=0x%08lX\n",
                 (unsigned long)stL, (unsigned long)stR);
   Serial.println("=============================================");
@@ -1679,7 +1655,7 @@ void tmcBootDiag() {
   Serial.printf("IFCNT L: %u -> %u %s\n", ifBefore, ifAfter,
     ifAfter != ifBefore ? "(zaehlt = Austausch OK)" : "(steht = KEIN Austausch!)");
   Serial.printf("MRES L: %u | Strom: %u mA | Hold: %u | Modus: %s | EN: %s\n",
-    tmcL.mres(), s_currentMa, s_hold,
+    mresCodeFor(s_microsteps), tmcGetCurrent(), tmcGetHold(),
     s_spread ? "SpreadCycle" : "StealthChop", s_enabled ? "EIN" : "AUS");
   // KEIN Readback von TPWMTHRS/TCOOLTHRS/SGTHRS: das Datenblatt kennzeichnet
   // sie als "W" = nur schreibbar, der Readback liefert immer 0 und hat hier
@@ -1739,11 +1715,16 @@ void tmcNetDiag() {
 void tmcRegDump() {
   Serial.println();
   Serial.println("========== TMC REGISTER-DUMP ==========");
+  // Adressen und Namen aus dem TMC2209-Datenblatt, NICHT aus TMCStepper. Die
+  // Bibliothek vererbt die TMC2130-Namen und -Adressen und nennt 0x07
+  // "FCLKCONF" - beim TMC2209 ist das FACTORY_CONF. Ebenso ist 0x05 beim
+  // TMC2130 SLAVECONF, beim TMC2209 OTP_READ (nur lesbar, harmlos).
+  // 0x04 (OTP_PROG) fehlt bewusst: das programmiert NVM-Zellen.
   struct { const char* n; uint8_t a; } const regs[] = {
-    {"GCONF", 0x00}, {"GSTAT", 0x01}, {"IFCNT", 0x02}, {"SLAVECONF", 0x05},
     {"GCONF", 0x00}, {"GSTAT", 0x01}, {"IFCNT", 0x02}, {"NODECONF", 0x03},
-    {"IOIN", 0x06}, {"FCLKCONF", 0x07}, {"CHOPCONF", 0x08}, {"SHORT_CONF", 0x09},
-    {"SHORT_STAT", 0x0A}, {"COOLCONF", 0x0B}, {"TPOWER", 0x11},
+    {"OTP_READ", 0x05}, {"IOIN", 0x06}, {"FACTORY_CONF", 0x07}, {"CHOPCONF", 0x08},
+    {"SHORT_CONF", 0x09}, {"SHORT_STAT", 0x0A}, {"COOLCONF", 0x0B},
+    {"IHOLD_IRUN", 0x10}, {"TPOWER", 0x11},
     {"TSTEP", 0x12}, {"TPWMTHRS", 0x13}, {"TCOOLTHRS", 0x14}, {"VACTUAL", 0x22},
     {"SGTHRS", 0x40}, {"SG_RESULT", 0x41}, {"COOLCONF2", 0x42},
     {"MSCNT", 0x6A}, {"DRV_STATUS", 0x6F},
@@ -1758,25 +1739,32 @@ void tmcRegDump() {
     Serial.printf("  0x%02X %-12s = 0x%08lX%s\n", regs[i].a, regs[i].n,
                   (unsigned long)v, writeOnly ? "   (nur schreibbar - Readback ohne Aussage)" : "");
   }
-  Serial.println("--- Schreibtest: GCONF (0x00) und FCLKCONF (0x07, R/W) ---");
+  // Schreibtest auf GCONF (0x00, R/W) - die einzige Adresse, an der wir ohne
+  // Nebenwirkung kippen koennen. Der alte Test schrieb zusaetzlich auf 0x07
+  // und nannte das FCLKCONF; das ist beim TMC2209 FACTORY_CONF, und er
+  // manipulierte dort ein Feld mit unbekannter Bedeutung.
+  Serial.println("--- Schreibtest: GCONF (0x00, R/W) ---");
   {
     TMC2209Diag& d = tmcL;
+    const uint32_t g0 = d.read(TMC_REG_GCONF);
     const uint8_t if0 = (uint8_t)d.read(TMC_REG_IFCNT);
-    d.write(TMC_REG_GCONF, 0x1C0 ^ 0x00000100u);   // GCONF-Bit kippen (R/W)
-    const uint32_t g = d.read(TMC_REG_GCONF);
-    d.write(TMC_REG_GCONF, 0x1C0);
+    // Genau ein Bit kippen und danach den GEMESSENEN Wert zurueckschreiben.
+    // Vorher stand hier die Konstante 0x1C0 - bei aktivem SpreadCycle (0x1C4)
+    // hat TMC:REG den Treiber damit still und dauerhaft auf StealthChop
+    // zurueckgeschaltet.
+    d.write(TMC_REG_GCONF, g0 ^ 0x00000100u);
+    const uint32_t g1 = d.read(TMC_REG_GCONF);
+    d.write(TMC_REG_GCONF, g0);              // gelesener Wert, nicht eine Konstante
+    const uint32_t g2 = d.read(TMC_REG_GCONF);
     const uint8_t if1 = (uint8_t)d.read(TMC_REG_IFCNT);
-    Serial.printf("  GCONF   : gekipptes Bit liest 0x%08lX  %s\n",
-                  (unsigned long)g, (g != 0x1C0) ? "-> SCHREIBEN WIRKT" : "-> wird ignoriert");
-
-    const uint32_t f0 = d.read(0x07);
-    d.write(0x07, (f0 & 0x000000FFu) | ((((f0 >> 8) + 1) & 0x3Fu) << 8));  // FCLKTRIM
-    const uint32_t f1 = d.read(0x07);
-    d.write(0x07, f0);
-    Serial.printf("  FCLKCONF: 0x%08lX -> 0x%08lX  %s\n",
-                  (unsigned long)f0, (unsigned long)f1,
-                  (f1 != f0) ? "-> SCHREIBEN WIRKT AUCH AUF ADRESSE != 0" : "-> wird ignoriert");
-    Serial.printf("  IFCNT   : %u -> %u (zaehlt nur Schreibzugriffe; 4 Writes = +4 erwartet)\n",
+    Serial.printf("  GCONF   : 0x%08lX -> 0x%08lX -> 0x%08lX  %s\n",
+                  (unsigned long)g0, (unsigned long)g1, (unsigned long)g2,
+                  (g1 != g0) ? "-> SCHREIBEN WIRKT" : "-> wird ignoriert");
+    Serial.printf("  Zustand wiederhergestellt: %s\n",
+                  (g2 == g0) ? "ja" : "NEIN - bitte neu konfigurieren (TMC:INIT)");
+    // Zwei Schreibzugruege liegen zwischen den beiden IFCNT-Abfragen:
+    // das Gekippte und das Zurueckgeschriebene.
+    Serial.printf("  IFCNT   : %u -> %u (zaehlt nur Schreibzugruege; 2 Writes = +2 erwartet)\n",
                   if0, if1);
   }
   Serial.println("======================================");

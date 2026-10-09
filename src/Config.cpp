@@ -22,8 +22,6 @@ float configStepsPerS() {
 void configLoad() {
   prefs.begin("edubot", false);
   // TMC-Werte ZUERST: die Microsteps gehen in jede Umrechnung ein.
-  config.tmcCurrent    = prefs.getUShort("tmcCur", 200);
-  config.tmcHold       = prefs.getUChar("tmcHold", 16);
   config.tmcMicrosteps = prefs.getUShort("tmcMS", 16);
   config.tmcSpread     = prefs.getBool("tmcSpread", false);
   // Tischkanten-Waechter: Default AN. Wer ihn ausschaltet, schreibt false in
@@ -101,7 +99,7 @@ void configLoad() {
                 "tempo=%.0f mm/s tmc=%u/%u/%u/%d geoSig=0x%08lX (soll 0x%08lX)%s\n",
                 (double)config.quizForwardMM, (double)config.quizTurnDeg,
                 (double)config.driveSpeedMM,
-                config.tmcCurrent, config.tmcHold, config.tmcMicrosteps,
+                config.tmcMicrosteps,
                 config.tmcSpread ? 1 : 0,
                 (unsigned long)prefs.getUInt("geoSig", 0), (unsigned long)sig,
                 geoChanged ? " -> NEU GESETZT" : "");
@@ -198,19 +196,9 @@ void configValidate() {
   if (!inRange(config.obsScale, 0.5f, 2.0f)) {
     config.obsScale = 1.0f; changed = true;
   }
-  // Motorgstrom: 100..200 mA, harte Obergrenze = Nennstrom des NEMA8.
-  // Wichtig: der Bereich MUSS mit TMC_CURRENT_MA_MIN/MAX aus Motor.h
-  // uebereinstimmen. Stand hier vorher "100..800", dann waere ein per altem
-  // Build gespeicherter 800-mA-Wert weiterhin gueltig - der Befehlsweg
-  // (tmcSetCurrent) lehnt zwar ab, aber die NVS haette den Wert behalten und
-  // initSteppers() haette ihn beim Boot erneut eingelesen. Genau damit waere
-  // die Grenze nicht "echt" gewesen, sondern nur im UI.
-  if (config.tmcCurrent < TMC_CURRENT_MA_MIN || config.tmcCurrent > TMC_CURRENT_MA_MAX) {
-    config.tmcCurrent = TMC_CURRENT_MA_MAX; changed = true;
-  }
-  if (config.tmcHold > 31) {
-    config.tmcHold = 31; changed = true;
-  }
+  // Der Motorstrom wird hier nicht mehr validiert: er steht fest in Motor.h
+  // (TMC_CURRENT_MA_FIXED = 200 mA) und hat kein NVS-Feld mehr. Die
+  // Microstep-Zahl dagegen bleibt einstellbar und wird hier geprueft.
   if (config.tmcMicrosteps != 1 && config.tmcMicrosteps != 2 &&
       config.tmcMicrosteps != 4 && config.tmcMicrosteps != 8 &&
       config.tmcMicrosteps != 16 && config.tmcMicrosteps != 32) {
@@ -232,8 +220,6 @@ void configValidate() {
   prefs.putInt("obsRel", config.obsRelMM);
     prefs.putInt("obsOff", config.obsOffsetMM);
     prefs.putFloat("obsScale", config.obsScale);
-    prefs.putUShort("tmcCur", config.tmcCurrent);
-    prefs.putUChar("tmcHold", config.tmcHold);
     prefs.putUShort("tmcMS", config.tmcMicrosteps);
     prefs.putBool("tmcSpread", config.tmcSpread);
     prefs.putFloat("quizMM", config.quizForwardMM);

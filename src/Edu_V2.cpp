@@ -905,26 +905,17 @@ static bool cmdTmc(const String& cmd) {
       }
       return true;
     }
-  if (cmd.startsWith("TMC:CURRENT:")) {
-    int v = cmd.substring(12).toInt();
-    if (tmcSetCurrent((uint16_t)v)) {
-      config.tmcCurrent = (uint16_t)v; configSaveUShort("tmcCur", config.tmcCurrent);
-      snprintf(buf, sizeof(buf), "TMC:CURRENT=%u", tmcGetCurrent()); sendStatus(buf);
-      tmcSendCompactStatus();
-    } else {
-      sendStatus("TMC:BAD_CURRENT");
-    }
-    return true;
-  }
-  if (cmd.startsWith("TMC:HOLD:")) {
-    int v = cmd.substring(9).toInt();
-    if (tmcSetHold((uint8_t)v)) {
-      config.tmcHold = (uint8_t)v; configSaveUChar("tmcHold", config.tmcHold);
-      snprintf(buf, sizeof(buf), "TMC:HOLD=%u", tmcGetHold()); sendStatus(buf);
-      tmcSendCompactStatus();
-    } else {
-      sendStatus("TMC:BAD_HOLD");
-    }
+  // TMC:CURRENT: und TMC:HOLD: gibt es nicht mehr. Der Motorstrom ist fest
+  // 200 mA (Nennstrom des NEMA8, Motor.h TMC_CURRENT_MA_FIXED), IHOLD ist der
+  // halbe Fahrstrom - beides wird in configureOne() abgeleitet.
+  //
+  // Die Befehle werden abgelehnt statt ignoriert: eine alte Web-UI oder ein
+  // altes Skript, das sie noch schickt, soll eine klare Antwort bekommen und
+  // nicht stillschweigend denken, der Strom waere jetzt so eingestellt.
+  if (cmd.startsWith("TMC:CURRENT:") || cmd.startsWith("TMC:HOLD:")) {
+    snprintf(buf, sizeof(buf), "TMC:FEST=%u", tmcGetCurrent()); sendStatus(buf);
+    Serial.printf("[CMD] %s abgelehnt - der Strom ist fest %u mA\n",
+                  cmd.c_str(), (unsigned)tmcGetCurrent());
     return true;
   }
   if (cmd.startsWith("TMC:MS:")) {

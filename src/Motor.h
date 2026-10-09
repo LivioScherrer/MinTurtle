@@ -23,7 +23,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include "Config.h"   // TMC_CURRENT_MA_MIN/MAX (Stromgrenze 200 mA)
+#include "Config.h"   // MICROSTEPS_MAX, Geometrie, RAMPE
 
 // Stepper-Pins (Xiao ESP32-S3, PCB Edu_V2.2 verdrahtet - NICHT aendern!)
 // IST-Verdrahtung dieses Roboters (am Fahrroboter geprueft, 2026-09):
@@ -91,11 +91,17 @@ constexpr uint32_t MOTOR_TICK_US = 50;
 // Hold 16 = halber Haltestrom (kuehl + akkuschonend, reicht flach).
 // StealthChop = leise (Klassenzimmer); per Web-UI auf SpreadCycle schaltbar.
 //
-// Die STROMGRENZEN (TMC_CURRENT_MA_MIN/MAX/DEFAULT) stehen bewusst in
-// Config.h neben den anderen Motorkonstanten, weil sie sowohl der Befehl
-// (tmcSetCurrent) als auch die NVS-Validierung (Config.cpp) brauchen und
-// dort das "wir wirklich 200 mA maximal" durchgesetzt wird.
-constexpr uint8_t  TMC_HOLD_DEFAULT       = 16;   // 0...31
+// Motorstrom FEST 200 mA - der Nennstrom des NEMA8 laut Datenblatt. Kein
+// Regler, kein Befehl, kein NVS-Feld, kein UI-Feld. IHOLD ist der halbe
+// Fahrstrom, IHOLDDELAY glaettet das Absenken.
+//
+// Vorher standen hier MIN/MAX/DEFAULT und TMC_CURRENT_MA_* in Config.h, und
+// die Web-UI liess den Strom einstellen. Das war wirkungslos: die
+// IRUN-Klemme auf 16 hat jede Einstellung von 100 bis 200 mA auf dieselben
+// 210 mA gebracht. Ueber TMCStepper geschrieben wurde der Strom ohnehin nicht,
+// sondern nur in die NVS - im Silizium stand die Klemme.
+constexpr uint16_t TMC_CURRENT_MA_FIXED   = 200;  // mA RMS Sollstrom
+constexpr uint8_t  TMC_IHOLDDELAY          = 4;    // Stufen je Stromabsenkung
 constexpr uint16_t TMC_MICROSTEPS_DEFAULT = 16;   // 1,2,4,8,16,32 (Grenze: MICROSTEPS_MAX)
 // Anzahl der Register-Schreibzugriffe in configureOne(): GCONF, CHOPCONF,
 // IHOLD_IRUN, TPOWER, TPWMTHRS, TCOOLTHRS, SGTHRS, NODECONF. Der Erfolg wird
@@ -118,12 +124,9 @@ constexpr uint8_t TMC_REG_GCONF       = 0x00;   // nur 10 Bit: Modus/Flags
 constexpr uint8_t TMC_REG_GSTAT       = 0x01;   // reset / drv_err / uv_cp
 constexpr uint8_t TMC_REG_IFCNT       = 0x02;
 constexpr uint8_t TMC_REG_NODECONF    = 0x03;   // SENDDELAY
+constexpr uint8_t TMC_REG_IHOLD_IRUN   = 0x10;   // IHOLD/IRUN/IHOLDDELAY
 constexpr uint8_t TMC_REG_IOIN        = 0x06;   // nur lesbar
-constexpr uint8_t TMC_REG_FCLKCONF    = 0x07;   // FCLKTRIM/OTTRIM
 constexpr uint8_t TMC_REG_CHOPCONF    = 0x08;   // NICHT 0x06 (das ist IOIN!)
-constexpr uint8_t TMC_REG_SHORT_CONF  = 0x09;
-constexpr uint8_t TMC_REG_SHORT_STAT  = 0x0A;
-constexpr uint8_t TMC_REG_COOLCONF    = 0x0B;
 constexpr uint8_t TMC_REG_TPOWER      = 0x11;   // TPOWERDOWN
 constexpr uint8_t TMC_REG_TSTEP       = 0x12;   // gemessene STEP-Periode
 constexpr uint8_t TMC_REG_TPWMTHRS    = 0x13;
@@ -131,15 +134,11 @@ constexpr uint8_t TMC_REG_TCOOLTHRS   = 0x14;
 constexpr uint8_t TMC_REG_VACTUAL     = 0x22;   // gemessene Drehzahl
 constexpr uint8_t TMC_REG_SGTHRS      = 0x40;
 constexpr uint8_t TMC_REG_SG_RESULT   = 0x41;   // Drehmoment-Reserve
-constexpr uint8_t TMC_REG_COOLCONF2   = 0x42;
 constexpr uint8_t TMC_REG_MSCNT       = 0x6A;   // Sequenzer-Mikroschrittzaehler
 constexpr uint8_t TMC_REG_DRV_STATUS  = 0x6F;
 
 // GCONF-Bitlagen (Datenblatt 5.5.1).
-constexpr uint32_t GCONF_I_SCALE_ANALOG  = 1u << 0;
-constexpr uint32_t GCONF_INTERNAL_RSENSE = 1u << 1;
 constexpr uint32_t GCONF_EN_SPREADCYCLE  = 1u << 2;
-constexpr uint32_t GCONF_SHAFT           = 1u << 3;
 constexpr uint32_t GCONF_PDN_DISABLE     = 1u << 6;
 constexpr uint32_t GCONF_MSTEP_REG_SELECT= 1u << 7;
 constexpr uint32_t GCONF_MULTISTEP_FILT  = 1u << 8;
@@ -186,9 +185,9 @@ constexpr uint32_t DRVST_CS_ACTUAL_MASK  = 0xFFu;
 // Gegenprobe mit der eigenen OTP-Tabelle des Herstellers: die Stufen
 // 200/300/400/500/800/1200/4000 ergeben damit 180/120/90/72/45/30/9 mm/s -
 // die Formel reproduziert die Werksvorgabe, ist also nicht nur hergeleitet.
-// Mit dem Rad dieses Roboters (35 mm, DRIVE_TRIM 1.0101 -> 111,07 mm) folgt
-//     TPWMTHRS  = 36030 / v[mm/s]     ->  601 bei 60 mm/s
-//     TCOOLTHRS = 36030 / v[mm/s]     -> 2402 bei 15 mm/s
+// Mit dem Rad dieses Roboters (38 mm, DRIVE_TRIM 1.0101 -> 120,59 mm) folgt
+//     TPWMTHRS  = 39514 / v[mm/s]     ->  658 bei 60 mm/s
+//     TCOOLTHRS = 39514 / v[mm/s]     -> 2634 bei 15 mm/s
 constexpr float   TMC_SPREADCYCLE_AB_MM_S = 60.0f;   // ab hier SpreadCycle
 
 // ---- StallGuard scharf machen ----
@@ -381,10 +380,10 @@ void tmcAutoStandbyTick();
 // senden - z.B. nachträglich, wenn beim Booten noch kein VM anlag.
 void tmcReinit();
 
-// Strom / Haltestrom / Microsteps / Modus (fuer Diagnose + Tuning)
-bool tmcSetCurrent(uint16_t mA);      // 100...200, false bei ungueltig
-bool tmcSetHold(uint8_t ihold);       // 0...31, wird auf IRUN begrenzt
-bool tmcSetMicrosteps(uint16_t ms);   // 1..256 (Liste), verifiziert per Readback
+// Microsteps / Modus (fuer Diagnose + Tuning).
+// tmcSetCurrent() und tmcSetHold() gibt es nicht mehr - der Strom ist fest
+// 200 mA (TMC_CURRENT_MA_FIXED) und wird in configureOne() gesetzt.
+bool tmcSetMicrosteps(uint16_t ms);   // 1..32 (Liste), verifiziert per IFCNT-Beleg
 void tmcSetSpreadCycle(bool spread);  // true=SpreadCycle, false=StealthChop
 bool tmcSpreadCycle();                // aktueller Modus
 uint16_t tmcGetCurrent();
