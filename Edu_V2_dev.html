@@ -231,6 +231,24 @@ function showParsed(msg) {
     const f = msg.substring(5).split(',');
     out = [['Anlaufdrehung', f[0] + ' Schritte/s'], ['Dauer', f[1] + ' ms'],
            ['aktiv', f[0] !== '0' && f[1] !== '0']];
+  } else if (msg.startsWith('MOT:MEAS:')) {
+    // Treiber-Messung: reine Beobachtung, kein Eingriff. Siehe die
+    // ausfuehrliche Erklaerung im Serial-Log (Befehl MOT:DIAG).
+    const f = msg.substring(9).split(',');
+    const flags = parseInt(f[0], 10) || 0;
+    const names = ['Ladepumpen-Unterspannung', 'Treiberfehler', 'Modusunterschied',
+                   'offene Last', 'Kurzschluss', 'Ueberhitzung', 'Laststrom auseinander',
+                   'STEP-Periode auseinander', 'TSTEP Anschlag',
+                   'SCHRITTVERLUST (MSCNT)', 'Drehmomentreserve auseinander',
+                   'Drehzahl auseinander', 'Lesefehler'];
+    const hits = [];
+    for (let i = 0; i < names.length; i++) if (flags & (1 << i)) hits.push(names[i]);
+    out = [['Befund', hits.length ? hits.join(', ') : 'unauffaellig'],
+           ['Drehmomentreserve L/R', f[1] + ' / ' + f[2]],
+           ['Drehzahl L/R', f[3] + ' / ' + f[4] + ' uSchritt/s'],
+           ['TSTEP L/R', f[5] + ' / ' + f[6]],
+           ['MSCNT-Vorreck L/R', f[7] + ' / ' + f[8]],
+           ['GSTAT L/R', '0x' + f[9] + ' / 0x' + f[10]]];
   } else if (msg.startsWith('DRV:')) {
     const d = {};
     for (const kv of msg.substring(4).split(' ')) {
@@ -241,6 +259,11 @@ function showParsed(msg) {
            // Weichen die beim Anfahren dauerhaft voneinander ab, faehrt der
            // Roboter schief - das ist ein Motor-Problem, kein Aufbau-Problem.
            ['gefahren L/R', (d.lst || '?')],
+           // pos=/d= sind die Schrittzaehler der Stepper. Sie zaehlen jeden
+           // erzeugten Puls unabhaengig vom Rollen: d=0 bei sichtbarem Drift
+           // heisst "mechanisch", ungleiche Zaehler heissen "Software".
+           ['Schrittzaehler L/R', (d.pos || '?')],
+           ['Zaehler-Differenz', (d.d !== undefined ? d.d : '?')],
            ['Spiel-Sperre', d.lock === '1'], ['Spiel', d.game],
            // cmdAlter liefert die Firmware bereits mit Einheit ("42ms"),
            // also hier keine zweite anfuegen.

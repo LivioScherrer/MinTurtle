@@ -157,8 +157,13 @@ static int32_t degToSteps(int16_t deg) {
 // =====================================================
 static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
   (void)speed;   // Feste Geschwindigkeit - der Motor-Task faehrt immer FIXED_DRIVE_SPEED.
-  prepPositionMove(0, sL * (long)config.leftSign);
-  prepPositionMove(1, sR * (long)config.rightSign);
+  // EIN Aufruf fuer beide Seiten: der Blockprogramm-Befehl ist die Stelle, an
+// der ein Zeitversatz zwischen den Raedern am auffaelligsten waere - die
+// Schrittzahlen beider Seiten stimmen zwar, aber bei unterschiedlichem Start
+// wirkt das Drehmoment kurzzeitig nur einseitig und der Roboter steht
+// schief. Genau das war vorher moeglich, weil zwischen den beiden Aufrufen der
+// 50-us-Puls-Task den Mutex bekommen konnte.
+prepPositionMoves(sL * (long)config.leftSign, sR * (long)config.rightSign);
   // Slalom: merken, ob wir schon AUF der Zielfarbe starten. Dann erst nach
   // einem Weg-Gang wieder triggern (Flanken-Logik, siehe slalomHitPoll).
   if (colorCheck >= 0 && colorCheck < (int8_t)PROG_SENSOR_IR_HIGH) {
@@ -199,6 +204,137 @@ static bool progMove(int32_t sL, int32_t sR, float speed, int8_t colorCheck) {
   return colorHit;
 }
 
+// =====================================================
+// "Fahre bis ..." - eine Routine fuer alle drei Faelle
+// =====================================================
+//
+// D (bis Abstand), P (bis Farbe) und die alte Form "F..E.." (bis Farbe mit
+// fester Suchstrecke) laufen alle hier durch. Das ist Absicht: vorher gab es
+// zwei voellig verschiedene Implementierungen, und die eine davon fuhr in
+// 10-mm-Etappen mit jeweils eigener Rampe. Bei 150 mm/s und 150 ms Anfahrzeit
+// kostet jede Etappe mehr Zeit im Anfahren als im Fahren - der Roboter kam
+// hardly vom Fleck, und der Abstandssensor bekam kaum eine brauchbare Messung.
+//
+// Jetzt: eine einzige sanfte Rampe, danach durchgehende Fahrt und alle
+// ~10 ms eine Pruefung. Das ist fuers Reagieren schnell genug und laesst den
+// Roboter wirklich fahren.
+//
+// slot   >= 0 : Farbe (0..3) oder Hindernis (4) / Weg frei (5)
+// targetMM >  0 : Stopp, sobald der gemessene Abstand <= targetMM ist
+// maxMM       : Strecken-Sicherheitsnetz (0 = PROG_DRIVE_UNTIL_MAX_MM)
+//
+// Rueckgabe true = Bedingung hat den Lauf beendet, false = Sicherheitsnetz.
+static bool progDriveUntil(int8_t slot, int16_t targetMM, int32_t maxMM) {
+  // Ohne Bedingung waere das ein "fahr einfach los bis zum Sicherheitsnetz".
+  // Bewusst zurueckweisen statt still weiterzufahren - ein Aufruferfehler
+  // darf nicht wie ein geplanter Block aussehen.
+  if (slot < 0 && targetMM <= 0) {
+    Serial.println("[PROG] fahre-bis ohne Bedingung - nicht ausgefuehrt");
+    return false;
+  }
+  if (maxMM <= 0 || maxMM > PROG_DRIVE_UNTIL_MAX_MM) maxMM = PROG_DRIVE_UNTIL_MAX_MM;
+
+  // Flanken-Logik fuer Farben: steht der Roboter schon AUF der Zielfarbe,
+  // darf er nicht sofort stoppen - sonst waere "fahre bis Rot" auf einem roten
+  // Feld ein Block ohne Wirkung. Erst wenn die Farbe einmal verschwunden war,
+  // zaehlt das naechste Auftaucht als Ziel. Genau dieselbe Regel wie im
+  // Slalom (slalomHitPoll), deshalb wird deren Zustand hier benutzt.
+  if (slot >= 0 && slot < (int8_t)PROG_SENSOR_IR_HIGH) {
+    char nm[16];
+    getCurrentColorName(nm, sizeof(nm));
+    slalomHitReset(strcasecmp(nm, PROG_COLOR_NAMES[(uint8_t)slot]) != 0);
+  } else {
+    slalomHitReset(true);
+  }
+
+  const float stepsPerMM = configStepsPerMM();
+  float drivenMM = 0.0f;
+  uint32_t lastMs = millis();
+  const uint32_t t0 = lastMs;
+  bool hit = false;
+  const char* reason = "Sicherheitsnetz";
+
+  char was[24];
+  if (targetMM > 0) snprintf(was, sizeof(was), "Abstand <= %d mm", targetMM);
+  else              snprintf(was, sizeof(was), "%s", PROG_COLOR_NAMES[(uint8_t)slot]);
+  Serial.printf("[PROG] fahre bis %s (Sicherheitsnetz: %.1f m / %lu s)\n",
+                was, (double)((float)maxMM / 1000.0f), (unsigned long)PROG_DRIVE_UNTIL_MAX_MS);
+
+  setMotorSpeeds(FIXED_DRIVE_SPEED, FIXED_DRIVE_SPEED, true);   // beide Seiten, eine Rampe
+  for (;;) {
+    if (!gameAllowsMotorRun()) break;
+    const uint32_t now = millis();
+    uint32_t dt = now - lastMs;
+    lastMs = now;
+    // Gefahrene Strecke aus dem BEFEHL abrechnen (nicht messen): fuer das
+    // Sicherheitsnetz reicht das, und es ist unabhaengig von Radschlupf.
+    // dt wird auf 500 ms begrenzt statt uebersprungen: ein ausgesetzter
+    // Durchlauf darf NICHT als "gefahren 0 mm" gelten, sonst waere das
+    // Sicherheitsnetz genau dann am schwaechsten, wenn der Roboter ohnehin
+    // schon stoert.
+    if (dt > 500UL) dt = 500UL;
+    if (stepsPerMM > 0.0f) {
+      drivenMM += FIXED_DRIVE_SPEED * (float)dt / 1000.0f / stepsPerMM;
+    }
+
+    bool done = false;
+    if (targetMM > 0) {
+      const int16_t d = distMeasureMM();
+      if (d >= 0 && d <= targetMM) { done = true; reason = "Abstand erreicht"; }
+    }
+    if (!done && slot >= 0) {
+      // Farbe: Haltezeit gegen Einzel-Fehlwerte. Hindernis/Weg-frei: sofort.
+      const bool h = (slot < (int8_t)PROG_SENSOR_IR_HIGH)
+                       ? slalomHitPoll((uint8_t)slot, PROG_DRIVE_UNTIL_HOLD_MS)
+                       : sensorHitImmediate((uint8_t)slot);
+      if (h) { done = true; reason = PROG_COLOR_NAMES[(uint8_t)slot]; }
+    }
+    if (done) {
+      hit = true;
+      break;
+    }
+    if (drivenMM >= (float)maxMM) { reason = "Suchstrecke verbraucht"; break; }
+    if (now - t0 >= PROG_DRIVE_UNTIL_MAX_MS) { reason = "Zeitlimit"; break; }
+
+    bleProcessEvents();
+    espNowProcessEvents();
+    esp_task_wdt_reset();
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+  stopMotors();
+  Serial.printf("[PROG] fahre-bis beendet (%s): %.0f mm, Restabstand %d mm\n",
+                reason, (double)drivenMM, (int)distLastMM());
+  return hit;
+}
+
+// "Warte bis ..." - der stehende Zwilling. slot >= 0, max. 30 s.
+static bool progWaitUntil(int8_t slot) {
+  colorPollReset();
+  const uint32_t t0 = millis();
+  while (millis() - t0 < 30000UL) {
+    if (!gameAllowsMotorRun()) return false;
+    if (slot >= 0 && sensorPoll((uint8_t)slot)) return true;
+    bleProcessEvents();
+    espNowProcessEvents();
+    esp_task_wdt_reset();
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+  return false;
+}
+
+// Beim Start einer Strecken-Fahrt ins Log schreiben, WELCHE Strecke in mm
+// tatsaechlich befohlen wird.
+//
+// Grund: F/B nehmen ZENTIMETER, M/N nehmen MILLIMETER - dieselbe Zahl,
+// zehnfache Strecke. Genau daran ist es beim Nachmessen gescheitert: wer im
+// Block "10" eintippt, bekommt je nach Baustein 100 mm oder 10 mm, ohne
+// dass man es der Fahrt ansieht. Mit dieser Zeile steht die Wahrheit im Log.
+static void progLogDist(const char* op, int16_t val, float mm, int32_t steps) {
+  Serial.printf("[PROG] %s%ld -> %.1f mm (%.2f cm) = %ld Schritte (%u Microsteps)\n",
+                op, (long)val, (double)mm, (double)(mm / 10.0), (long)steps,
+                (unsigned)config.tmcMicrosteps);
+}
+
 // Einfachen Baustein ausfuehren (kein Loop). Rueckgabe: true wenn Farbe ausgeloest.
 static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
   int32_t steps;
@@ -206,17 +342,29 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
   switch (op) {
     case OP_FWD:
       steps = cmToSteps(val);
+      progLogDist("F", val, (float)val * 10.0f, steps);
       return progMove(steps, steps, FIXED_DRIVE_SPEED, colorCheck);
     case OP_BACK:
       steps = cmToSteps(val);
+      progLogDist("B", val, (float)val * 10.0f, steps);
       return progMove(-steps, -steps, FIXED_DRIVE_SPEED, colorCheck);
+    case OP_DRIVE_UNTIL:
+      // "fahre bis Farbe/Sensor". val > 0 = Suchstrecke in mm (kommt aus der
+      // alten Schreibweise F50E2, im Parser bereits hierher umgewandelt),
+      // val == 0 = nur das Sicherheitsnetz.
+      return progDriveUntil(colorCheck, -1,
+                            val > 0 ? (int32_t)val : PROG_DRIVE_UNTIL_MAX_MM);
+    case OP_WAIT_UNTIL:
+      return progWaitUntil(colorCheck);
     case OP_MM_FWD:
       // Millimetergenau: der Wert wird direkt in Schritte gerechnet und ist
       // dadurch unabhaengig von der Microstep-Einstellung.
       steps = geoStepsForMM((float)val, config.tmcMicrosteps);
+      progLogDist("M", val, (float)val, steps);
       return progMove(steps, steps, FIXED_DRIVE_SPEED, colorCheck);
     case OP_MM_BACK:
       steps = geoStepsForMM((float)val, config.tmcMicrosteps);
+      progLogDist("N", val, (float)val, steps);
       return progMove(-steps, -steps, FIXED_DRIVE_SPEED, colorCheck);
     case OP_LEFT:
       steps = degToSteps(val);
@@ -226,30 +374,15 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
       steps = degToSteps(val);
       progMove(steps, -steps, FIXED_DRIVE_SPEED, -1);
       return false;
-    case OP_DRIVE_DIST: {
-      // "Fahre, bis der Abstand <= val ist." In kleinen Etappen, damit der
-      // Sensor frueh genug reagiert. Sicherheitsnetze: max. Strecke und Zeit.
-      const int16_t target = val;
-      const int16_t stepMM = 10;
-      const int16_t maxMM  = 1500;
-      const uint32_t t0 = millis();
-      int16_t driven = 0;
-      while (driven < maxMM && millis() - t0 < 20000UL) {
-        if (!gameAllowsMotorRun()) return false;
-        const int16_t d = distMeasureMM();
-        if (d >= 0 && d <= target) break;          // Ziel erreicht
-        if (irBlocked()) break;                    // Hindernis-Schwelle
-        steps = geoStepsForMM((float)stepMM, config.tmcMicrosteps);
-        progMove(steps, steps, FIXED_DRIVE_SPEED, -1);
-        driven = (int16_t)(driven + stepMM);
-        bleProcessEvents();
-        espNowProcessEvents();
-        esp_task_wdt_reset();
-      }
-      Serial.printf("[PROG] D%u gefahren %u mm (Restabstand %d)\n",
-                    target, driven, (int)distLastMM());
-      return false;
-    }
+    case OP_DRIVE_DIST:
+      // "Fahre, bis der Abstand <= val ist." Dieselbe Routine wie "bis
+      // Farbe": eine Rampe, dann durchgehend fahren und alle ~10 ms pruefen.
+      // Bewusst KEIN zusaetzlicher Halt auf der Hindernis-Schwelle
+      // (distBlocked): die steht woanders und wuerde den Baustein vorzeitig
+      // beenden, obwohl der eingetragene Wert noch nicht erreicht ist - der
+      // Roboter wuerde anhalten, ohne zu wissen warum. Das Sicherheitsnetz
+      // (1,5 m / 20 s) faengt den Fall "Sensor blind" ab.
+      return progDriveUntil(-1, val, PROG_DRIVE_UNTIL_MAX_MM);
     case OP_WAIT_DIST: {
       // "Warte, bis der Abstand <= val ist" (hoechstens 5 s).
       const uint32_t t0 = millis();
@@ -394,6 +527,8 @@ static bool opFromChar(char c, uint8_t& op) {
     case 'D': op = OP_DRIVE_DIST; return true;
     case 'X': op = OP_WAIT_DIST;  return true;
     case 'G': op = OP_WAIT_FREE;  return true;
+    case 'P': op = OP_DRIVE_UNTIL; return true;
+    case 'V': op = OP_WAIT_UNTIL;  return true;
     case 'S': op = OP_LED;        return true;
     case 'Z': op = OP_PAUSE;      return true;
     case 'Q': op = OP_STOP;       return true;
@@ -471,11 +606,37 @@ static bool progParseRange(const char*& p, uint8_t& pc, uint8_t depth, bool topL
     if (!opFromChar(c, op)) { Serial.printf("[PROG] unbekannter Baustein '%c'\n", c); return false; }
     st.op = op;
 
+    // P/V: der Wert ist der SENSOR-SLOT (0-5), keine Zahl zum Fahren.
+    // Das ist der ganze Unterschied zu den anderen Bloecken und deshalb hier
+    // VOR der allgemeinen Zahlenbehandlung - sonst wuerde P2 als "2 cm fahren"
+    // gelesen und der Baustein waere genau das, was er nicht soll.
+    if (op == OP_DRIVE_UNTIL || op == OP_WAIT_UNTIL) {
+      if (*p < '0' || *p > '5') { Serial.printf("[PROG] %c braucht eine Farbe/Sensor 0-5\n", c); return false; }
+      st.color = (int8_t)(*p - '0');
+      st.val = 0;
+      p++;
+      if (pc >= PROG_MAX_STEPS) { Serial.println("[PROG] Programm zu lang"); return false; }
+      progSteps[pc++] = st;
+      continue;
+    }
+
     int8_t slot = -1;
     const bool hasSlot = parseESlot(p, slot);
 
-    // F/B mit E-Slot: fahre bis zur Farbe (bzw. bis IR-Bedingung)
-    if (hasSlot && (op == OP_FWD || op == OP_BACK)) {
+// F mit E-Slot: die alte Schreibweise "FE<slot>" (nur aus Programmen, die
+    // vor dem P-Baustein gespeichert wurden). Wird HIER gleich auf OP_DRIVE_UNTIL
+    // // umgewandelt, statt es in zwei Interpretationen mitzuschleppen:
+    // "F10 mit Zielfarbe aus einer Bis-Schleife" und "bis Farbe mit 50 cm
+    // Suchstrecke" sind im Executor sonst nicht mehr zu unterscheiden - beide
+    // kommen als (F, val, colorCheck) an.
+    if (hasSlot && op == OP_FWD) {
+      st.op      = OP_DRIVE_UNTIL;
+      st.color   = slot;
+      st.val     = 500;                  // 50 cm Suchstrecke, in mm
+    } else if (hasSlot && op == OP_BACK) {
+      // Rueckwaerts "bis Farbe" ergibt keinen Sinn (der Sensor schaut nach
+      // vorn) und wurde nie in der Palette angeboten. Der Bestand bleibt
+      // unveraendert, damit alte Programme nicht anders laufen.
       st.color = slot;
       st.val = 50;                       // max. Suchstrecke in cm
     } else if (hasSlot && op == OP_WAIT) {
@@ -599,6 +760,12 @@ static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
     int8_t cc = -1;
     if (s.op == OP_FWD || s.op == OP_BACK || s.op == OP_MM_FWD || s.op == OP_MM_BACK) {
       cc = (s.color >= 0) ? s.color : ctx.defaultColor;
+    } else if (s.op == OP_DRIVE_UNTIL || s.op == OP_WAIT_UNTIL) {
+      // P/V tragen ihre Bedingung IMMER selbst im Block - sie sind genau die
+      // Bausteine, bei denen der Aufrufer die Farbe ausdruecklich waehlt.
+      // Deshalb NICHT ctx.defaultColor: ein "P3" in einer "bis GELB"-Schleife
+      // muss auf Blau reagieren, nicht auf Gelb.
+      cc = s.color;
     }
     if (progExecSimple(s.op, s.val, cc)) seen = true;
 

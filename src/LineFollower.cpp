@@ -73,24 +73,25 @@ namespace {
   // z. B. 150 ms wuerde den Richtungswechsel verschlucken - der Roboter
   // kaeme nie von der Links- in die Rechtssuche. Freies Fahren per Taste
   // faehrt dagegen mit Rampe (siehe Drive.cpp).
+  // setMotorSpeeds() statt zweier setMotorSpeed()-Aufrufe: beide Raeder
+  // bekommen ihre Ziele unter EINEM Mutex-Halt. Beim Linienfolger ist das
+  // besonders wichtig, weil hier jede Richtungsenderung sofort wieder das
+  // Gegenteil befiehlt - ein zwischenzeitlich verzoegertes Ziel macht aus dem
+  // Kurvenfahren sofort eine Drehung.
   void motorsForward(float v) {
-    setMotorSpeed(0, v, false);
-    setMotorSpeed(1, v, false);
+    setMotorSpeeds(v, v, false);
   }
   void motorsTurnLeft(float v) {
-    setMotorSpeed(0, -v, false);
-    setMotorSpeed(1,  v, false);
+    setMotorSpeeds(-v, v, false);
   }
   void motorsTurnRight(float v) {
-    setMotorSpeed(0,  v, false);
-    setMotorSpeed(1, -v, false);
+    setMotorSpeeds(v, -v, false);
   }
   void motorsOff() {
     // Hart, nicht weich (useRamp = false) - der ganze Linienfolger faehrt ohne
     // Rampe, und die Zustandswechsel liegen bei 140 ms. Ein Ausrollen wuerde
     // in den naechsten Zustand hineinlaufen.
-    setMotorSpeed(0, 0, false);
-    setMotorSpeed(1, 0, false);
+    setMotorSpeeds(0, 0, false);
   }
 }
 

@@ -98,6 +98,133 @@ constexpr uint32_t MOTOR_TICK_US = 50;
 constexpr uint8_t  TMC_HOLD_DEFAULT       = 16;   // 0...31
 constexpr uint16_t TMC_MICROSTEPS_DEFAULT = 16;   // 1,2,4,8,16,32,64,128,256
 
+// ---- Register-Adressen (TMC2209-Datenblatt Rev. 1.09, Abschnitt 5) ----
+// ACHTUNG: TMCStepper adressiert den TMC2209 mit der Karte des TMC2130. Das
+// fuehrt auf diesem Roboter zu einem stillen Totalausfall der Konfiguration,
+// weil beim TMC2130 CHOPCONF auf 0x06 liegt - beim TMC2209 ist 0x06 aber das
+// IOIN und damit nur lesbar. GEMESSEN (COM9, 2026-10): nach der
+// Konfiguration waren TPWMTHRS, TCOOLTHRS, SGTHRS, TPOWER und CHOPCONF alle 0,
+// waehrend GCONF (0x00, in beiden Karten identisch) korrekt ankam. Deshalb
+// werden alle Register hier ueber die eigene, per Readback gepruefte
+// Schreiberoutine gesetzt - die Adressen kommen aus dem Datenblatt, nicht aus
+// der Bibliothek.
+constexpr uint8_t TMC_REG_GCONF       = 0x00;   // nur 10 Bit: Modus/Flags
+constexpr uint8_t TMC_REG_GSTAT       = 0x01;   // reset / drv_err / uv_cp
+constexpr uint8_t TMC_REG_IFCNT       = 0x02;
+constexpr uint8_t TMC_REG_NODECONF    = 0x03;   // SENDDELAY
+constexpr uint8_t TMC_REG_IOIN        = 0x06;   // nur lesbar
+constexpr uint8_t TMC_REG_FCLKCONF    = 0x07;   // FCLKTRIM/OTTRIM
+constexpr uint8_t TMC_REG_CHOPCONF    = 0x08;   // NICHT 0x06 (das ist IOIN!)
+constexpr uint8_t TMC_REG_SHORT_CONF  = 0x09;
+constexpr uint8_t TMC_REG_SHORT_STAT  = 0x0A;
+constexpr uint8_t TMC_REG_COOLCONF    = 0x0B;
+constexpr uint8_t TMC_REG_TPOWER      = 0x11;   // TPOWERDOWN
+constexpr uint8_t TMC_REG_TSTEP       = 0x12;   // gemessene STEP-Periode
+constexpr uint8_t TMC_REG_TPWMTHRS    = 0x13;
+constexpr uint8_t TMC_REG_TCOOLTHRS   = 0x14;
+constexpr uint8_t TMC_REG_VACTUAL     = 0x22;   // gemessene Drehzahl
+constexpr uint8_t TMC_REG_SGTHRS      = 0x40;
+constexpr uint8_t TMC_REG_SG_RESULT   = 0x41;   // Drehmoment-Reserve
+constexpr uint8_t TMC_REG_COOLCONF2   = 0x42;
+constexpr uint8_t TMC_REG_MSCNT       = 0x6A;   // Sequenzer-Mikroschrittzaehler
+constexpr uint8_t TMC_REG_DRV_STATUS  = 0x6F;
+
+// GCONF-Bitlagen (Datenblatt 5.5.1).
+constexpr uint32_t GCONF_I_SCALE_ANALOG  = 1u << 0;
+constexpr uint32_t GCONF_INTERNAL_RSENSE = 1u << 1;
+constexpr uint32_t GCONF_EN_SPREADCYCLE  = 1u << 2;
+constexpr uint32_t GCONF_SHAFT           = 1u << 3;
+constexpr uint32_t GCONF_PDN_DISABLE     = 1u << 6;
+constexpr uint32_t GCONF_MSTEP_REG_SELECT= 1u << 7;
+constexpr uint32_t GCONF_MULTISTEP_FILT  = 1u << 8;
+constexpr uint32_t GCONF_MASK            = 0x3FF;   // nur 10 Bit
+
+// CHOPCONF-Bitlagen (Datenblatt 5.5.1). MRES-Codierung: %0000 = 256,
+// %0001..%1000 = 128, 64, 32, 16, 8, 4, 2, FULLSTEP - identisch zu
+// mresCodeFor() in Motor.cpp.
+constexpr uint32_t CHOP_MRES_SHIFT = 24;
+constexpr uint32_t CHOP_MRES_MASK  = 0x0F000000u;
+constexpr uint32_t CHOP_INTPOL     = 1u << 28;   // auf 256 interpolieren
+constexpr uint32_t CHOP_TOFF_SHIFT = 0;
+constexpr uint32_t CHOP_TOFF_MASK  = 0x00000007u;
+
+// DRV_STATUS-Bitfelder (Datenblatt 5.5.3). Wichtig fuer die Deutung: die
+// unteren 10 Bit sind KEIN SG_RESULT, sondern Temperatur, offene Last und
+// Kurzschluss - SG_RESULT steht ausschliesslich im Register 0x41.
+constexpr uint32_t DRVST_OTPW      = 1u << 0;
+constexpr uint32_t DRVST_OT        = 1u << 1;
+constexpr uint32_t DRVST_S2GA      = 1u << 2;
+constexpr uint32_t DRVST_S2GB      = 1u << 3;
+constexpr uint32_t DRVST_S2VSA     = 1u << 4;
+constexpr uint32_t DRVST_S2VSB     = 1u << 5;
+constexpr uint32_t DRVST_OLA       = 1u << 6;
+constexpr uint32_t DRVST_OLB       = 1u << 7;
+constexpr uint32_t DRVST_STEALTH   = 1u << 30;
+constexpr uint32_t DRVST_STST      = 1u << 31;
+constexpr uint32_t DRVST_CS_ACTUAL_SHIFT = 19;
+constexpr uint32_t DRVST_CS_ACTUAL_MASK  = 0xFFu;
+
+// ---- TPWMTHRS: ab hier soll SpreadCycle das Ruder uebernehmen ----
+// Vorher stand hier TPWMTHRS(0), und 0 heisst laut Datenblatt "Disabled":
+// der Treiber blieb dadurch bei JEDER Geschwindigkeit in StealthChop, auch
+// dort, wo StealthChop am wenigsten Drehmoment hat und Mikroschritte eher
+// verlorengehen.
+//
+// Der Registerwert ist die STEP-Periode, bei der umgeschaltet wird, und
+// bezieht sich laut Datenblatt immer auf 1/256 Schritt - er ist damit
+// unabhaengig von der Microstep-Zahl und EIN Wert reicht fuer alle
+// Microstep-Einstellungen:
+//     TSTEP = 2^24 * U / (VACTUAL * 256)
+//     VACTUAL * U = (Mikroschritte/Umdrehung) * U/s = 200*U*v/CIRC
+//     => TSTEP = 2^24 * CIRC / (256 * 200 * v) = 2^24 * CIRC / (51200 * v)
+// Gegenprobe mit der eigenen OTP-Tabelle des Herstellers: die Stufen
+// 200/300/400/500/800/1200/4000 ergeben damit 180/120/90/72/45/30/9 mm/s -
+// die Formel reproduziert die Werksvorgabe, ist also nicht nur hergeleitet.
+// Mit dem Rad dieses Roboters (35 mm, DRIVE_TRIM 1.0101 -> 111,07 mm) folgt
+//     TPWMTHRS  = 36030 / v[mm/s]     ->  601 bei 60 mm/s
+//     TCOOLTHRS = 36030 / v[mm/s]     -> 2402 bei 15 mm/s
+constexpr float   TMC_SPREADCYCLE_AB_MM_S = 60.0f;   // ab hier SpreadCycle
+
+// ---- StallGuard scharf machen ----
+// SGTHRS: "A stall is signaled with SG_RESULT <= SGTHRS*2". Der Wert ist
+// anwendungsabhaengig (Motor, Strom, Last) - das Datenblatt gibt keine
+// Vorgabe. Wichtig: NICHTS in der Firmware handelt auf diesem Flag, er wird
+// nur gelesen und berichtet. Ein zu niedriger Wert kann deshalb keinen
+// Schaden anrichten, und die Ausgabe zeigt beide SG_RESULT-Werte plus die
+// Schwelle, damit der echte Wert am Roboter ablesbar ist.
+constexpr uint8_t  TMC_SGTHRS_DEFAULT    = 100;    // Stall bei SG_RESULT <= 200
+// TCOOLTHRS: unterhalb dieser Geschwindigkeit ist StallGuard nicht
+// verlaesslich (das Datenblatt warnt ausdruecklich davor). 15 mm/s liegt
+// unter dem Startbereich und ist bewusst konservativ gewaehlt.
+constexpr float   TMC_STALLGUARD_AB_MM_S = 15.0f;
+
+// ---- Diagnose-Takt ----
+// Ein Register-Read auf dem gemeinsamen Single-Wire-Bus kostet ~2 ms
+// (Datagramm + replyDelay = 2 ms, max_retries = 2). Deshalb wird NIE mehr als
+// EIN Register pro Aufruf gelesen und die Messung ueber mehrere Loop-Durchlaenge
+// verteilt. Ein Read im 50-us-Puls-Task wuerde 40 Ticks verschlucken - also
+// genau die Schritte zerstoeren, die man messen will.
+//
+// Sicherheitsgrenze: die automatische Startmessung liest nur, solange die
+// STEP-Periode laenger ist als ein Read. Bei 1500 Schritten/s ist die Periode
+// noch 667 us, bei 4321 Schritten/s (150 mm/s, 16 Microsteps) nur noch 231 us -
+// dann wuerde die UART-ISR dem Puls-Task genau die Takte wegnehmen, die man
+// messen will. Also: frueh nach dem Anfahren messen, bei steigendem Tempo
+// abbrechen. Der Lauf umfasst 16 Reads und passt in die ersten ~50 ms einer
+// Rampe; reicht die Loop-Rate nicht, wird abgebrochen und das gemeldet.
+constexpr float   MOT_DIAG_MIN_STEPS_S  = 20.0f;    // "faehrt wirklich"
+constexpr float   MOT_DIAG_MAX_STEPS_S  = 1500.0f;  // ab hier wird abgebrochen
+
+// ---- Schwellen der Messauswertung ----
+// Bewusst getrennt von den Messwerten: was als "auffaellig" gilt, ist eine
+// Bewertung und keine Messung - sie steht hier, damit sie im Log nachlesbar
+// ist, statt in einer if()-Kette zu verschwinden.
+constexpr uint16_t DIAG_SG_DIFF_MIN     = 100;   // von 0..1023 Drehmomentreserve
+constexpr uint8_t  DIAG_VACTUAL_DIFF_PCT = 8;    // gemessene Drehzahl %
+constexpr uint8_t  DIAG_TSTEP_DIFF_PCT  = 5;     // STEP-Periode %
+constexpr uint8_t  DIAG_CS_DIFF_PCT     = 15;    // CS_ACTUAL %
+constexpr uint16_t DIAG_MSCNT_TOLERANCE = 2;     // Mikroschritte
+
 // Auto-Standby: keine Fahrt seit dieser Zeit + Motoren stehen
 // -> Treiber ueber EN abschalten (0 Strom, kuehl). Jede echte Fahrt
 // (setMotorSpeed/prepPositionMove) schaltet automatisch wieder ein.
@@ -123,6 +250,16 @@ bool motorRampActive();
 // Vorzeichen), unter einem einzigen Mutex-Halt gelesen. Reine Diagnose:
 // zeigt, was die Motoren TUN - DRV:spd= zeigt nur, was befohlen wurde.
 void motorRampSpeeds(float& outL, float& outR);
+// Aktueller Schrittzaehler-Stand beider Stepper (AccelStepper
+// currentPosition()), unter EINEM Mutex-Halt gelesen.
+//
+// Das ist die Messgroesse, die "Software oder Hardware?" entscheidet: der
+// Zaehler zaeht JEDEN erzeugten Puls, unabhaengig davon, ob das Rad rollt.
+// Wenn nach einer Fahrt beide Zaehler gleich weit gelaufen sind, aber der
+// Roboter trotzdem driftet, kann es nicht die Schritterzeugung sein - dann
+// stimmt Winkel, Reibung oder Spiel nicht zum Motor. Bei den gleichen Werten
+// ist der Motor schuld, bei unterschiedlichen die Software.
+void motorStepPositions(long& outL, long& outR);
 
 // Start-Signal nach dem Booten: beide Motoren drehen kurz auf der Stelle
 // (config.spinSpeed Schritte/s fuer config.spinMs), danach wieder Stillstand.
@@ -152,7 +289,48 @@ void startupSpin();
 // Thread-sicher: kann von jedem Core aus aufgerufen werden.
 void setMotorSpeed(int motorIdx, float speed, bool useRamp = true);
 
-// Beide Motoren sofort stoppen (auch laufende Positions-Fahrten abbrechen).
+// BEIDE Motoren unter EINEM Mutex-Halt setzen - fuer jede Stelle, die
+// anfahren, bremsen oder steuern will.
+//
+// Warum das nicht nur Geschmack ist: vorher standen ueberall zwei Aufrufe
+// hintereinander (setMotorSpeed(0,..) / setMotorSpeed(1,..)), und jeder
+// Aufruf holt den Mutex erst recht. Der Motor-Task nimmt ihn alle 50 us; ein
+// verschluckter zweiter Aufruf kostet dann die Differenz zwischen beiden
+// Befehlen. Beide Raeder bekommen dadurch unterschiedliche Startzeitpunkte -
+// bei 20 ms Versatz sind das bei 150 mm/s und 16 Microsteps rund 3 mm Weg
+// und gut 2,5 Grad Gierwinkel, also auf einem Meter deutlich sichtbar.
+// Mit einem Aufruf kann das nicht mehr passieren.
+//
+// Semantik identisch zu zwei einzelnen Aufrufen: useRamp wirkt auf beide.
+void setMotorSpeeds(float speedL, float speedR, bool useRamp = true);
+
+// Beide Motoren auf denselben Microstep-Index bringen (Befehl MOT:SYNC,
+// wird ausserdem bei jedem Moduswechsel aufgerufen). true = es musste
+// ausgeglichen werden.
+//
+// Der TMC2209 zaehlt die ausgefuehrten Mikroschritte in MSCNT (10 Bit,
+// vorzeichenbehaftet: CW hoch, CCW runter). Zwei Motoren, die gleich viele
+// Schritte in derselben Fahrtrichtung bekommen, haben deshalb |MSCNT|
+// gleich, auch wenn ihre Zaehler wegen der Spiegelung entgegengesetzte
+// Vorzeichen tragen. Weichen die BETRAEGE ab, laeuft die Sinusphase der
+// beiden Motoren gegeneinander - das Rad mit dem kleineren Zaehler bleibt um
+// die Differenz zurueck, und in einer Fahrtrichtung faellt das staerker auf
+// als in der anderen.
+//
+// Bewusst NICHT die alte motorSettle(): die fuhr zwei Vollschritte hin UND
+// exakt zwei zurueck. Das ist winkelneutral - am Ende steht jeder Rotor
+// genauso versetzt wie vorher, der gewuenschte Effekt trat also nie ein,
+// sie hat nur 30..200 ms blockiert und konnte den Programmstart ueber
+// PROG:NO_SETTLE verhindern. Hier wird stattdessen genau die Differenz
+// ausgeglichen, und zwar in Fahrtrichtung: hoechstens MOTOR_SYNC_MAX_STEPS
+// Mikroschritte, also ein Weg von gut einem Millimeter.
+//
+// Nie blockierend fuer den Programmstart: der Aufruf wartet hoechstens
+// MOTOR_SYNC_MAX_MS und laeuft nur im Stillstand.
+bool motorSyncMicrosteps();
+constexpr uint32_t MOTOR_SYNC_MAX_MS   = 250;    // Hoechstwartedauer
+constexpr uint16_t MOTOR_SYNC_MAX_STEPS = 128;   // = 4 Vollschritte
+constexpr uint16_t MOTOR_SYNC_TOLERANCE = 1;     // 1 Mikroschritt Toleranz
 // Thread-sicher.
 void stopMotors();
 
@@ -164,6 +342,13 @@ void stopMotors();
 // Das Ende wird intern automatisch erkannt (Rest-Zaehler == 0 -> Speed auf 0).
 // Thread-sicher.
 void prepPositionMove(int motorIdx, long physicalSteps);
+// BEIDE Positionsfahrten unter EINEM Mutex-Halt starten - dasselbe Argument
+// wie bei setMotorSpeeds(), und bei Drehungen sogar noch schlagkraeftiger:
+// zwei Aufrufe mit Mutex dazwischen bedeuten, dass die beiden Raeder den
+// Drehbeginn zu verschiedenen Zeitpunkten bekommen. Die Schrittzahlen
+// stimmen zwar beide, das Drehmoment ist aber kurzzeitig einseitig - und der
+// Roboter steht danach schief. Vorzeichen je Seite getrennt uebergeben.
+void prepPositionMoves(long stepsL, long stepsR);
 
 // true solange mind. ein Motor noch Positionsschritte offen hat.
 // Thread-sicher (liest volatile Zaehler).
@@ -207,6 +392,48 @@ void tmcPrintStatus();
 void tmcSendCompactStatus();
 // Boot-Diagnose (einmalig in setup()): Verbindung, Version, IFCNT, MRES.
 void tmcBootDiag();
+// Alle relevanten Register beider Treiber ausgeben plus Schreibtest auf GCONF
+// (das geklappte Bit wird sofort zurueckgeschrieben). Loest die Frage, ob der
+// Treiber wirklich konfiguriert ist - aufgeraeumte Register lesen sich wie
+// Auslieferungswerte und sind auf den ersten Blick unauffaellig.
+void tmcRegDump();
+// ---- Treiber-Messung: Schrittverlust und Schlupf BEOBACHTEN ----
+// Reine Diagnose. Die Firmware regelt danach nichts nach, korrigiert nichts
+// und haelt den Roboter nicht an - das Verhalten ist vorher wie nachher.
+// Lesbar sind: SG_RESULT (0x41), GSTAT (0x01), VACTUAL (0x22), TSTEP (0x12),
+// MSCNT (0x6A) und DRV_STATUS (0x6F).
+//
+// Ein Register-Read kostet ~2 ms, deshalb liest motorDiagTick() genau EIN
+// Register pro Aufruf und muss einmal pro Loop-Durchlauf aufgerufen werden
+// (macht Edu_V2.cpp). Der Lauf ist danach fertig und die Auswertung steht im
+// Log sowie als MOT:MEAS:-Zeile fuer die Web-UI zur Verfuegung.
+// Messlauf anfordern (Befehl MOT:DIAG). false = Treiber aus oder ein Lauf
+// laeuft bereits. Der Lauf selbst zieht sich ueber motorDiagTick() durch.
+bool motorDiagRequest();
+bool motorDiagRunning();
+// Aus dem Loop, einmal pro Durchlauf: Messlauf fortschreiben (ein Register pro
+// Aufruf) und am Ende automatisch auswerten + melden.
+void motorDiagTick();
+// Messung MITTEN in der Fahrt, auf Abruf (Befehl MOT:SPD?).
+//
+// Das ist die Messung, die bei dauerhaftem Drift weiterhilft: die
+// automatische Startmessung ist nach ~50 ms vorbei, ein Drift zeigt sich
+// aber ueber Sekunden. Gelesen werden nur VACTUAL (gemessene Drehzahl je
+// Treiber) und MSCNT (Sequenzerposition) - 4 Reads, rund 8 ms.
+//
+// Warum das etwas ueber "Software oder Hardware" entscheidet: die Schritt-
+// zaehler in der [DRV]-Zeile sagen, OB beide Raeder gleich viele Pulse
+// bekommen. VACTUAL sagt, ob die Raeder daraus gleich viel WEG machen.
+// Gleiche Pulse + unterschiedliches VACTUAL = Schlupf, Reibung oder
+// schiefe Raeder. Gleiches VACTUAL + Drift = der Roboter wird von aussen
+// gelenkt (Boden, Teppichkante, schiefe Achse).
+//
+// Bewusst NICHT automatisch: 8 ms Lesen mitten in der Fahrt sind eine
+// echte Stoerung des 50-us-Puls-Tasks (guter Anlass, sie nur zu wollen
+// statt sie zu planen).
+// Teilstrom: false = nur eine kompakte Logzeile (selbsttaetiger 2-Sekunden-
+// Takt waehrend der Fahrt), true = ausfuehrliche Auswertung plus MOT:SPD:.
+bool motorDiagSteadySpeed(bool verbose = true);
 // UART-Bus-Diagnose (Echo/Reply/Ruhepegel, Baud-Messung).
 // ACHTUNG: Es gab hier einmal eine Funktion tmcUartDiag(), die per
 // Read-Request an die UART-Adressen 0..3 gesendet hat. Die war nie aufgerufen

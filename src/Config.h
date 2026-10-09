@@ -75,9 +75,10 @@ constexpr uint16_t MOTOR_FULL_STEPS_PER_REV = 200;
 constexpr uint16_t TMC_CURRENT_MA_MIN     = 100;  // darunter haelt der Motor nicht
 constexpr uint16_t TMC_CURRENT_MA_MAX     = 200;  // = Nennstrom laut Datenblatt
 constexpr uint16_t TMC_CURRENT_MA_DEFAULT = TMC_CURRENT_MA_MAX;
-// Rad-Durchmesser 35 mm (am Roboter gemessen). Wird nur noch fuer die
-// Umrechnung Schritte <-> mm gebraucht; Drehungen kommen ohne den Radwert aus.
-constexpr float WHEEL_DIAMETER_MM = 35.0f;
+// Rad-Durchmesser 38 mm (2026-10: neue Raeder montiert). Wird nur noch fuer
+// die Umrechnung Schritte <-> mm gebraucht; Drehungen kommen ohne den
+// Radwert aus.
+constexpr float WHEEL_DIAMETER_MM = 38.0f;
 constexpr float WHEEL_CIRCUMFERENCE_MM = 3.14159265358979f * WHEEL_DIAMETER_MM;
 // Strecken-Trim aus der Fahrprobe: auf 10 cm fuhr der Roboter 1 mm zu weit.
 // Die tatsaechlich gerollte Schrittlaenge ist also ~1 % groesser als die
@@ -196,8 +197,8 @@ constexpr int32_t geoStepsForDeg(float deg, uint16_t microsteps) {
 // oder Rad nicht still zu falschen Distanzen fuehrt. Geprueft wird an
 // ZWEI Microstep-Zahlen - wenn 16 und 128 dasselbe Ergebnis skalieren,
 // ist die Strecke nachweislich unabhaengig von der Microstep-Einstellung.
-static_assert(MM_PER_FULL_STEP > 0.555f && MM_PER_FULL_STEP < 0.556f,
-              "Ein Vollschritt muss 0,5553 mm ergeben (Rad 35mm / 200 Schritte, inkl. DRIVE_TRIM).");
+static_assert(MM_PER_FULL_STEP > 0.602f && MM_PER_FULL_STEP < 0.604f,
+              "Ein Vollschritt muss 0,6029 mm ergeben (Rad 38mm / 200 Schritte, inkl. DRIVE_TRIM).");
 static_assert(geoStepsForFullSteps(QUIZ_STEP_FULL_STEPS, 16) == 800
            && geoStepsForFullSteps(QUIZ_STEP_FULL_STEPS, 128) == 6400,
               "50 Vollschritte muessen 16 Microsteps -> 800 und 128 -> 6400 ergeben.");

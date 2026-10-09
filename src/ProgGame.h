@@ -34,6 +34,9 @@ enum ProgOp : uint8_t {
   OP_DRIVE_DIST,// D<n>        fahre vorwaerts bis Abstand <= n mm
   OP_WAIT_DIST, // X<n>        warte bis Abstand <= n mm (max. 5 s)
   OP_WAIT_FREE, // G<n>        warte bis Abstand >= n mm (max. 5 s)
+  // --- "bis" als eigener Baustein (der verstaendliche Weg zu Farbe/Distanz) ---
+  OP_DRIVE_UNTIL,// P<c>       fahre vorwaerts BIS Farbe/Sensor c sichtbar ist
+  OP_WAIT_UNTIL, // V<c>       warte BIS Farbe/Sensor c sichtbar ist
   // --- neu: Anzeige und Feinsteuerung ---
   OP_LED,       // S<c>        LED auf Slot c setzen (0-3 Farben, 4/5 IR, 6 aus)
   OP_PAUSE,     // Z<n>        Pause n x 100 ms
@@ -51,6 +54,16 @@ constexpr uint8_t PROG_SENSOR_IR_HIGH = 4;  // Hindernis erkannt (distBlocked())
 constexpr uint8_t PROG_SENSOR_IR_LOW  = 5;  // Weg frei (DIST >= Schwelle / kein Wert)
 constexpr uint8_t PROG_SLOT_OFF       = 6;  // nur LED: ausschalten
 
+// Sicherheitsnetze fuer "fahre bis ...": ohne sie faehrt der Roboter bei
+// defektem oder blindem Sensor endlos weiter. Beide Grenzen greifen
+// unabhaengig voneinander - eine verletzte genuegt zum Halt.
+constexpr uint32_t PROG_DRIVE_UNTIL_MAX_MS = 20000UL;   // hoechstens 20 s
+constexpr int32_t  PROG_DRIVE_UNTIL_MAX_MM = 1500;      // hoechstens 1,5 m
+// Haltezeit fuer eine erkannte Farbe waehrend "fahre bis". Kurz genug, dass
+// der Roboter nicht weit ueber die Farblinie hinausfaehrt, lang genug, dass
+// ein einzelner Fehlwert beim Fahren nicht stoppt.
+constexpr uint32_t PROG_DRIVE_UNTIL_HOLD_MS = 60;
+
 // Ein Eintrag der flachen Programmliste.
 struct ProgStep {
   uint8_t op;      // ProgOp
@@ -66,6 +79,7 @@ extern bool     progActive;
 // Programm aus kompaktem String parsen (Schleifen beliebig verschachtelt).
 //   F10 = 10 cm vorwaerts, R90 = 90 Grad rechts, W2 = 2 s warten
 //   M45 = 45 mm vorwaerts, D120 = fahre bis Abstand <= 120 mm
+//   P2  = fahre bis GRUEN sichtbar ist,  V2 = warte bis GRUEN sichtbar ist
 //   U3(F10,R90) = 3x, C2(F5) = bis GRUEN
 //   U2(U3(F5))  = verschachtelt
 // true bei Erfolg, false bei Syntaxfehler / leerem Programm.

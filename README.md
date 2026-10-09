@@ -111,6 +111,29 @@ Weiter wichtig:
 | fährt rückwärts | Werte unterschiedlich, aber beide umgekehrt zur nötigen Polarität |
 | fährt geradeaus, dreht auf der Stelle in die falsche Richtung | Fahrzeichen stimmt, aber `gameTurnSteps()`-Logik prüfen |
 
+#### Modus-Automatik: `TPWMTHRS` und StallGuard
+
+Zwei Register, die früher nicht gesetzt wurden und jetzt in `configureOne()`
+mitlaufen (`src/Motor.h`):
+
+- **`TPWMTHRS` = 601** → Umschaltung auf SpreadCycle ab 60 mm/s. Vorher stand
+  hier `TPWMTHRS(0)`, und `0` bedeutet laut Datenblatt *Disabled*: der Treiber
+  blieb bei **jeder** Geschwindigkeit in StealthChop, also auch dort, wo
+  StealthChop die wenigste Drehmomentreserve hat. Der Wert ist unabhängig von
+  der Microstep-Zahl (er bezieht sich immer auf 1/256 Schritt), ein Wert reicht
+  für alle Microstep-Einstellungen.
+- **`TCOOLTHRS` = 2402** → StallGuard erst ab 15 mm/s auswerten. Unterhalb
+  dieser Geschwindigkeit ist er nicht verlässlich.
+- **`SGTHRS` = 100** → Stall bei `SG_RESULT ≤ 200`. Der Wert ist
+  anwendungsabhängig, das Datenblatt gibt keine Vorgabe. **Nichts in der
+  Firmware handelt darauf** — er wird nur gelesen und zusammen mit beiden
+  `SG_RESULT`-Werten gemeldet. Ein zu niedriger Wert kann deshalb keinen
+  Schaden anrichten, und der echte Wert ist am Roboter ablesbar.
+
+Die Herleitung der Registerwerte steht ausgeschrieben bei
+`TMC_SPREADCYCLE_AB_MM_S` in `Motor.h`: `Registerwert = 2^24 · Radumfang /
+(51200 · v[mm/s])`, gegengeprüft an der OTP-Tabelle des Herstellers.
+
 ### I2C-Sensoren
 
 | Sensor | Adresse | Pins |
@@ -164,9 +187,160 @@ Zwei Regeln sind bewusst so gewaehlt:
 1. **Waehrend Farbmessungen bleibt der Ring dunkel** (Slalom-Rennen,
    Quiz-Lesephase, ausgefuehrte Programme). Eigenes LED-Licht koennte sonst
    als Farbe auf dem Boden erkannt werden. Der Not-Aus-Alarm blinkt trotzdem.
-2. **Der S-Block** (`LED`-Baustein) nutzt dieselbe Anzeige: Slots 0-3 zeigen
+2. **Der S-Block** (`Licht`-Baustein) nutzt dieselbe Anzeige: Slots 0-3 zeigen
    die Zielfarbe, Slot 4/5 die Distanz-Bedeutung NAH (dunkelrot) / FREI
    (dunkelgruen), Slot 6 schaltet aus.
+
+### Code-Bausteine (Blockprogrammierung)
+
+Die Web-UI baut das Programm als kurzen String (`PROG:SET:<enc>`). Die
+Bausteine sind nach **Aufgabe** gruppiert, nicht nach Technik — genau diese
+technische Gruppierung war es, an der man nicht durchblickte.
+
+| Reiter | Bausteine | Kodierung |
+|---|---|---|
+| Fahren | vorwärts/rückwärts cm, drehe links/rechts ° | `F20` `B15` `L90` `R90` |
+| **Fahre bis** | **fahre bis [Farbe]**, **fahre bis Abstand [mm]** | **`P0`**…`P5` **`D150`** |
+| Warten | warte s, warte bis [Farbe], warte bis Abstand mm | `W2` `V1` `X150` |
+| Wiederholen | wiederhole n mal, wiederhole bis [Farbe] | `U4(...)` `C2(...)` |
+| Genau fahren | vorwärts/rückwärts mm | `M45` `N45` |
+| Sonstiges | Licht, Stopp, kurze Pause, warte bis frei mm | `S1` `Q` `Z5` `G300` |
+
+Slot 0-3 sind ROT/GELB/GRÜN/BLAU, Slot 4 = Hindernis erkannt, Slot 5 = Weg frei.
+Der Farb-Chip im Baustein wird durch Anklicken weitergeschaltet.
+
+**„Fahre bis …" läuft für alle drei Fälle über eine Routine**
+(`progDriveUntil()`): eine einzige Rampe, dann durchgehende Fahrt mit einer
+Prüfung alle ~10 ms. Vorher gab es zwei getrennte Wege, und der Abstands-Baustein
+fuhr in 10-mm-Etappen mit jeweils eigener Rampe — bei 150 ms Anfahrzeit kostet
+jede Etappe mehr Zeit im Anfahren als im Fahren.
+
+Drei Dinge, die dabei bewusst so gelöst sind:
+
+1. **Flanken-Logik bei Farben.** Steht der Roboter schon auf der Zielfarbe,
+   hält er nicht sofort, sondern erst bei der *nächsten* Farbe. Sonst wäre
+   „fahre bis Rot" auf rotem Boden ein Baustein ohne Wirkung.
+2. **Zwei Sicherheitsnetze**, unabhängig voneinander: höchstens 1,5 m und
+   höchstens 20 s. Ohne sie fährt der Roboter bei blindem Sensor endlos weiter.
+3. **Kein zusätzlicher Halt auf der Hindernis-Schwelle** beim Abstands-Baustein.
+   Die Schwelle steht an anderer Stelle und würde den Baustein beenden, bevor
+   sein eigener Wert erreicht ist — der Roboter hielte an, ohne dass klar wäre,
+   warum.
+
+Der alte Weg „F/B mit angehängtem E-Wertblock" (`FE2`, im Parser gleich auf
+`OP_DRIVE_UNTIL` umgewandelt) wird weiterhin gelesen und läuft jetzt über
+dieselbe Routine. Der E-Wertblock selbst steht nicht mehr in der Palette: für
+„bis Farbe" gibt es mit `P` genau einen Weg, und zwei Wege für dieselbe Sache
+waren einer zu viel.
+
+### Drift: „Software oder Hardware?" — die Messgröße dafür
+
+Jedes Freifahren-Manöver (`driveUpdate()`) gibt am Ende automatisch eine Zeile
+aus:
+
+```
+[DRV] Fahrt beendet: Schritte L=16862 R=16861 (Diff 1)
+[DRV]   Zaehler praktisch gleich -> Drift ist MECHANISCH
+```
+
+Die Zähler sind `AccelStepper::currentPosition()` — sie zählen **jeden
+erzeugten Puls**, unabhängig davon, ob das Rad rollt. Damit ist die Frage
+entscheidbar statt vermutbar:
+
+| Befund | Bedeutung |
+|---|---|
+| Zähler gleich (Diff ≤ 2), Roboter driftet sichtbar | **mechanisch**: Rad steht schief, Getriebespiel, Reibung, Spannung im Chassis |
+| Zähler unterscheiden sich | **Software**: die Räder werden ungleich angesteuert (zuerst `leftSign`/`rightSign`, dann der Puls-Task) |
+| Zähler gleich *und* Strecke stimmt nicht | Zeitbasis: `MOTOR_TICK_US`, `MAX_DRIVE_STEPS_S` |
+
+Gleiche Zahlen stehen auch in `DRV?` (`pos=<L>/<R> d=<Diff>`) und auf der
+Diagnose-Seite. Reine Diagnose — am Fahrverhalten ändert sich nichts.
+
+### TMC2209: Registerkarte nicht aus der Bibliothek übernehmen
+
+**Das ist die wichtigste Falle im ganzen Projekt.** TMCStepper adressiert den
+TMC2209 mit der Registerkarte des **TMC2130**. Dort liegt `CHOPCONF` auf
+**0x06** — beim TMC2209 ist 0x06 aber **IOIN** und damit nur lesbar.
+
+Gemessen auf dem Roboter (2026-10, COM9): `toff`, `mres`, `intpol`, `pwm_autoscale`,
+Strom und Hold waren nie angekommen. Stattdessen liefen beide Treiber auf
+Auslieferungswerte — mit **IRUN = 31 (voller Strom)**, also rund **396 mA RMS**
+bei 560 mΩ Fühlerwiderstand, für einen Motor mit **0,2 A Nennstrom**.
+
+| Register | TMC2209 (UART) | TMC2130 (was TMCStepper nutzt) |
+|---|---|---|
+| `GCONF` | 0x00 | 0x00 ✔ zufällig gleich |
+| `CHOPCONF` | **0x08** | 0x06 ✘ = IOIN, nur lesbar |
+| `IHOLD_IRUN` (Strom) | **0x10** | — |
+| `TPOWER` | 0x11 | 0x19 ✘ |
+| `TSTEP` / `TPWMTHRS` / `TCOOLTHRS` | 0x12 / 0x13 / 0x14 | 0x13 / 0x15 / 0x16 ✘ |
+| `VACTUAL` | 0x22 | ✔ |
+| `SGTHRS` / `SG_RESULT` | 0x40 / 0x41 | ✔ |
+
+Deshalb schreibt `configureOne()` **alle Register selbst** über
+`tmcWriteChecked()` mit den Adressen aus dem Datenblatt.
+
+**Zwei Fallen, die zusammen sehr viel Zeit gekostet haben:**
+
+1. **Nur-schreibbare Register kann man nicht zurücklesen.** `CHOPCONF`,
+   `IHOLD_IRUN`, `TPOWER`, `TPWMTHRS`, `TCOOLTHRS`, `SGTHRS` und `NODECONF`
+   sind im Datenblatt mit `W` gekennzeichnet. Ein Readback liefert dort
+   konstant 0 — daraus entstand die Fehldiagnose „die Schwellen kommen nicht
+   an". **Belegbar sind sie nur über `IFCNT`:** „This register becomes
+   incremented with each successful UART interface write access." Nach der
+   Konfiguration muss dieser Zähler um die Anzahl der Schreibzugriffe
+   gewachsen sein. Genau das prüft `configureOne()` jetzt.
+2. **`ENN` ist auch ein Reset.** Das Datenblatt (5.5.1): „Indicates that the
+   IC has been reset since the last read access to GSTAT. **All registers
+   have been cleared to reset values.**" Der Auto-Standby schaltet nach 3 s auf
+   EN=HIGH und löscht damit jedes Register — ohne jede Fehlermeldung.
+   `tmcEnable()` konfiguriert deshalb neu, sobald der Treiber wieder
+   eingeschaltet wird.
+
+**MS1/MS2 tragen doppelte Funktion:** Sie wählen die UART-Adresse *und* — solange
+`mstep_reg_select = 0` — die Microstep-Auflösung (Datenblatt 4.3 und 5.5.1).
+Diese Platine nutzt sie für die Adresse (links `0b01`, rechts `0b00`); ohne
+`mstep_reg_select` wären die Räder auf 128 bzw. 256 Microsteps gelaufen,
+während die Firmware für beide 32 rechnet.
+
+**Strom:** `IRUN` (Bit 12..8) und `IHOLD` (Bit 4..0) des Registers 0x10 sind
+Strom-*Skalen* 0..31 (0 = 1/32, 31 = 32/32). Die Widerstände und VREF legen die
+**Obergrenze** fest (~396 mA bei 560 mΩ und `vsense = 0`), `IRUN` skaliert nur
+darunter. Für 200 mA folgt `IRUN = 16` → **210 mA**. Das Datenblatt empfiehlt
+ausdrücklich „IRUN is 16 to 31 for best microstep performance" — darunter
+wird deshalb gekappt. `IHOLD > IRUN` heißt: im Stillstand fließt **mehr** Strom
+als beim Fahren; `tmcPrintStatus()` warnt davor.
+
+### `MOT:SPD?` — Momentaufnahme mitten in der Fahrt
+
+Für einen **dauerhaften** Drift (die Startmessung ist nach ~50 ms vorbei,
+ein Drift zeigt sich über Sekunden) liest dieser Befehl auf Abruf
+`VACTUAL` und `MSCNT` beider Treiber — 4 Reads, rund 8 ms:
+
+```
+VACTUAL L=-4310 R=-4290 uSchritt/s  (~-126.5 / -125.9 mm/s)  Diff 0 %
+BEWERTUNG: beide Raeder drehen gleich schnell. Ein Drift kommt dann
+           NICHT aus unterschiedlichem Vortschritt - sondern aus
+           seitlichem Versatz (Achse schief, Boden, Spiel).
+```
+
+Die beiden Messungen zusammen sind die eigentliche Entscheidung:
+
+| `[DRV]`-Zähler | `MOT:SPD?` VACTUAL | Bedeutung |
+|---|---|---|
+| gleich | gleich | **kein Fortschrittsunterschied** — der Roboter wird von außen gelenkt: Achse schief, Boden, Rad schief |
+| gleich | **verschieden** | **mechanisch**: ein Rad kommt nicht voran — Schlupf, Getriebereibung, schleifendes Rad |
+| **verschieden** | — | **Software**: die Räder werden ungleich angesteuert |
+
+Bewusst nicht automatisch: 8 ms Lesen mitten in der Fahrt sind eine echte
+Störung des 50-µs-Puls-Tasks — ein guter Anlass, sie nur auf Abruf zu machen.
+
+**Richtungsunabhängigkeit als Ausschlusskriterium:** `runSpeed()` rechnet in
+AccelStepper mit `fabs()` und hält die Richtung getrennt in `_direction`.
+Vorwärts und Rückwärts laufen damit durch denselben Codepfad; eine
+Asymmetrie *im* Puls-Task ist ausgeschlossen. Sie kann nur aus
+unterschiedlichen Sollwerten je Rad entstehen — und genau das zeigen die
+Zähler.
 
 ---
 
@@ -361,6 +535,40 @@ Dispatch-Liste am Ende von `handleCommand()` eintragen.
 | `TMC:EN:1` / `TMC:EN:0` | Treiber ein/aus |
 | `TMC:INIT` | Konfiguration erneut senden (z. B. nachträglich, wenn VM kam) |
 | `UARTTEST` / `UARTNET` | UART- bzw. PDN-Netz-Diagnose |
+| `MOT:DIAG` | Treiber-Messung (siehe unten) |
+
+#### Treiber-Messung: Schrittverlust und Schlupf **beobachten**
+
+`MOT:DIAG` liest `GSTAT` (0x01), `SG_RESULT` (0x41), `VACTUAL` (0x22),
+`TSTEP` (0x12), `MSCNT` (0x6A) und `DRV_STATUS` (0x6F) von **beiden**
+Treibern und meldet sie im Log als `MOT:MEAS:` für die Web-UI.
+
+**Es wird nichts nachgeregelt.** Kein Korrekturwert, kein Trim, kein
+Ausgleich, kein Halt, keine Wartezeit – das Fahrverhalten ist vorher wie
+nachher. Die Messung liefert Zahlen und Befunde, entschieden wird nichts.
+
+| Wert | Wofür |
+|---|---|
+| `SG_RESULT` | Drehmomentreserve (höher = mehr Reserve). Nur oberhalb `TCOOLTHRS` verlässlich |
+| `GSTAT` | Bit 1 `drv_err`, Bit 2 `uv_cp` (Ladepumpen-Unterspannung – der Treiber schaltet dann laut Datenblatt ab). Lesen löscht die Bits **nicht**; nur Schreiben tut das, und das unterbleibt |
+| `VACTUAL` | von jedem Treiber selbst gemessene Drehzahl. Erkennt laufenden Schlupf, beweist aber keine einmalig verlorenen Schritte |
+| `TSTEP` | von beiden Treibern gemessene STEP-Periode. Weit auseinander = die STEP-Leitungen werden unterschiedlich bedient; Anschlag `0xFFFFF` = Stillstand |
+| `MSCNT` | **direkter Schrittverlust-Nachweis**: der *Vorrück* beider Seiten muss gleich sein. Zählerstand allein bedeutet nichts |
+| `DRV_STATUS` | Modus (Stealth/Spread muss auf beiden Seiten gleich sein), `CS_ACTUAL` (ungleicher Laststrom), offene Last, Kurzschluss, Temperatur |
+
+Automatisch läuft die Messung einmal nach jedem Anfahren, aber nur im
+sicheren Fenster (20…1500 Schritte/s). Grund: ein Register-Read auf dem
+gemeinsamen Single-Wire-Bus kostet ~2 ms – bei 4321 Schritten/s wäre die
+STEP-Periode nur noch 231 µs, und die UART-ISR würde dem 50-µs-Puls-Task
+genau die Takte wegnehmen, die er zum Erzeugen der Pulse braucht. Verlässt
+der Roboter das Fenster, wird abgebrochen und das gemeldet. Positionsfahrten
+werden nie unterbrochen.
+
+Weil das Register-Layout in `Motor.h` (`TMC_REG_*`) an einer Stelle steht und
+die Rohzugriffe über eine kleine Ableitung von `TMC2209Stepper` laufen, nutzt
+die Messung den geprüften UART-Code der Bibliothek (CRC, Wiederholungen) – und
+nicht eigene Datagramme, die wie die früher gelöschte `tmcUartDiag()` die
+Treiberadressen verschieben könnten.
 
 ### Anfahren und Einschalten (nicht der Treiber, sondern die Laufzeit)
 
@@ -410,14 +618,23 @@ werden:
    `readRangeResult()` und wertet `readRangeStatus()` aus.
 3. **Motor-Zugriffe nur über `Motor.h`.** Der Puls-Task läuft auf Core 0;
    alle Stepper-Instanzen sind dort `private`.
-4. **`currentGame` nicht im Motor-Task lesen.** Es ist single-Core-Logik
+4. **Beide Motoren über `setMotorSpeeds()` bzw. `prepPositionMoves()` setzen,
+   nicht über zwei einzelne Aufrufe.** Der Puls-Task nimmt den Motor-Mutex
+   alle 50 µs; zwischen zwei Aufrufen kann er ihn bekommen, und dann kommt der
+   zweite Befehl später an — die Räder fahren kurz einseitig an. Bei 20 ms
+   Versatz sind das bei 150 mm/s und 16 Microsteps rund 3 mm Weg und gut
+   2,5° Gierwinkel, auf einem Meter deutlich sichtbar. Bei Drehungen
+   (`prepPositionMoves`) stimmen die Schrittzahlen zwar beide, aber das
+   Drehmoment wirkt kurzzeitig nur einseitig. Die Einzelaufrufe
+   `setMotorSpeed()` und `prepPositionMove()` bleiben für echte Einzelfälle.
+5. **`currentGame` nicht im Motor-Task lesen.** Es ist single-Core-Logik
    (Core 1), deshalb ohne `volatile`.
-5. **Spiel-Moves sind blockierend** und pollen mit `GAME_TICK_MS = 1`.
+6. **Spiel-Moves sind blockierend** und pollen mit `GAME_TICK_MS = 1`.
    Deshalb funktionieren `STOP` und andere BLE-Befehle auch *während* eines
    Spiels: die Warte-Schleifen rufen `bleProcessEvents()` auf und brechen
    bei `currentGame == GAME_NONE` ab.
 
-6. **`handleCommand` ist ein Dispatcher.** Befehlsgruppen sind eigene
+7. **`handleCommand` ist ein Dispatcher.** Befehlsgruppen sind eigene
    `cmd*()`-Funktionen. Neue Befehle dort ergänzen und in der Dispatch-Liste
    eintragen, statt die Kette in `handleCommand()` zu verlängern.
 7. **Nie `setMeasurementTimingBudgetMicroSeconds()` auf dem VL53L0X.** Die
@@ -428,6 +645,19 @@ werden:
    (33 ms) verwenden.
 8. **Der VL53L0X braucht 0x29 für sich allein, solange er initialisiert
    wird** – siehe den Abschnitt unten.
+9. **TMC-Register nur lesen, wenn überhaupt – und nie das Auto-Inkrement-Bit
+   setzen.** Ein Read-Request an die *UART*-Adresse 0 ist beim TMC2209
+   gleichzeitig ein Auto-Inkrement: die Treiberadressen wandern dauerhaft und
+   die UART-Kommunikation ist tot, bis ein Neustart die OTP-Adressen
+   zurücksetzt. Deshalb gibt es die gelöschte `tmcUartDiag()` nicht mehr, und
+   die Registerzugriffe der Treiber-Messung laufen über die geprüften
+   `read()`-Aufrufe einer kleinen Ableitung von `TMC2209Stepper` – CRC-Prüfung
+   und Wiederholungen kommen damit aus der Bibliothek. `GSTAT` wird
+   ebenfalls nur gelesen: die Fehlerbits werden durch **Schreiben** gelöscht,
+   und das unterbleibt absichtlich.
+10. **Kein Register-Read aus dem 50-µs-Puls-Task.** Ein Read auf dem
+   gemeinsamen Bus kostet ~2 ms und würde 40 Ticks verschlucken. Die Messung
+   liest deshalb genau ein Register pro Loop-Durchlauf.
 
 ---
 

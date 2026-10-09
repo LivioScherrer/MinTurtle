@@ -27,3 +27,7 @@ backup_*/
 # ---- OS ----
 Thumbs.db
 .DS_Store
+
+# ---- UI-Test-Screenshots (Wegwerf) ----
+ui_v3_*.png
+restore_check_*.png

@@ -113,11 +113,13 @@ static void waitForStop(uint32_t maxExtraMs = 1000) {
 void gameDrive(int32_t ms, bool bForward) {
   gameMoveBusy = true;
   const float target = bForward ? FIXED_DRIVE_SPEED : -FIXED_DRIVE_SPEED;
-  setMotorSpeed(0, target, false);
-  setMotorSpeed(1, target, false);
+  // Beide Raeder in EINEM Aufruf: hier ist der Versatz zwischen zwei
+  // Aufrufen besonders teuer, weil anschliessend gewartet wird - ein
+  // verzoegertes zweites Ziel heisst, der Roboter faehrt die ersten
+  // Millisekunden einseitig an und die vorgegebene Fahrzeit stimmt nicht mehr.
+  setMotorSpeeds(target, target, false);
   waitWhileRunning((uint32_t)ms, true);
-  setMotorSpeed(0, 0, false);
-  setMotorSpeed(1, 0, false);
+  setMotorSpeeds(0, 0, false);
   waitForStop();
   gameMoveBusy = false;
 }
@@ -131,8 +133,7 @@ void gameStop(uint32_t ms) {
   // einen STILLSTEHENDEN Roboter brauchen (Farbe messen, Drehung ansetzen,
   // warten bis etwas da ist). Ein ausrollender Roboter wuerde die Farbe im
   // Vorbeifahren lesen und das Ergebnis waere Muell.
-  setMotorSpeed(0, 0, false);
-  setMotorSpeed(1, 0, false);
+  setMotorSpeeds(0, 0, false);
   // bAbortOnNoGame=false: ein bewusstes Pause-Fenster (z.B. waehrend der
   // Farbsensor liest) darf nicht durch einen Spielabbruch verkuerzt werden.
   waitWhileRunning(ms, false);
@@ -176,8 +177,8 @@ static void waitForStepsDone(bool bAbortOnNoGame) {
 // Beruecksichtigt config.leftSign/rightSign fuer die Verkabelung.
 void gameDriveForwardSteps(int32_t steps) {
   gameMoveBusy = true;
-  prepPositionMove(0, steps * static_cast<long>(config.leftSign));
-  prepPositionMove(1, steps * static_cast<long>(config.rightSign));
+  prepPositionMoves(steps * static_cast<long>(config.leftSign),
+                    steps * static_cast<long>(config.rightSign));
   waitForStepsDone(true);
   gameMoveBusy = false;
 }
@@ -188,8 +189,8 @@ void gameDriveForwardSteps(int32_t steps) {
 void gameDriveBackwardSteps(int32_t steps) {
   if (steps < 0) steps = -steps;
   gameMoveBusy = true;
-  prepPositionMove(0, -(long)steps * (long)config.leftSign);
-  prepPositionMove(1, -(long)steps * (long)config.rightSign);
+  prepPositionMoves(-(long)steps * (long)config.leftSign,
+                    -(long)steps * (long)config.rightSign);
   waitForStepsDone(true);
   gameMoveBusy = false;
 }
@@ -197,8 +198,8 @@ void gameDriveBackwardSteps(int32_t steps) {
 // Test-Helper: fahre n Schritte ohne currentGame-Abhaengigkeit, mit Timeout.
 // Wird vom STEPS:-Befehl genutzt, um den richtigen Wert fuer 3cm zu finden.
 void testDriveSteps(int32_t steps) {
-  prepPositionMove(0, steps * static_cast<long>(config.leftSign));
-  prepPositionMove(1, steps * static_cast<long>(config.rightSign));
+  prepPositionMoves(steps * static_cast<long>(config.leftSign),
+                    steps * static_cast<long>(config.rightSign));
   uint32_t start = millis();
   while (motorStillRunning() && millis() - start < 5000) {
     esp_task_wdt_reset();
@@ -211,12 +212,17 @@ void testDriveSteps(int32_t steps) {
 // Positionsbasierte Drehung auf der Stelle: beide Motoren bekommen
 // entgegengesetzte Richtungen, je 'steps' (vorzeichenkorrigiert).
 // bLeft=true -> links rueckwaerts / rechts vorwaerts.
+//
+// prepPositionMoves() statt zwei Aufrufe: bei einer Drehung ist ein
+// zeitlicher Versatz zwischen den Seiten der schlimmste denkbare Fehler -
+// die Schrittzahlen stimmen beide, aber das Drehmoment wirkt kurzzeitig nur
+// auf ein Rad, und der Roboter steht danach schief.
 static void gameTurnSteps(int32_t steps, bool bLeft) {
   gameMoveBusy = true;
   const long l = bLeft ? -steps : steps;
   const long r = bLeft ? steps : -steps;
-  prepPositionMove(0, l * static_cast<long>(config.leftSign));
-  prepPositionMove(1, r * static_cast<long>(config.rightSign));
+  prepPositionMoves(l * static_cast<long>(config.leftSign),
+                    r * static_cast<long>(config.rightSign));
   waitForStepsDone(true);
   gameMoveBusy = false;
 }
@@ -226,8 +232,8 @@ void gameTurnRightSteps(int32_t steps) { gameTurnSteps(steps, false); }
 
 // Test-Helper: drehe auf der Stelle (rechts) um 'steps' Schritte pro Rad.
 void testTurnSteps(int32_t steps) {
-  prepPositionMove(0,  steps * static_cast<long>(config.leftSign));
-  prepPositionMove(1, -steps * static_cast<long>(config.rightSign));
+  prepPositionMoves( steps * static_cast<long>(config.leftSign),
+                    -steps * static_cast<long>(config.rightSign));
   uint32_t start = millis();
   while (motorStillRunning() && millis() - start < 5000) {
     esp_task_wdt_reset();
@@ -811,6 +817,35 @@ static bool cmdTmc(const String& cmd) {
     // UARTNET (nur lesend) bleibt erlaubt.
     if (cmd == "UARTTEST") { sendStatus("UARTTEST:GESPERRT"); return true; }
   if (cmd == "UARTNET") { tmcNetDiag(); sendStatus("NETZ:DIAG_DONE"); return true; }
+    // MOT:DIAG: liest GSTAT, SG_RESULT, VACTUAL, TSTEP, MSCNT und DRV_STATUS
+    // von BEIDEN Treibern. Reine Beobachtung - es wird nichts geregelt und
+    // der Roboter nicht angehalten. Der Lauf braucht 16 Loop-Durchlaeufe
+    // (ein Register pro Durchlauf, ~2 ms Lesen), danach kommt die Auswertung
+    // im Log und als MOT:MEAS:-Zeile fuer die Web-UI.
+    if (cmd == "MOT:SYNC") {
+      // Beide Motoren auf denselben Mikroschritt bringen. Laeuft bei jedem
+      // Moduswechsel automatisch; dieser Befehl macht es auf Abruf.
+      const bool korrigiert = motorSyncMicrosteps();
+      sendStatus(korrigiert ? "MOT:SYNC:OK" : "MOT:SYNC:OK");
+      return true;
+    }
+    if (cmd == "MOT:SPD?") {
+      // Messung mitten in der Fahrt: VACTUAL beider Treiber (= wie schnell
+      // drehen die Raeder wirklich) plus MSCNT als Referenz. Genau damit
+      // laesst sich ein dauerhafter Drift von "die Raeder kommen
+      // unterschiedlich weit" (mechanisch) trennen.
+      if (!motorDiagSteadySpeed()) sendStatus("MOT:SPD:NO_TMC");
+      return true;
+    }
+    if (cmd == "MOT:DIAG") {
+      if (!motorDiagRequest()) {
+        // Grund: Treiber aus (Auto-Standby) oder ein Lauf laeuft bereits.
+        sendStatus(motorDiagRunning() ? "MOT:DIAG:BUSY" : "MOT:DIAG:NO_TMC");
+        Serial.printf("[CMD] MOT:DIAG abgelehnt: %s\n",
+                      motorDiagRunning() ? "Messlauf laeuft bereits" : "Treiber aus (kein EN)");
+      }
+      return true;
+    }
   if (cmd.startsWith("TMC:CURRENT:")) {
     int v = cmd.substring(12).toInt();
     if (tmcSetCurrent((uint16_t)v)) {
@@ -862,6 +897,11 @@ static bool cmdTmc(const String& cmd) {
   if (cmd == "TMC:EN:1") { tmcEnable(); sendStatus("TMC:EN=1"); tmcSendCompactStatus(); return true; }
   if (cmd == "TMC:EN:0") { tmcDisable(); sendStatus("TMC:EN=0"); tmcSendCompactStatus(); return true; }
   if (cmd == "TMC:INIT") { tmcReinit(); sendStatus("TMC:INIT_DONE"); tmcSendCompactStatus(); return true; }
+    // TMC:REG: Register-Dump mit Schreibtest - damit laesst sich von aussen
+    // pruefen, ob der Treiber wirklich konfiguriert ist (und ob Schreibzugriffe
+    // ueberhaupt ankommen). Nur lesend, ausser dem einen GCONF-Bit im Test,
+    // das sofort wieder zurueckgeschrieben wird.
+    if (cmd == "TMC:REG") { tmcRegDump(); sendStatus("TMC:REG_DONE"); return true; }
   return false;
 }
 
@@ -1514,7 +1554,11 @@ void handleCommand(const char* cmdStr) {
     // DRV? zeigt die komplette Freifahren-Kette (Keys, Geschwindigkeit,
     // Spiel-Sperre, Treiber). Nur Diagnose - veraendert nichts.
     if (cmd == "DRV?") {
-      char drv[160];
+      // 224 statt 160: die Zeile enthaelt jetzt auch die Schrittzaehler beider
+      // Raeder (pos=/d=) fuer die Drift-Diagnose. BLE verhandelt MTU 247, und
+      // sendStatus() schneidet nichts ab - ein zu kleiner Puffer wuerde die
+      // Diagnose genau dort kappen, wo sie gebraucht wird.
+      char drv[224];
       driveDebug(drv, sizeof(drv));
       sendStatus(drv);
       return;
@@ -1721,6 +1765,10 @@ void loop() {
   distRefSpadService();
   // TMC-Auto-Standby: Treiber aus, wenn laenger als TMC_STANDBY_MS nichts faehrt
   tmcAutoStandbyTick();
+  // Treiber-Messung fortschreiben: liest bewusst nur EIN Register pro
+  // Durchlauf. Muss hier stehen bleiben - die Messung braucht viele
+  // Durchlaeufe, und ein blockierender Aufruf wuerde die Fahrt stoeren.
+  motorDiagTick();
   // Rennen: hat der Gegner zu lange geschwiegen, sauber beenden. Sonst bleibt
   // der Roboter bis zum naechsten STOP im Renn-Modus und die Steuerung gesperrt.
   if (racePeerTimedOut()) {

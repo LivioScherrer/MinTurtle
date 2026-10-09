@@ -3155,7 +3155,60 @@
         font-size: 12px
       }
     }
+    /* ---- UX-Schicht (Motion + Konfetti) ----
+       Nur additive Regeln. Alles hier ist optional: fehlt die Bibliothek,
+       laeuft die Seite wie vorher. */
+    /* Startbildschirm: Kacheln füllen die Breite der Rubrik (auto-fit statt
+       auto-fill, damit zwei Kacheln nicht in einer Spalte von vier kleben) */
+    .tile-grid,
+    .setup-group {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr))
+    }
+
+    /* Kopfzeile auf breiten Bildschirmen auf die Inhaltsbreite ausrichten */
+    @media (min-width:1000px) {
+      .header {
+        padding-left: max(28px, calc((100% - 1400px) / 2 + 28px));
+        padding-right: max(28px, calc((100% - 1400px) / 2 + 28px))
+      }
+
+      .tile {
+        padding: 20px 24px;
+        gap: 22px
+      }
+    }
+
+    .fx-shake {
+      animation: wiggle .45s ease-in-out
+    }
+
+    .conn-dot.fx-pop {
+      animation: popIn .5s var(--ease-bounce)
+    }
+
+    /* Blockkopf ist der Griff zum Ziehen: Touch-Geste nicht als Scrollen werten,
+       sonst bricht der Browser das Ziehen auf Tablets ab (pointercancel). */
+    .prog-blk-head,
+    .prog-chip {
+      touch-action: none
+    }
+
+    /* In der Palette (schmale Spalte) darf der Wert-Eingang umbrechen,
+       statt ueber den Rahmen zu ragen (z.B. "fahre bis Abstand 150 mm"). */
+    .prog-palette .prog-blk-head {
+      flex-wrap: wrap;
+      row-gap: 4px
+    }
+
+    @media (prefers-reduced-motion:reduce) {
+      .fx-shake,
+      .conn-dot.fx-pop {
+        animation: none !important
+      }
+    }
   </style>
+  <script src="vendor/motion.js"></script>
+  <script src="vendor/confetti.js"></script>
 </head>
 
 <body>
@@ -3712,6 +3765,8 @@
             <div class="prog-cols">
               <div class="prog-col prog-col-palette">
                 <div style="font-size:14px;color:var(--ink-mute);font-weight:700;margin-bottom:8px;">Bausteine</div>
+                <div class="prog-tabs" id="slalomTabs" role="tablist"></div>
+                <div class="prog-cat-hint" id="slalomCatHint"></div>
                 <div class="prog-palette" id="slalomPalette"></div>
               </div>
               <div class="prog-col prog-col-prog">
@@ -3812,6 +3867,11 @@
           <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:14px 0;">
             <button class="btn btn-grey" onclick="sendCommand('TMC?')">Status abfragen</button>
             <button class="btn btn-grey" onclick="sendCommand('TMC:INIT')">Neu initialisieren</button>
+            <!-- Misst SG_RESULT, GSTAT, VACTUAL, TSTEP, MSCNT und DRV_STATUS von
+                 BEIDEN Treibern. Reine Beobachtung: der Roboter wird dabei nicht
+                 angehalten und es wird nichts nachgeregelt. Am sinnvollsten
+                 waehrend einer Fahrt - dann sind VACTUAL und TSTEP aussagekraeftig. -->
+            <button class="btn btn-grey" onclick="motorDiag()">Schrittverlust messen</button>
           </div>
           <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0;">
             <span style="font-weight:700;min-width:110px;">Strom (mA):</span>
@@ -4420,7 +4480,8 @@ function updateConnectionUI(isConn, text) {
           distCal3Reset('Nicht geklappt - die Messwerte passten nicht zusammen. Nochmal: Blatt ruhig auf 5, 10 und 20 cm halten.');
           distFeedback('Kalibrierung fehlgeschlagen.');
         } else if (msg.startsWith('TMC:') || msg.startsWith('UART:') || msg.startsWith('NETZ:') ||
-                   msg.startsWith('SPEED=') || msg.startsWith('RAMP') || msg.startsWith('SPIN')) {
+                   msg.startsWith('MOT:') || msg.startsWith('SPEED=') ||
+                   msg.startsWith('RAMP') || msg.startsWith('SPIN')) {
           // SPEED=/RAMP/SPIN gehoeren zum Motor-Bereich und wurden hier
           // lange nicht aufgefuehrt: die Antworten landeten in keinem Zweig
           // und wurden verworfen. Folge war, dass das Tempo-Feld auf der
@@ -4473,6 +4534,15 @@ function updateConnectionUI(isConn, text) {
       function motorFeedback(t) {
         const el = document.getElementById('motorFeedback');
         if (el) { el.textContent = t; el.style.display = 'block'; }
+      }
+      function motorDiag() {
+        // Messung anfordern. Die Firmware liest 16 Register ueber 16
+        // Loop-Durchlaeufe (ein Register pro Durchlauf, ~2 ms Lesen) und
+        // meldet danach per MOT:MEAS:. Der Roboter wird dabei nicht
+        // angehalten; am aussagekraeftigsten ist die Messung waehrend einer
+        // Fahrt, weil VACTUAL und TSTEP im Stillstand nichts messen.
+        motorFeedback('Messung angefordert - am besten während einer Fahrt auslösen. Ergebnisse kommen gleich.');
+        sendCommand('MOT:DIAG');
       }
       function motorSetCurrent() {
         // 100..200 mA. 200 ist der Nennstrom des NEMA8 und eine harte Grenze -
@@ -4618,6 +4688,40 @@ function updateConnectionUI(isConn, text) {
         if (msg === 'TMC:INIT_DONE') { motorFeedback('Neu initialisiert.'); sendCommand('TMC?'); return; }
         if (msg === 'TMC:LOGGED') { motorFeedback('Status empfangen.'); return; }
         if (msg === 'UART:DIAG_DONE' || msg === 'NETZ:DIAG_DONE') { motorFeedback('Diagnose fertig (Details im Serial-Monitor).'); return; }
+        // MOT:MEAS:flags,sgL,sgR,vactL,vactR,tstepL,tstepR,mscntL,mscntR,gstatL,gstatR
+        // Messung der beiden Treiber (reine Beobachtung, kein Eingriff).
+        // flags ist eine Bitmaske; bit0 = Ladepumpen-Unterspannung,
+        // bit1 = Treiberfehler, bit2 = Modusunterschied, bit3 = offene Last,
+        // bit4 = Kurzschluss, bit5 = Ueberhitzung, bit6 = Laststrom weit
+        // auseinander, bit7/8 = STEP-Periode, bit9 = MSCNT-Vorreck ungleich
+        // (direkter Schrittverlust-Nachweis), bit10 = Drehmomentreserve,
+        // bit11 = gemessene Drehzahl, bit12 = Lesefehler.
+        const DIAG_FLAG_NAMES = [
+          'Ladepumpen-Unterspannung', 'Treiberfehler', 'Modusunterschied',
+          'offene Last', 'Kurzschluss', 'Überhitzung', 'Laststrom unterschiedlich',
+          'STEP-Periode unterschiedlich', 'TSTEP am Anschlag',
+          'Schrittverlust (MSCNT)', 'Drehmomentreserve unterschiedlich',
+          'Drehzahl unterschiedlich', 'Lesefehler'
+        ];
+        if (msg.startsWith('MOT:MEAS:')) {
+          const p = msg.substring(9).split(',');
+          if (p.length >= 11) {
+            const flags = parseInt(p[0], 10) || 0;
+            const hits = [];
+            for (let i = 0; i < DIAG_FLAG_NAMES.length; i++) {
+              if (flags & (1 << i)) hits.push(DIAG_FLAG_NAMES[i]);
+            }
+            const an = hits.length ? 'BEFUND: ' + hits.join(', ') : 'alles unauffällig';
+            motorFeedback('Treiber-Messung ' + an +
+              ' | Drehmomentreserve ' + p[1] + '/' + p[2] +
+              ' | Drehzahl ' + p[3] + '/' + p[4] + ' µSchritt/s' +
+              ' | Mikroschritt-Vorreck ' + p[7] + '/' + p[8] +
+              ' | volle Auswertung im Serial-Monitor.');
+          }
+          return;
+        }
+        if (msg === 'MOT:DIAG:BUSY') { motorFeedback('Es läuft bereits eine Messung - kurz warten.'); return; }
+        if (msg === 'MOT:DIAG:NO_TMC') { motorFeedback('Treiber sind aus (kein EN). Kurz fahren oder "Neu initialisieren".'); return; }
         if (msg.startsWith('TMC:BAD') || msg.startsWith('UNKNOWN:')) { motorFeedback('Fehler: ' + msg); return; }
       }
 
@@ -5466,14 +5570,13 @@ function updateConnectionUI(isConn, text) {
           prog: {
             titel: 'Code-Bausteine',
             schritte: [
-              { title: 'Bausteine ziehen', detailHtml: 'Zieh einen Baustein aus der Palette in dein Programm – auch in den Körper eines Wiederhole-Blocks.' },
-              { title: 'Zahlen einstellen', detailHtml: 'Tippe auf die Zahl im Baustein. Einheiten je nach Block: <b>cm</b>, <b>Grad</b>, <b>mm</b> oder <b>Sekunden</b>.' },
-              { title: 'Millimeter-genau fahren', detailHtml: '<b>Vorwärts mm</b> und <b>Rückwärts mm</b> fahren eine genaue Strecke. Der Weg ist immer gleich, egal wie viele Microsteps eingestellt sind.' },
-              { title: 'Warten und Pausieren', detailHtml: '<b>Warte</b> zählt ganze Sekunden, <b>Kurze Pause</b> Zehntelsekunden – praktisch, wenn der Roboter kurz stillstehen soll.' },
-              { title: 'Distanzsensor mit Wert', detailHtml: 'Trage eine Zahl in Millimetern ein:<br>· <b>Fahre bis Abstand ≤</b> – fährt in kleinen Etappen, bis das Hindernis nah genug ist.<br>· <b>Warte bis nah ≤</b> – wartet, bis etwas nahe kommt (höchstens 5 s).<br>· <b>Warte bis frei ≥</b> – wartet, bis der Weg wieder frei ist.' },
-              { title: 'Wiederholen', detailHtml: '<b>Wiederhole n mal</b> und <b>Wiederhole bis Farbe</b> lassen sich <b>ineinander verschachteln</b> – z.B. „3× je 4× 2 cm fahren“.' },
-              { title: 'Licht und Stopp', detailHtml: '<b>LED</b> zeigt eine Farbe oder schaltet aus, <b>Stopp</b> hält den Roboter sofort an.' },
-              { title: 'Bis-Farbe-Block', detailHtml: 'Der kleine Wert-Block <b>bis</b> legt fest, bei welcher Farbe oder welchem Sensorzustand der Roboter stoppt bzw. weiterläuft.' },
+              { title: 'Bausteine ziehen', detailHtml: 'Zieh einen Baustein aus der Palette in dein Programm – auch in den Körper eines Wiederhole-Blockes. Die Reiter oben gruppieren die Bausteine nach Aufgabe.' },
+              { title: 'Fahren mit festen Strecke', detailHtml: '<b>Vorwärts</b> / <b>Rückwärts</b> in Zentimetern, <b>Drehe links</b> / <b>rechts</b> in Grad. Die Zahl im Baustein kannst du antippen.' },
+              { title: 'Fahren bis etwas da ist', detailHtml: 'Das sind die zwei wichtigsten Bausteine:<br>· <b>Fahre bis [Farbe]</b> – fährt los und hält von selbst, sobald die Farbe unter dem Roboter liegt.<br>· <b>Fahre bis Abstand [mm]</b> – fährt los und hält, wenn nur noch so viel Platz ist.<br>Steht die Farbe schon da, wo der Roboter startet, fährt er erst los und hält erst bei der <i>nächsten</i> Farbe.' },
+              { title: 'Warten', detailHtml: '<b>Warte [s]</b> zählt ganze Sekunden. <b>Warte bis [Farbe]</b> bleibt stehen, bis die Farbe da ist. <b>Warte bis Abstand [mm]</b> bleibt stehen, bis wieder Platz ist.' },
+              { title: 'Wiederholen', detailHtml: '<b>Wiederhole [n] mal</b> und <b>Wiederhole bis [Farbe]</b> lassen sich <b>ineinander verschachteln</b> – z. B. „3× je 4× 2 cm fahren“.' },
+              { title: 'Genau fahren', detailHtml: '<b>Vorwärts genau</b> und <b>Rückwärts genau</b> fahren eine Strecke in <b>Millimetern</b> – für Raster, Linien und kurze Wege. Die Strecke ist immer gleich, egal wie viele Microsteps eingestellt sind.' },
+              { title: 'Licht, Halt, Pause', detailHtml: '<b>Licht</b> zeigt eine Farbe oder schaltet aus, <b>Stopp</b> hält sofort an, <b>Kurze Pause</b> wartet Zehntelsekunden.' },
               { title: 'Start drücken', detailHtml: 'Der Roboter führt dein Programm von oben nach unten aus. Währenddessen leuchtet der gerade ausgeführte Baustein.' }
             ]
           },
@@ -6460,7 +6563,11 @@ function updateConnectionUI(isConn, text) {
       // Geschwindigkeit ueberhaupt zulaesst.
       const SPEED_STEP_CAP = 20000;              // muss zu MAX_DRIVE_STEPS_S passen
       const MOTOR_FULL_STEPS = 200;              // NEMA8 laut Datenblatt
-      const WHEEL_DIAM_MM = 35.3535;             // effektiv 35 mm + DRIVE_TRIM (Config.h)
+      // Effektiver Roll-Durchmesser = WHEEL_DIAMETER_MM * DRIVE_TRIM aus
+      // src/Config.h. Beide Werte muessen dort und hier zusammen gehoeren:
+      // 38 mm * 1,0101 = 38,3838. Mit dem alten 35,3535 rechnet die UI
+      // 8,6 % zu viele Schritte pro mm und zeigt eine zu hohe Schrittrate an.
+      const WHEEL_DIAM_MM = 38.3838;
       let driveSpeedDragging = false;
       let driveMicrosteps = 128;                  // wird bei TMC:STAT= aktualisiert
       function driveStepsPerMM(ms) {
@@ -8073,6 +8180,11 @@ function slalomRefreshUi() {
         { stage: 5, name: 'Hindernis ausweichen', code: 'D250QR90F20L90M200' },
         { stage: 6, name: 'Bis zum Hindernis', code: 'D200QS0' },
         { stage: 6, name: 'Warten bis der Weg frei ist', code: 'G300F20' },
+        { stage: 4, name: 'Bis zur roten Linie fahren', code: 'P0F10L90F15' },
+        { stage: 5, name: 'Bis zur blauen Linie, dann zurück', code: 'P3B15L90' },
+        { stage: 5, name: 'Bis Farbe, dann warten, dann weiter', code: 'P2V2D200' },
+        { stage: 6, name: 'Bis zur Farbe und zurück, 3×', code: 'U3(P1B15)' },
+        { stage: 6, name: 'Bis zum Hindernis (Sensor)', code: 'P4QS0' },
         { stage: 6, name: 'Blinker im Kreis', code: 'U3(S0F20S1F20)' },
         { stage: 6, name: 'Genau 100 mm', code: 'M100QZ10L90M100' },
         { stage: 6, name: 'Spirale (verschachtelt)', code: 'U2(U2(M20L45)M10L90)' }
@@ -8253,6 +8365,11 @@ function slalomRefreshUi() {
                 '<path d="M7 21h10"/>'),
         // Distanzsensor
         D: _ico('<path d="M2.5 12h9"/><path d="M8 8.2 12 12l-4 3.8"/><path d="M18.5 3.5v17"/>'),
+        // "bis" - fahren bzw. warten, bis etwas eintritt
+        P: _ico('<path d="M2.5 15h8"/><path d="M7.5 11.5 11 15l-3.5 3.5"/>' +
+                '<path d="M14.5 4h6v16h-6z"/><circle cx="17.5" cy="12" r="1.6"/>'),
+        V: _ico('<circle cx="12" cy="12" r="8.4"/>' +
+                '<path d="M12 7.2V12l3.1 2"/>'),
         X: _ico('<path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z"/>' +
                 '<circle cx="12" cy="12" r="2.8"/>'),
         G: _ico('<path d="M4 12.6 9.4 18 20 6.6"/>'),
@@ -8270,60 +8387,80 @@ function slalomRefreshUi() {
       // Bausteine in Gruppen sortiert. Ohne diese Aufteilung standen 16
       // Bloecke ungeordnet untereinander - fuer Kinder nicht mehr ueberschaubar.
       // Jede Gruppe hat einen Reiter, eine Erklaerung und nur ihre Bloecke.
+      //
+      // Reihenfolge = Haeufigkeit: zuerst, was man fast immer braucht. Die
+      // Reiter heissen wie Aufgaben ("Fahre bis ...", "Warte bis ...") und
+      // nicht nach Technik - genau diese technischen Namen ("Distanz",
+      // "Anzeige", ein nackter "bis"-Wertblock) waren es, an denen man vorher
+      // nicht durchblickte.
       const PROG_CATS = [
         {
           id: 'move', label: 'Fahren',
           icon: _ico('<path d="M4.5 9.5h15v8.5h-15z"/><path d="M12 9.5V5.5"/>' +
                      '<path d="M8.5 13.5h.01M15.5 13.5h.01"/><path d="M7.5 18v2.5M16.5 18v2.5"/>'),
-          hint: 'Strecke in cm, Winkel in Grad. Mit „mm" fährst du haargenau.',
-          ops: ['F', 'B', 'M', 'N', 'L', 'R']
+          hint: 'Eine feste Strecke: so viele Zentimeter vorwärts oder rückwärts, so viele Grad drehen.',
+          ops: ['F', 'B', 'L', 'R']
+        },
+        {
+          id: 'until', label: 'Fahre bis', icon: PROG_ICON.P,
+          hint: 'Der Roboter fährt los und hält von selbst an – bei einer Farbe oder bei einem Abstand. Findet er es nicht, hält er nach 1,5 m.',
+          ops: ['P', 'D']
         },
         {
           id: 'wait', label: 'Warten', icon: PROG_ICON.W,
-          hint: 'Der Roboter bleibt stehen und wartet – ganze Sekunden oder Zehntelsekunden.',
-          ops: ['W', 'Z']
-        },
-        {
-          id: 'dist', label: 'Distanz', icon: PROG_ICON.D,
-          hint: 'Alles mit dem Abstand-Sensor. Trag den Abstand in Millimetern ein.',
-          ops: ['D', 'X', 'G']
+          hint: 'Stehen bleiben: eine Zeit lang, bis eine Farbe da ist, oder bis wieder Platz ist.',
+          ops: ['W', 'V', 'X']
         },
         {
           id: 'loop', label: 'Wiederholen', icon: PROG_ICON.U,
-          hint: 'Lassen sich ineinander stecken: 3× je 4× etwas tun.',
+          hint: 'Mehrere Blöcke als eine Einheit: entweder x-mal hintereinander oder immer weiter, bis etwas da ist.',
           ops: ['U', 'C']
         },
         {
-          id: 'more', label: 'Anzeige', icon: PROG_ICON.S,
-          hint: 'Licht, sofortiger Halt und der „bis"-Block für Farbe oder Abstand.',
-          ops: ['S', 'Q', 'E']
+          id: 'mm', label: 'Genau fahren', icon: PROG_ICON.M,
+          hint: 'Wie „Fahren“, aber in Millimetern – für Raster, Linien und kurze Wege.',
+          ops: ['M', 'N']
+        },
+        {
+          id: 'more', label: 'Sonstiges', icon: PROG_ICON.S,
+          hint: 'Licht, sofortiger Halt, kurze Pause und „warte, bis wieder frei“.',
+          ops: ['S', 'Q', 'Z', 'G']
         }
       ];
       let progCat = 'move';
+      let slalomCat = 'move';   // eigene Rubrik fuer den Farben-Slalom (eigene Leiste)
 
       const PROG_DEFS = {
-        // --- Fahren (cm, grob) ---
-        F: { label: 'Vorwärts', unit: 'cm', def: 10, min: 1, max: 200, loop: false, slot: 'num' },
-        B: { label: 'Rückwärts', unit: 'cm', def: 10, min: 1, max: 200, loop: false, slot: 'num' },
-        // --- Fahren (mm, millimetergenau - unabhaengig von Microsteps) ---
-        M: { label: 'vorwärts', unit: 'mm', def: 50, min: 1, max: 2000, loop: false, slot: 'num' },
-        N: { label: 'rückwärts', unit: 'mm', def: 50, min: 1, max: 2000, loop: false, slot: 'num' },
-        L: { label: 'links', unit: '°', def: 90, min: 5, max: 360, loop: false, slot: 'num' },
-        R: { label: 'rechts', unit: '°', def: 90, min: 5, max: 360, loop: false, slot: 'num' },
+        // --- Fahren (cm) ---
+        F: { label: 'vorwärts', unit: 'cm', def: 10, min: 1, max: 200, loop: false, slot: 'num' },
+        B: { label: 'rückwärts', unit: 'cm', def: 10, min: 1, max: 200, loop: false, slot: 'num' },
+        L: { label: 'drehe links', unit: '°', def: 90, min: 5, max: 360, loop: false, slot: 'num' },
+        R: { label: 'drehe rechts', unit: '°', def: 90, min: 5, max: 360, loop: false, slot: 'num' },
+        // --- Fahren BIS etwas eintritt (die wichtigsten Bloecke) ---
+        P: { label: 'fahre bis', unit: '', def: 0, min: 0, max: 5, loop: false, slot: 'color',
+             hint: 'Fährt los und hält an, sobald die Farbe da ist. Findet er sie nicht, hält er nach 1,5 m oder 20 s.' },
+        D: { label: 'fahre bis Abstand', unit: 'mm', def: 150, min: 20, max: 1500, loop: false, slot: 'num',
+             hint: 'Fährt los und hält, wenn nur noch der eingetragene Abstand frei ist.' },
         // --- Warten ---
-        W: { label: 'Warte', unit: 's', def: 1, min: 1, max: 10, loop: false, slot: 'num' },
-        Z: { label: 'Pause', unit: 'Zehntel', def: 5, min: 1, max: 30, loop: false, slot: 'num' },
-        // --- Distanzsensor mit eingetragenem Wert ---
-        D: { label: 'fahre bis', unit: 'mm', def: 150, min: 20, max: 1500, loop: false, slot: 'num' },
-        X: { label: 'warte nah', unit: 'mm', def: 150, min: 10, max: 1500, loop: false, slot: 'num' },
-        G: { label: 'warte frei', unit: 'mm', def: 300, min: 10, max: 1500, loop: false, slot: 'num' },
+        W: { label: 'warte', unit: 's', def: 1, min: 1, max: 10, loop: false, slot: 'num' },
+        V: { label: 'warte bis', unit: '', def: 0, min: 0, max: 5, loop: false, slot: 'color',
+             hint: 'Bleibt stehen, bis die Farbe da ist – höchstens 30 s.' },
+        X: { label: 'warte bis Abstand', unit: 'mm', def: 150, min: 10, max: 1500, loop: false, slot: 'num' },
         // --- Schleifen (beliebig verschachtelt) ---
-        U: { label: 'Wiederhole', unit: 'mal', def: 2, min: 1, max: 20, loop: true, slot: 'num' },
-        C: { label: 'bis Farbe', unit: '', def: 0, min: 0, max: 0, loop: true, slot: 'color' },
-        // --- Anzeige / Steuerung ---
-        S: { label: 'LED', unit: '', def: 0, min: 0, max: 6, loop: false, slot: 'led' },
+        U: { label: 'wiederhole', unit: 'mal', def: 2, min: 1, max: 20, loop: true, slot: 'num' },
+        C: { label: 'wiederhole bis', unit: '', def: 0, min: 0, max: 0, loop: true, slot: 'color' },
+        // --- Genau fahren (mm) - braucht man fuer Raster und Linien ---
+        M: { label: 'vorwärts genau', unit: 'mm', def: 50, min: 1, max: 2000, loop: false, slot: 'num' },
+        N: { label: 'rückwärts genau', unit: 'mm', def: 50, min: 1, max: 2000, loop: false, slot: 'num' },
+        // --- Sonstiges ---
+        S: { label: 'Licht', unit: '', def: 0, min: 0, max: 6, loop: false, slot: 'led' },
         Q: { label: 'Stopp', unit: '', def: 0, min: 0, max: 0, loop: false, slot: null },
-        // Wert-Block: kann in num-Slots gezogen werden (Farbe oder IR)
+        Z: { label: 'kurze Pause', unit: 'Zehntel', def: 5, min: 1, max: 30, loop: false, slot: 'num' },
+        G: { label: 'warte bis frei', unit: 'mm', def: 300, min: 10, max: 1500, loop: false, slot: 'num' },
+        // Wert-Block: kann in num-Slots gezogen werden (Farbe oder IR).
+        // Er steht NICHT mehr in der Palette - weder P noch V brauchen ihn,
+        // und zwei Wege fuer dieselbe Sache waren einer zu viel. Alte
+        // gespeicherte Programme mit E-Blöcken werden weiterhin gelesen.
         E: { label: 'bis', unit: '', def: 0, min: 0, max: 5, loop: false, slot: null, isValue: true, color: true }
       };
       // LED-Farben: 0-3 Farben, 4/5 = Distanz-Anzeige, 6 = aus
@@ -8341,9 +8478,9 @@ function slalomRefreshUi() {
       let progBlocks = [];      // [{op,val} | {op:'U',val,body:[...]} | {op:'C',color,body:[...]}]
       let progRunning = false;
       let progRunStep = -1, progRunSub = -1;
-      let progPaletteEColor = 0;   // persistente Farbe des E-Blocks in der Palette
-      let progPaletteCColor = 0;   // persistente Farbe des C-Blocks in der Palette
-      let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palette
+let progPaletteEColor = 0;   // persistente Farbe des E-Blocks in der Palette
+let progPaletteColor = 0;    // persistente Farbe fuer P/V/C (Farb-Chip im Header)
+let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palette
 
       // --- Shared DnD context: 'prog' or 'slalom' ---
       let dndMode = 'prog';
@@ -8519,33 +8656,11 @@ function slalomRefreshUi() {
           const chip = document.createElement('span');
           chip.className = 'prog-chip';
           chip.style.background = PROG_COLORS[b.color].bg;
-          chip.addEventListener('pointerdown', e => e.stopPropagation());
           chip.addEventListener('click', e => {
             e.stopPropagation();
             if (progRunning) return;
             b.color = (b.color + 1) % PROG_COLORS.length;
             if (isPalette) progPaletteEColor = b.color;
-            progRender();
-          });
-          head.appendChild(chip);
-          const cn = document.createElement('span');
-          cn.className = 'prog-unit';
-          cn.textContent = PROG_COLORS[b.color].name;
-          head.appendChild(cn);
-        } else if (b.op === 'C') {
-          // C-Block: Farb-Chip direkt im Header (kein Slot)
-          // Im Palette-Kontext Farbe in progPaletteCColor speichern (persistent)
-          const isPalette = (ctx.where === 'palette');
-          if (isPalette) b.color = progPaletteCColor;
-          const chip = document.createElement('span');
-          chip.className = 'prog-chip';
-          chip.style.background = PROG_COLORS[b.color].bg;
-          chip.addEventListener('pointerdown', e => e.stopPropagation());
-          chip.addEventListener('click', e => {
-            e.stopPropagation();
-            if (progRunning) return;
-            b.color = (b.color + 1) % PROG_COLORS.length;
-            if (isPalette) progPaletteCColor = b.color;
             progRender();
           });
           head.appendChild(chip);
@@ -8561,7 +8676,6 @@ function slalomRefreshUi() {
           const chip = document.createElement('span');
           chip.className = 'prog-chip';
           chip.style.background = PROG_LED_COLORS[b.val].bg;
-          chip.addEventListener('pointerdown', e => e.stopPropagation());
           chip.addEventListener('click', e => {
             e.stopPropagation();
             if (progRunning) return;
@@ -8573,6 +8687,33 @@ function slalomRefreshUi() {
           const cn = document.createElement('span');
           cn.className = 'prog-unit';
           cn.textContent = PROG_LED_COLORS[b.val].name;
+          head.appendChild(cn);
+        } else if (def.slot === 'color') {
+          // Farb-/Sensor-Chip direkt im Header - fuer jeden Baustein mit
+          // slot:'color' (P "fahre bis", V "warte bis", C "wiederhole bis").
+          // Ein gemeinsamer Pfad statt dreier Copy-Pastes: sonst vergisst man
+          // beim naechsten Baustein das Klick-zum-Wechseln.
+          // Im Palette-Kontext die zuletzt gewaehlte Farbe merken, damit das
+          // Zieh-Bild und der abgelegte Baustein nicht unterschiedlich sind.
+          const isPalette = (ctx.where === 'palette');
+          if (isPalette) b.color = progPaletteColor;
+          // Schutz: ein fehlender/ungueltiger Farbwert darf die Anzeige nicht abbrechen
+          if (!PROG_COLORS[b.color]) b.color = 0;
+          const chip = document.createElement('span');
+          chip.className = 'prog-chip';
+          chip.style.background = PROG_COLORS[b.color].bg;
+          chip.title = 'Farbe bzw. Abstand wählen (anklicken)';
+          chip.addEventListener('click', e => {
+            e.stopPropagation();
+            if (progRunning) return;
+            b.color = (b.color + 1) % PROG_COLORS.length;
+            if (isPalette) progPaletteColor = b.color;
+            progRender();
+          });
+          head.appendChild(chip);
+          const cn = document.createElement('span');
+          cn.className = 'prog-unit';
+          cn.textContent = PROG_COLORS[b.color].name;
           head.appendChild(cn);
         } else if (def.slot) {
           // Wert-Slot (num)
@@ -8604,7 +8745,7 @@ function slalomRefreshUi() {
           head.addEventListener('pointerdown', e => {
             if (progRunning) return;
             // Klicks auf interaktive Kinder nicht als Drag werten
-            if (e.target.closest('.prog-num,.prog-chip,.prog-embed,.prog-embed-x,.prog-item-x')) return;
+            if (e.target.closest('.prog-num,.prog-embed,.prog-embed-x,.prog-item-x')) return;
             // bodyRef mitgeben: damit ist der Baustein auch in einer
             // verschachtelten Schleife wieder auffindbar.
             if (ctx.where === 'body' && !ctx.bodyRef) ctx.bodyRef = progFindBodyRef(ctx.path);
@@ -8628,6 +8769,9 @@ function slalomRefreshUi() {
         if (def.isValue) cls += ' prog-blk-value';
         if (extraClass) cls += ' ' + extraClass;
         wrap.className = cls;
+        // Rubrik am Baustein merken: die Farbe im Design richtet sich danach
+        const catOfOp = PROG_CATS.find(c => c.ops.indexOf(b.op) >= 0);
+        if (catOfOp) wrap.dataset.cat = catOfOp.id;
         if (progRunning && ctx.where === 'prog' && progRunStep === ctx.idx) {
           wrap.classList.add(progRunSub >= 0 ? 'running-sub' : 'running');
         }
@@ -8669,29 +8813,37 @@ function slalomRefreshUi() {
       // Nur die Bloecke der aktiven Gruppe zeigen. Sonst stehen 16 Bloecke
       // untereinander und man weiss nicht, wo man suchen soll.
       function progActiveCat() {
-        return PROG_CATS.find(c => c.id === progCat) || PROG_CATS[0];
+        const id = dndMode === 'slalom' ? slalomCat : progCat;
+        return PROG_CATS.find(c => c.id === id) || PROG_CATS[0];
+      }
+      // Rubrik wechseln. Jede Ansicht (Programmieren / Slalom) hat ihre eigene Leiste
+      // und merkt sich ihre Rubrik getrennt. Die Palette wird im richtigen Modus neu gebaut.
+      function progSwitchCat(id, slal) {
+        if (slal) { if (slalomCat === id) return; slalomCat = id; }
+        else { if (progCat === id) return; progCat = id; }
+        const prev = dndMode;
+        dndMode = slal ? 'slalom' : 'prog';
+        progBuildPalette();
+        dndMode = prev;
       }
       function progBuildTabs() {
-        const bar = document.getElementById('progTabs');
+        const slal = dndMode === 'slalom';
+        const bar = document.getElementById(slal ? 'slalomTabs' : 'progTabs');
         if (!bar) return;
+        const cur = slal ? slalomCat : progCat;
         bar.innerHTML = '';
         PROG_CATS.forEach(c => {
           const b = document.createElement('button');
           b.type = 'button';
-          b.className = 'prog-tab' + (c.id === progCat ? ' on' : '');
+          b.className = 'prog-tab' + (c.id === cur ? ' on' : '');
           b.setAttribute('role', 'tab');
-          b.setAttribute('aria-selected', c.id === progCat ? 'true' : 'false');
+          b.setAttribute('aria-selected', c.id === cur ? 'true' : 'false');
           b.innerHTML = '<span class="prog-tab-ic" aria-hidden="true">' + c.icon + '</span>' + c.label;
-          b.addEventListener('click', () => {
-            if (progCat === c.id) return;
-            progCat = c.id;
-            progBuildTabs();
-            progBuildPalette();
-          });
+          b.addEventListener('click', () => progSwitchCat(c.id, slal));
           bar.appendChild(b);
         });
-        const hint = document.getElementById('progCatHint');
-        if (hint) hint.textContent = progActiveCat().hint;
+        const hint = document.getElementById(slal ? 'slalomCatHint' : 'progCatHint');
+        if (hint) hint.textContent = progActiveCat().hint + ' Antippen setzt den Baustein ans Ende.';
       }
       function progBuildPalette() {
         const pal = dndPalette();
@@ -8768,6 +8920,8 @@ function slalomRefreshUi() {
           startX: e.clientX,
           startY: e.clientY,
           active: false,
+          // Startete die Geste auf dem Farb-Chip? Dann ist ein Antippen ein Farbwechsel, kein Hinzufuegen.
+          onChip: !!(e.target && e.target.closest && e.target.closest('.prog-chip')),
           ghost: null,
           srcEl: null,
           target: null
@@ -8910,7 +9064,39 @@ function slalomRefreshUi() {
         }
       }
 
-      function progDragFinish() {
+      // Aus einem Zieh-Vorgang den Datensatz fuer den Baustein bauen.
+      // Eine Stelle fuer Ablegen UND Antippen, damit beide dieselbe Farbe/Zahl uebernehmen.
+      function progBlockFromDrag(d) {
+        const def = PROG_DEFS[d.op];
+        const data = { op: d.op };
+        if (def.loop) {
+          if (d.op === 'U') data.val = d.val;
+          if (d.op === 'C') data.color = d.color || 0;
+          data.body = d.body || [];
+        } else if (def.slot === 'color') {
+          // P / V: die gewaehlte Farbe muss mit. Vorher ging sie verloren,
+          // der Baustein hatte keine Farbe und die Anzeige brach ab.
+          data.color = d.color || 0;
+          data.val = 0;
+        } else {
+          data.val = d.val;
+        }
+        return data;
+      }
+
+      // Antippen eines Palette-Bausteins: ans Ende des Programms setzen.
+      function progTapAdd(d) {
+        const blocks = dndBlocks();
+        const fbId = dndMode === 'slalom' ? 'slalomFeedback' : 'progFeedback';
+        if (blocks.length >= PROG_MAX_STEPS) {
+          showFeedback(fbId, 'error', 'Max ' + PROG_MAX_STEPS + ' Blöcke!');
+          return;
+        }
+        blocks.push(progBlockFromDrag(d));
+        dndRender();
+      }
+
+      function progDragFinish(ev) {
         const d = progDrag;
         if (!d) return;
         if (d.ghost) d.ghost.remove();
@@ -8922,7 +9108,12 @@ function slalomRefreshUi() {
         dndPalette().classList.remove('trash-over');
         if (progDropLine && progDropLine.parentNode) progDropLine.parentNode.removeChild(progDropLine);
         progDrag = null;
-        if (!d.active || !d.target) return;
+        // Kein Ziehen, sondern ein echtes Antippen (nicht abgebrochen, nicht auf dem Farb-Chip)
+        if (!d.active) {
+          if (ev && ev.type === 'pointerup' && d.from.where === 'palette' && !d.onChip && !progRunning) progTapAdd(d);
+          return;
+        }
+        if (!d.target) return;
 
         const t = d.target;
         const blocks = dndBlocks();
@@ -8951,14 +9142,7 @@ function slalomRefreshUi() {
             if (src) delete src[d.from.parentKey];
           }
         } else if (d.op !== 'E') {
-          const data = { op: d.op };
-          if (PROG_DEFS[d.op].loop) {
-            if (d.op === 'U') data.val = d.val;
-            if (d.op === 'C') data.color = d.color;
-            data.body = d.body || [];
-          } else {
-            data.val = d.val;
-          }
+          const data = progBlockFromDrag(d);
           if (d.from.where === 'prog') {
             blocks.splice(d.from.idx, 1);
             if (t.kind === 'strip' && d.from.idx < t.idx) t.idx--;
@@ -9003,6 +9187,8 @@ function slalomRefreshUi() {
       // ---------- Kodierung + Ausfuehrung ----------
       function progEncodeBlock(b) {
         if (b.op === 'Q') return 'Q';                    // Stopp: kein Wert
+        // P/V: der Wert ist die Farbe bzw. der Sensor (0-5), kein Weg.
+        if (b.op === 'P' || b.op === 'V') return b.op + (b.color || 0);
         // U/W/F/B mit eingebettetem E-Block -> OP + E<color> + ...
         if (b.op === 'U') {
           if (b.embedded) return 'UE' + b.embedded.color + '(' + (b.body || []).map(progEncodeBlock).join(',') + ')';
@@ -9108,7 +9294,9 @@ function slalomRefreshUi() {
         //   program := block (',' block)*
         //   block   := loop | simple
         //   loop    := 'U' (E<0-5> | uint) '(' program ')' | 'C' uint '(' program ')'
-        //   simple  := ('F'|'B') (E<0-5> | uint)      fahren bis Farbe / IR
+        //   simple  := 'P' (0-5)                        fahre bis Farbe/Sensor
+        //            | 'V' (0-5)                        warte bis Farbe/Sensor
+        //            | ('F'|'B') (E<0-5> | uint)      alte Form: fahren bis
         //            | ('L'|'R'|'W'|'M'|'N'|'D'|'X'|'G'|'Z') (E<0-5> | uint)
         //            | 'S' uint                        LED
         //            | 'Q'                             Stopp
@@ -9161,6 +9349,13 @@ function slalomRefreshUi() {
           if (!PROG_DEFS[c]) return null;
           if (c === 'Q') return { op: 'Q', val: 0 };
           if (c === 'S') { const d = num(); return { op: 'S', val: (d === null ? 0 : d), color: 0 }; }
+          // P/V: eine Ziffer 0-5 = Farbe bzw. Sensor. Bewusst VOR der
+          // allgemeinen Zahlenbehandlung - dort wuerde P2 als "2 cm fahren"
+          // gelesen und der Baustein waere genau das, was er nicht soll.
+          if (c === 'P' || c === 'V') {
+            const d = num();
+            return { op: c, color: (d === null || d > 5 ? 0 : d), val: 0 };
+          }
           // alle uebrigen: optionaler E-Block, sonst Zahl
           if (src[i] === 'E') {
             i++;
@@ -9466,6 +9661,114 @@ function slalomRefreshUi() {
         const bk = document.getElementById('calBtnBack');
         if (bk) bk.addEventListener('click', () => { calStep--; calMsgClear(); renderCalWizard(); });
       }
+    </script>
+
+    <script>
+      // ==========================================
+      // UX-SCHICHT: Bewegung und Feedback (Motion + Konfetti)
+      // Haengt sich ueber Wrapper an bestehende Funktionen. Fehlt eine
+      // Bibliothek oder ist "Bewegung reduzieren" aktiv, passiert nichts
+      // Sichtbares - die Seite funktioniert wie vorher.
+      // ==========================================
+      (function () {
+        const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        const hasMotion = !!(window.Motion && typeof window.Motion.animate === 'function');
+
+        function celebrate() {
+          if (reduceMotion || typeof window.confetti !== 'function') return;
+          const colors = ['#1783FF', '#00C9C9', '#F0884D', '#D580FF', '#60C42D', '#FF80CA'];
+          window.confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 }, colors: colors, scalar: 0.9 });
+          setTimeout(() => window.confetti({ particleCount: 50, spread: 100, origin: { y: 0.4 }, colors: colors, scalar: 0.8 }), 180);
+        }
+
+        // Kacheln des Startbildschirms gestaffelt einblenden
+        function enterTiles() {
+          if (reduceMotion || !hasMotion) return;
+          const tiles = document.querySelectorAll('#view-dashboard .tile');
+          if (!tiles.length) return;
+          const ctl = window.Motion.animate(
+            tiles,
+            { opacity: [0, 1], transform: ['translateY(16px) scale(.97)', 'translateY(0px) scale(1)'] },
+            { duration: 0.45, delay: window.Motion.stagger(0.06), ease: [0.34, 1.56, 0.64, 1] }
+          );
+          // Inline-Styles danach entfernen, sonst ueberdecken sie die CSS-Hover-Effekte der Kacheln
+          if (ctl && ctl.finished) {
+            ctl.finished.then(() => tiles.forEach(t => { t.style.opacity = ''; t.style.transform = ''; })).catch(() => {});
+          }
+        }
+
+        // Navigation: beim Zurueck zum Startbildschirm Kacheln einblenden
+        const origNav = window.nav;
+        if (typeof origNav === 'function') {
+          window.nav = function (viewId) {
+            const r = origNav.apply(this, arguments);
+            if (viewId === 'dashboard') enterTiles();
+            return r;
+          };
+        }
+
+        // Verbindung hergestellt: Statuspunkt springt kurz
+        const origConn = window.updateConnectionUI;
+        if (typeof origConn === 'function') {
+          window.updateConnectionUI = function (isConn, text) {
+            const wasConn = typeof connected !== 'undefined' && !!connected;
+            const r = origConn.apply(this, arguments);
+            if (isConn && !wasConn && !reduceMotion) {
+              const dot = document.getElementById('statusDot');
+              if (dot) {
+                dot.classList.remove('fx-pop');
+                void dot.offsetWidth;
+                dot.classList.add('fx-pop');
+                dot.addEventListener('animationend', () => dot.classList.remove('fx-pop'), { once: true });
+              }
+            }
+            return r;
+          };
+        }
+
+        // Fehlermeldungen wackeln kurz
+        const origFeedback = window.showFeedback;
+        if (typeof origFeedback === 'function') {
+          window.showFeedback = function (id, type, text) {
+            const r = origFeedback.apply(this, arguments);
+            if (type === 'error') {
+              const el = document.getElementById(id);
+              if (el) {
+                el.classList.remove('fx-shake');
+                void el.offsetWidth;
+                el.classList.add('fx-shake');
+                el.addEventListener('animationend', () => el.classList.remove('fx-shake'), { once: true });
+              }
+            }
+            return r;
+          };
+        }
+
+        // Erfolge: Rennen-Sieger und volle Punktzahl im Farbquiz
+        const origRace = window.showRaceWinner;
+        if (typeof origRace === 'function') {
+          window.showRaceWinner = function () {
+            const r = origRace.apply(this, arguments);
+            celebrate();
+            return r;
+          };
+        }
+        const origCq = window.showCqResultModal;
+        if (typeof origCq === 'function') {
+          window.showCqResultModal = function (ok, total, wrong, aborted) {
+            const r = origCq.apply(this, arguments);
+            if (!aborted && total > 0 && ok === total) celebrate();
+            return r;
+          };
+        }
+
+        // Start: Kacheln einblenden
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', enterTiles);
+        } else {
+          enterTiles();
+        }
+      })();
     </script>
 </body>
 
