@@ -96,7 +96,13 @@ constexpr uint32_t MOTOR_TICK_US = 50;
 // (tmcSetCurrent) als auch die NVS-Validierung (Config.cpp) brauchen und
 // dort das "wir wirklich 200 mA maximal" durchgesetzt wird.
 constexpr uint8_t  TMC_HOLD_DEFAULT       = 16;   // 0...31
-constexpr uint16_t TMC_MICROSTEPS_DEFAULT = 16;   // 1,2,4,8,16,32,64,128,256
+constexpr uint16_t TMC_MICROSTEPS_DEFAULT = 16;   // 1,2,4,8,16,32 (Grenze: MICROSTEPS_MAX)
+// Anzahl der Register-Schreibzugriffe in configureOne(): GCONF, CHOPCONF,
+// IHOLD_IRUN, TPOWER, TPWMTHRS, TCOOLTHRS, SGTHRS, NODECONF. Der Erfolg wird
+// ueber IFCNT belegt - zaehlt der Zaehler um mindestens so weit, sind alle
+// angekommen. Stand vorher bei 7 statt 8, damit konnten drei Register
+// stillschweigend ausfallen.
+constexpr uint8_t  TMC_CFG_WRITE_COUNT     = 8;
 
 // ---- Register-Adressen (TMC2209-Datenblatt Rev. 1.09, Abschnitt 5) ----
 // ACHTUNG: TMCStepper adressiert den TMC2209 mit der Karte des TMC2130. Das
@@ -377,7 +383,7 @@ void tmcReinit();
 
 // Strom / Haltestrom / Microsteps / Modus (fuer Diagnose + Tuning)
 bool tmcSetCurrent(uint16_t mA);      // 100...200, false bei ungueltig
-bool tmcSetHold(uint8_t ihold);       // 0...31
+bool tmcSetHold(uint8_t ihold);       // 0...31, wird auf IRUN begrenzt
 bool tmcSetMicrosteps(uint16_t ms);   // 1..256 (Liste), verifiziert per Readback
 void tmcSetSpreadCycle(bool spread);  // true=SpreadCycle, false=StealthChop
 bool tmcSpreadCycle();                // aktueller Modus

@@ -170,10 +170,30 @@ constexpr bool inRange(float x, float lo, float hi) {
 // Aufwachen kostet einen Schritt (AccelStepper holt nicht nach, aber der
 // naechste Puls kommt entsprechend spaeter) - im schlimmsten Fall wird die
 // Fahrt einen Tick zu langsam, sie wird nicht ungenau.
-// WICHTIG: Schritte/s sind der eigentlichen Limit. Bei 128 Microsteps ergibt
-// 20 000 Schritte/s nur ~74 mm/s, bei 16 Microsteps dagegen ~589 mm/s.
+// WICHTIG: Schritte/s sind das eigentliche Limit. Bei 128 Microsteps ergeben
+// 20 000 Schritte/s nur ~94 mm/s, bei 16 Microsteps dagegen ~753 mm/s.
 // Wer mehr Tempo will, muss Microsteps senken (siehe Motor & TMC).
 constexpr float MAX_DRIVE_STEPS_S = 20000.0f;
+
+// Groesste Microstep-Zahl, bei der das gewuenschte Fahr-Tempo noch in
+// MAX_DRIVE_STEPS_S passt. GEMESSEN (COM9, 2026-10, 38-mm-Rad):
+//
+//   256 Microsteps -> 424,6 Schritte/mm -> bei 240 mm/s 101'902 Schritte/s
+//   128 Microsteps -> 212,3 Schritte/mm -> bei 240 mm/s  50'951 Schritte/s
+//    64 Microsteps -> 106,1 Schritte/mm -> bei 240 mm/s  25'476 Schritte/s
+//    32 Microsteps ->  53,1 Schritte/mm -> bei 240 mm/s  12'738 Schritte/s  ok
+//    16 Microsteps ->  26,5 Schritte/mm -> bei 240 mm/s   6'369 Schritte/s  ok
+//
+// Oberhalb von 32 bekommt der Motor nur jeden fuenften Puls. Er dreht dann
+// nicht, sondern pfeift: SpreadCycle baut bei so sporadischen Pulsen kein
+// Drehmoment auf. Genau das ist passiert, als die NVS 256 Microsteps
+// gespeichert hatte - der Roboter fuhr erst, nachdem per TMC:MS: ein
+// fahrbarer Wert gesetzt wurde.
+//
+// Deshalb wird die Microstep-Zahl beim Booten und beim Setzen geprueft und
+// notfalls auf MICROSTEPS_MAX abgesenkt. Wer feinere Aufloesung braucht,
+// zahlt sie mit Tempo, und das ist eine bewusste Entscheidung im UI.
+constexpr uint16_t MICROSTEPS_MAX = 32;
 
 // Schritte inkl. Microsteps fuer eine Anzahl VOLLschritte. Das ist die
 // praezise Form des Fahrens: der Motor zaehlt seine eigenen Vollschritte.

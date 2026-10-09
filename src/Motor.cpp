@@ -254,9 +254,15 @@ bool s_enabled = false;
 volatile unsigned long s_lastMotionMs = 0;
   bool s_msConfirmed = false;
 
+  // Erlaubt sind nur Zweierpotenzen - und hoechstens MICROSTEPS_MAX (Config.h).
+  //
+  // Die Obergrenze ist kein Wunsch, sondern eine Rechnung: der 50-us-Puls-Task
+  // schafft 20 000 Schritte/s. Bei 38-mm-Rad und 256 Microsteps braucht
+  // 240 mm/s aber 101 902 Schritte/s. Der Motor bekaeme jeden fuenften Puls
+  // und pieifte, statt zu drehen (gemessen auf dem Roboter). 32 Microsteps
+  // passen mit 12 738 Schritte/s, 64 brauchen schon 25 476.
   bool validMicrosteps(uint16_t v) {
-    return v == 1 || v == 2 || v == 4 || v == 8 || v == 16 ||
-           v == 32 || v == 64 || v == 128 || v == 256;
+    return v == 1 || v == 2 || v == 4 || v == 8 || v == 16 || v == 32;
   }
 
   uint8_t mresCodeFor(uint16_t ms) {
@@ -368,6 +374,11 @@ static uint8_t irunForMilliAmp(uint16_t mA) {
   return (uint8_t)(cs < 16.0f ? 16.0f : cs);
 }
 
+// Reihenfolge-Vorbereitung: configureOne() steht weiter unten im Text und
+// wird von hier aus gebraucht. tmcConfigureBothDrivers() ist in Motor.h
+// deklariert und wird weiter unten definiert.
+static void configureOne(TMC2209Diag& d, bool& msOkOut);
+
 // Effektivstrom, den eine IRUN/IHOLD-Stufe ergibt (nur fuer die Anzeige).
 static float milliAmpForIrun(uint8_t irun) {
   const float vfs = 0.325f;
@@ -448,15 +459,18 @@ void configureOne(TMC2209Diag& d, bool& msOkOut) {
   tmcWriteChecked(d, TMC_REG_NODECONF, 0x0Fu, 0x0Fu, "NODECONF");
 
   // ---- Erfolgskontrolle ueber IFCNT ----
-  // Sieben Register wurden geschrieben (GCONF, CHOPCONF, IHOLD_IRUN, TPOWER,
+  // Acht Register wurden geschrieben (GCONF, CHOPCONF, IHOLD_IRUN, TPOWER,
   // TPWMTHRS, TCOOLTHRS, SGTHRS, NODECONF). Zaehlt IFCNT mindestens so weit,
-  // sind alle angekommen.
+  // sind alle angekommen. Die Schwelle stand vorher bei 7 und ist damit zu
+  // schwach: drei Register duerften stillschweigend ausfallen, ohne dass der
+  // Erfolgspfad s_msConfirmed verliert.
   const uint8_t ifAfter = (uint8_t)d.read(TMC_REG_IFCNT);
   const uint8_t sent   = (uint8_t)(ifAfter - ifBefore);
-  msOkOut = (sent >= 7);
+  msOkOut = (sent >= TMC_CFG_WRITE_COUNT);
   if (motorDiagQuiet) {
-    Serial.printf("[TMC] Konfiguration: %u Schreibzugriffe angenommen (erwartet 7) - %s\n",
-                  sent, msOkOut ? "ALLE REGISTER GESETZT" : "NICHT VOLLSTAENDIG");
+    Serial.printf("[TMC] Konfiguration: %u Schreibzugriffe angenommen (erwartet %u) - %s\n",
+                  sent, (unsigned)TMC_CFG_WRITE_COUNT,
+                  msOkOut ? "ALLE REGISTER GESETZT" : "NICHT VOLLSTAENDIG");
   }
 
   // ---- MRES-Hinweis: der wichtigste dieser ganzen Sektion ----
@@ -466,6 +480,18 @@ void configureOne(TMC2209Diag& d, bool& msOkOut) {
   // 256 Microsteps gelaufen, waehrend die Firmware fuer beide denselben Weg
   // berechnet - der Roboter waere geschwungen statt gerade zu fahren. Das war
   // der Drift, und es ist kein Hardware-Defekt.
+}
+
+// Beide Treiber ueber denselben Pfad konfigurieren - die einzige Stelle, die
+// nach aussen wirkt. tmcSetCurrent(), tmcSetHold() und tmcReinit() gehen
+// darueber, damit Register 0x10 und CHOPCONF nie auf dem Umweg ueber die
+// TMCStepper-Schattenregisters geschrieben werden.
+static bool tmcConfigureBothDrivers() {
+  bool okL = false, okR = false;
+  configureOne(tmcL, okL);
+  configureOne(tmcR, okR);
+  s_msConfirmed = okL && okR;
+  return s_msConfirmed;
 }
 
   // ---- Treiber-Messung (GSTAT / SG_RESULT / VACTUAL / TSTEP / MSCNT) ----
@@ -1461,15 +1487,17 @@ void tmcAutoStandbyTick() {
 }
 
 void tmcReinit() {
-  bool okL = false, okR = false;
   // Wie beim Boot: erst einschalten, dann konfigurieren. Sonst gehen alle
   // Schreibzugriffe ins Leere, ohne dass irgendetwas einen Fehler meldet.
+  //
+  // Genau ein Konfigurationsdurchgang je Treiber. Vorher standen hier zwei
+  // configureOne()-Aufrufe ZUSAETZLICH zu denen aus tmcEnable() ->
+  // tmcEnsureConfigured(), also bis zu vier Durchgaenge: rund 40 UART-
+  // Transaktionen und 28 Logzeilen fuer einen einzigen Tastendruck.
   tmcEnable();
-  configureOne(tmcL, okL);
-  configureOne(tmcR, okR);
-  s_msConfirmed = okL && okR;
+  const bool ok = tmcConfigureBothDrivers();
   motorDiagPrimeMscnt();   // Konfiguration kann MRES angefasst haben
-  Serial.printf("[TMC] Reinit: L=%s R=%s\n", okL ? "OK" : "FEHLER", okR ? "OK" : "FEHLER");
+  Serial.printf("[TMC] Reinit: %s\n", ok ? "OK" : "FEHLER - Register nicht bestaetigt");
 }
 
 bool tmcSetCurrent(uint16_t mA) {
@@ -1483,19 +1511,30 @@ bool tmcSetCurrent(uint16_t mA) {
     return false;
   }
   s_currentMa = mA;
-  tmcL.rms_current(s_currentMa);
-  tmcR.rms_current(s_currentMa);
-  tmcL.ihold(s_hold);
-  tmcR.ihold(s_hold);
-  return true;
+  // Ueber configureOne(), NICHT ueber TMCStepper::rms_current()/ihold().
+  //
+  // Beide Bibliotheksaufrufe haben denselben Fehler, belegt in
+  // IHOLD_IRUN.cpp:4 -  #define SET_REG(SETTING) ... write(address, sr)
+  // Sie schreiben das KOMPLETTE Register aus dem Bibliotheks-Schatten, nicht
+  // nur das eine Bit. Den Schatten pflegt aber nur die Bibliothek selbst;
+  // configureOne() schreibt Register 0x10 direkt und laesst ihn unberuehrt, wo
+  // noch die Defaults stehen - darunter irun = 0.
+  //
+  // Praktische Folge: TMC:HOLD:20 schrieb nicht "Haltestrom 20", sondern
+  // "Haltestrom 20, Fahrstrom 0". Das sind rund 12 mA statt 210 mA, die
+  // Motoren drehen nicht mehr. rms_current() ruft zusaetzlich vsense() auf,
+  // das CHOPCONF an die TMC2130-Adresse 0x6C schreibt statt an 0x08.
+  return tmcConfigureBothDrivers();
 }
 
 bool tmcSetHold(uint8_t ihold) {
   if (ihold > 31) return false;
-  s_hold = ihold;
-  tmcL.ihold(s_hold);
-  tmcR.ihold(s_hold);
-  return true;
+  // IHOLD darf nie ueber IRUN liegen: sonst fliesst im Stillstand mehr Strom
+  // als beim Fahren - das ist Waerme, kein zusaetzliches Moment. Die Firmware
+  // hat im Stillstand nichts zu halten, wofoehr es 210 mA braeuchte.
+  const uint8_t irun = irunForMilliAmp(s_currentMa);
+  s_hold = (uint8_t)(ihold > irun ? irun : ihold);
+  return tmcConfigureBothDrivers();
 }
 
 bool tmcSetMicrosteps(uint16_t ms) {

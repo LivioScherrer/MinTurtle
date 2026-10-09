@@ -26,6 +26,17 @@ void configLoad() {
   config.tmcHold       = prefs.getUChar("tmcHold", 16);
   config.tmcMicrosteps = prefs.getUShort("tmcMS", 16);
   config.tmcSpread     = prefs.getBool("tmcSpread", false);
+  // Microstep-Zahl aus der NVS gegen die Schrittraten-Grenze pruefen. Ein
+  // gespeicherter Wert von 64/128/256 ergibt bei 38-mm-Rad und 240 mm/s mehr
+  // Schritte/s, als der 50-us-Puls-Task schafft - der Roboter pfeift dann,
+  // statt zu fahren (gemessen). Solche Werte stammen aus einer Zeit vor dem
+  // Radwechsel; hier werden sie still auf MICROSTEPS_MAX gesetzt.
+  if (config.tmcMicrosteps > MICROSTEPS_MAX) {
+    Serial.printf("[NVS] Microsteps %u aus der NVS sind zu fein (Grenze %u) - "
+                  "setze %u\n", config.tmcMicrosteps, MICROSTEPS_MAX,
+                  (unsigned)MICROSTEPS_MAX);
+    config.tmcMicrosteps = MICROSTEPS_MAX;
+  }
 
   // Einlernung in mm/Grad. Signatur nur aus Motor + Rad: Microsteps sind
   // ABSICHTLICH nicht Teil davon, denn sie aendern nur die Schrittzahl, nicht
@@ -198,9 +209,7 @@ void configValidate() {
   }
   if (config.tmcMicrosteps != 1 && config.tmcMicrosteps != 2 &&
       config.tmcMicrosteps != 4 && config.tmcMicrosteps != 8 &&
-      config.tmcMicrosteps != 16 && config.tmcMicrosteps != 32 &&
-      config.tmcMicrosteps != 64 && config.tmcMicrosteps != 128 &&
-      config.tmcMicrosteps != 256) {
+      config.tmcMicrosteps != 16 && config.tmcMicrosteps != 32) {
     // Ungueltige Microsteps -> Default. Abhaengige Schrittzahlen werden
     // nirgends gespeichert, also gibt es hier nichts mitzuziehen.
     config.tmcMicrosteps = 16;
