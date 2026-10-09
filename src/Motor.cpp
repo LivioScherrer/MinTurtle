@@ -369,16 +369,18 @@ static uint8_t irunForMilliAmp(uint16_t mA) {
   float cs = (float)mA / 1000.0f * 32.0f * (TMC_R_SENSE + 0.02f) * 1.41421356f / vfs - 1.0f;
   if (cs < 0.0f) cs = 0.0f;
   if (cs > 31.0f) cs = 31.0f;
-  // ABRUNDEN, nicht auf 16 kappen. Mit 560 mOhm ergibt sich fuer 200 mA
-  // Sollstrom cs = 15,15 -> IRUN 15 -> 198 mA.
+  // KLEMME auf 16, kein Abrunden. Mit 560 mOhm ergibt sich fuer 200 mA
+  // Sollstrom cs = 15,15 -> IRUN 16 -> 210 mA.
   //
-  // Vorher stand hier eine Klemme auf 16 (das Datenblatt empfiehlt "IRUN is
-  // 16 to 31 for best microstep performance"). Die hat jede Einstellung
-  // zwischen 100 und 200 mA auf dieselben 210 mA gebracht: Der Regler sah
-  // beweglich aus und war es nicht. Wir runden ab, damit der eingestellte
-  // Strom nie UEBERSCHRITTEN wird - das ist die Zusage, die auch in Config.h
-  // steht. 198 statt 210 mA sind 6 % weniger Drehmoment und messbar kuehler.
-  return (uint8_t)cs;
+  // Das ist Absicht und GEMESSEN, nicht geraten: IRUN = 15 laesst den Roboter
+  // stehen (Bisect 2026-10: 15/7 steht still, 16/7 faehrt - IHOLD war egal).
+  // Das Datenblatt bestaetigt die Richtung: "IRUN is 16 to 31 for best
+  // microstep performance". Unter 16 faellt die Mikroschritt-Qualitaet so
+  // weit ab, dass der Motor bei unseren Raedern nicht mehr anfaehrt - die
+  // 6 % Nennstrom sind nicht das Problem, die zerfallende Sinusform ist es.
+  // Der fruehere Versuch "abrunden, damit nie ueberschritten wird" (IRUN 15)
+  // hat genau diesen Stillstand erzeugt und wurde zurueckgenommen.
+  return (uint8_t)(cs < 16.0f ? 16.0f : cs);
 }
 
 // Reihenfolge-Vorbereitung: configureOne() steht weiter unten im Text und
