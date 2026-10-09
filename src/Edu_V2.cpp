@@ -811,6 +811,25 @@ static bool cmdCal(const String& cmd) {
     sendStatus(msg);
     return true;
   }
+  // Sensor-Farbe auf Serial. Die Auswertung detectColorName() passiert im
+  // Sensor-Task und liegt nur im Speicher; ueber BLE kommt COLOR:..., aber
+  // BLE ist im seriellen Monitor nicht sichtbar. Fuer die Kalibrierung wird
+  // deshalb hier derselbe Wert ausgegeben - sonst laesst sich am Serial-Monitor
+  // nicht pruefen, was der Sensor gerade erkennt.
+if (cmd == "CAL:COLOR" || cmd == "CAL:FARBE") {
+    char nb[16] = {};
+    int sr = 0, sg = 0, sb = 0;
+    if (colorSem && xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) == pdTRUE) {
+      sr = sensorR; sg = sensorG; sb = sensorB;
+      strlcpy(nb, (const char*)sensorName, sizeof(nb));
+      xSemaphoreGive(colorSem);
+    }
+    Serial.printf("[CAL] erkannt: %-10s rgb(%d,%d,%d)\n", nb, sr, sg, sb);
+    char cm[48];
+    snprintf(cm, sizeof(cm), "CAL:COLOR=%d,%d,%d,%s", sr, sg, sb, nb);
+    sendStatus(cm);
+    return true;
+  }
   if (cmd == "CAL:?") {
     char msg[96];
     snprintf(msg, sizeof(msg),

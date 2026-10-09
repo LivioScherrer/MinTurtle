@@ -69,8 +69,25 @@ const char* detectColorName(int r, int g, int b) {
   const float sat = (float)(maxC - minC) / (float)maxC;
   const bool warmEnough = (sat >= config.minColorSaturation);
 
-  // GELB: rot und gruen hoch, blau deutlich niedriger
-  if (warmEnough && r > 100 && g > 100 && b < 80 && r > b * 1.4f && g > b * 1.4f) return "GELB";
+  // GELB: rot und gruen hoch, blau deutlich niedriger.
+  //
+  // Der Blau-Test ist RELATIV (b < 0.60 * r) statt absolut (b < 80).
+  //
+  // Grund, gemessen (COM9, 2026-10): mit frisch eingelernten Grundwerten
+  // (Weiss 4143 -> 4848, also 17 % zu hoch vorher) liegt der Blau-Kanal
+  // eines gelben Plaettchens bei 111, nicht bei 71 wie unter der alten
+  // Einlernung. Die absolute Grenze b < 80 stammte aus genau dieser alten
+  // Einlernung und hat jedes Gelb durchfallen lassen - es wurde ROT
+  // gemeldet und im Web-UI als "unbekannt" angezeigt.
+  //
+  // Der relative Test haengt nicht mehr an den Einlernwerten:
+  //   Gelb  b/r = 111/254 = 0.44  -> erkannt
+  //   Rot   b/r =  31/107 = 0.29  -> nicht als Gelb (faellt zu ROT durch)
+  //   Weiss b/r =   0/255 = 0.00  -> nicht als Gelb
+  // Die Faktoren 1.4f fuer r und g gegen b bleiben, sie sind bereits
+  // relativ und damit einlernungsunabhaengig.
+  if (warmEnough && r > 100 && g > 100 && b < r * 0.60f &&
+      r > b * 1.4f && g > b * 1.4f) return "GELB";
 
   if (warmEnough && r > g * RATIO_RED && r > b * RATIO_RED) return "ROT";
   if (g > r * RATIO_GB && g > b * RATIO_GB) return "GRUEN";
