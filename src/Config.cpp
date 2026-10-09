@@ -26,6 +26,10 @@ void configLoad() {
   config.tmcHold       = prefs.getUChar("tmcHold", 16);
   config.tmcMicrosteps = prefs.getUShort("tmcMS", 16);
   config.tmcSpread     = prefs.getBool("tmcSpread", false);
+  // Tischkanten-Waechter: Default AN. Wer ihn ausschaltet, schreibt false in
+  // die NVS und der bleibt auch nach dem Neustart aus - das ist Absicht, sonst
+  // waere ein ausgeschalteter Waechter beim naechsten Boot wieder da.
+  config.edgeGuard     = prefs.getBool("edgeGuard", true);
   // Microstep-Zahl aus der NVS gegen die Schrittraten-Grenze pruefen. Ein
   // gespeicherter Wert von 64/128/256 ergibt bei 38-mm-Rad und 240 mm/s mehr
   // Schritte/s, als der 50-us-Puls-Task schafft - der Roboter pfeift dann,

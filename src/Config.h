@@ -255,6 +255,12 @@ struct Config {
   uint8_t  tmcHold = 16;        // 0...31 (halber Haltestrom: kuehl, reicht flach)
   uint16_t tmcMicrosteps = 16;  // 1,2,4,8,16,32,64,128,256
   bool     tmcSpread = false;   // false=StealthChop (leise), true=SpreadCycle
+  // Tischkanten-Waechter. Standard ist EINGESCHALTET: der Roboter soll nicht
+  // vom Tisch fallen, und das ist kein Feature, das man erst aktivieren muss.
+  // Abgeschaltet wird nur in den Farbsensor-Einstellungen der Web-UI - dort,
+  // wo man den Sensor ohnehin kalibriert. Der Wert liegt in der NVS und
+  // ueberlebt einen Neustart.
+  bool     edgeGuard = true;
   // Einlernung in PHYSIKALISCHEN Einheiten - dadurch von der Microstep-Zahl
   // unabhaengig (NVS: quizMM/quizDeg, per STEPS:<mm>/ANG:<grad>).
   float quizForwardMM  = QUIZ_STEP_MM;    // 5..150 mm, Werkseinstellung 27,8 (ein Rasterfeld)

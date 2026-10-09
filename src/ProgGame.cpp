@@ -69,7 +69,7 @@ static int8_t   colMatchIdx   = -1;
 //  - Eine schwarze Linie auf dem Tisch liest sich vermutlich aehnlich dunkel
 //    wie die Kante. Deshalb EDGE_CONFIRM_N: es zaehlt die Dauer, nicht den
 //    Einzelwert.
-constexpr uint16_t EDGE_RAW_C_MAX   = 500;
+constexpr uint16_t EDGE_RAW_C_MAX   = 500;   // auch in Edu_V2.cpp fuer EDGE? gespiegelt
 constexpr uint8_t  EDGE_CONFIRM_N   = 2;    // 2 Messungen in Folge (~300 ms)
 
 static volatile uint8_t s_edgeCount = 0;    // aufeinanderfolgende Treffer

@@ -507,10 +507,27 @@ static bool cmdDist(const String& cmd) {
   if (cmd == "DISTAUTO:ON") { distSetAuto(true); sendStatus("DISTAUTO:ON"); return true; }
   if (cmd == "DISTAUTO:OFF") { distSetAuto(false); sendStatus("DISTAUTO:OFF"); return true; }
 
+  // Tischkanten-Schwelle in Rohwerten. Gehoert zur Waechter-Logik in
+  // ProgGame.cpp (dort auch EDGE_CONFIRM_N und edgeGuardTick); hier nur fuer
+  // die Anzeige in EDGE? und fuer die Web-UI.
+  constexpr uint16_t EDGE_RAW_C_MAX = 500;
+
   // Tischkanten-Waechter. Der Sensor sitzt nach unten; ueber der Kante faellt
-  // die Gesamthelligkeit auf fast 0, drei Messungen in Folge -> sofortiger Halt.
-  if (cmd == "EDGE:ON")  { edgeGuardSet(true);  sendStatus("EDGE:ON");  return true; }
-  if (cmd == "EDGE:OFF") { edgeGuardSet(false); sendStatus("EDGE:OFF"); return true; }
+  // die Gesamthelligkeit auf fast 0, zwei Messungen in Folge -> sofortiger Halt.
+  // Standardmaessig EINGESCHALTET (config.edgeGuard, NVS-Schluessel "edgeGuard").
+  // Ausgeschaltet wird er nur in den Farbsensor-Einstellungen der Web-UI.
+  if (cmd == "EDGE:ON") {
+    edgeGuardSet(true);
+    configSaveBool("edgeGuard", true);
+    sendStatus("EDGE:ON");
+    return true;
+  }
+  if (cmd == "EDGE:OFF") {
+    edgeGuardSet(false);
+    configSaveBool("edgeGuard", false);
+    sendStatus("EDGE:OFF");
+    return true;
+  }
   if (cmd == "EDGE:RESET") {
     edgeGuardReset();
     sendStatus("EDGE:RESET");
@@ -522,9 +539,9 @@ static bool cmdDist(const String& cmd) {
     snprintf(eb, sizeof(eb), "EDGE=%u,%u,%u",
              edgeGuardActive() ? 1u : 0u, (unsigned)rawSensorC, (unsigned)rawSensorR);
     sendStatus(eb);
-    Serial.printf("[KANTE] %s | Clear=%u (Schwelle 60) | Rot=%u\n",
+    Serial.printf("[KANTE] %s | Clear=%u (Schwelle %u) | Rot=%u\n",
                   edgeGuardActive() ? "aktiv" : "aus",
-                  (unsigned)rawSensorC, (unsigned)rawSensorR);
+                  (unsigned)rawSensorC, (unsigned)EDGE_RAW_C_MAX, (unsigned)rawSensorR);
     return true;
   }
   // Diagnose: kompakte Zeile nach BLE + ausfuehrlicher Status auf Serial.
@@ -1648,9 +1665,16 @@ void setup() {
   esp_task_wdt_init(10000, true);
   esp_task_wdt_add(NULL);
 
-  configLoad();
+configLoad();
 
-  initSteppers();
+// Tischkanten-Waechter nach dem Laden der NVS uebernehmen. Muss VOR dem Start
+  // des Farbsensor-Tasks passieren: edgeGuardTick() wird von dort aufgerufen und
+  // wuerde sonst die ersten Messungen ignorieren, weil der Schalter noch aus
+  // steht - beim Anfahren direkt nach dem Einschalten waere die Kante genau dann
+  // ungeschuetzt, wenn es gefaehrlich wird.
+edgeGuardSet(config.edgeGuard);
+
+initSteppers();
   Serial.println("[MOTOR] Motor-Task auf Core 0 gestartet (feste Geschwindigkeit, sanftes Anfahren)");
   startupSpin();
   tmcBootDiag();

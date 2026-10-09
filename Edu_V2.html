@@ -4030,6 +4030,19 @@
     ein Feld = ein Viertel Radumdrehung = 50 Vollschritte. Microsteps ändern nur die Schrittzahl,
     nie die Strecke. Nur falls der Roboter wegen Schlupf danebenliegt, hier korrigieren —
     das Fahrfeld bewegt sich dann und der Roboter prüft die Strecke sofort.</div>
+    <div class="mesh-section-title" style="margin-top:16px;">Tischkanten-Wächter</div>
+    <div class="game-desc">Der Roboter soll nicht vom Tisch fallen. Der Farbsensor sitzt nach unten;
+    über der Kante kommt kein Licht zurück und er merkt es. <b>Standard ist eingeschaltet</b> —
+    abgeschaltet wird nur hier.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
+      <label class="game-desc" style="display:flex;gap:6px;align-items:center;">
+        <input type="checkbox" id="edgeGuardChk"> Wächter aktiv
+      </label>
+      <button class="btn btn-sm btn-grey" onclick="edgeGuardSetUi(true)">Einschalten</button>
+      <button class="btn btn-sm btn-grey" onclick="edgeGuardSetUi(false)">Ausschalten</button>
+      <button class="btn btn-sm btn-grey" onclick="sendCommand('EDGE:RESET')">Freigeben</button>
+    </div>
+    <div class="game-desc" id="edgeGuardState" style="margin-top:6px;">Wird beim Verbinden abgefragt.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
       <label class="game-desc" for="geoFwdIn">Vorwärts (mm):</label>
       <input id="geoFwdIn" type="number" min="5" max="150" step="0.5" value="27.8"
@@ -5337,6 +5350,26 @@ function updateConnectionUI(isConn, text) {
       // Einlernen: Strecke (mm) und Drehung (Grad) setzen. Beide Befehle
       // fahren den Roboter sofort zur Pruefung - deshalb bewusst als eigene
       // Aktion und nicht im Spielbetrieb.
+      // Tischkanten-Waechter umschalten. Der Firmware-Stand ist der massgebliche -
+      // die Antwort EDGE=1,0,... bestaetigt den neuen Zustand, und erst dann
+      // wird das Kaestchen gesetzt. Sonst wuerde die Anzeige etwas behaupten,
+      // das der Roboter gar nicht uebernommen hat.
+      function edgeGuardSetUi(on) {
+        const st = document.getElementById('edgeGuardState');
+        if (st) st.textContent = 'Sende EDGE:' + (on ? 'ON' : 'OFF') + ' …';
+        sendCommand('EDGE:' + (on ? 'ON' : 'OFF'));
+      }
+      function edgeGuardUiShow(active, clear) {
+        const chk = document.getElementById('edgeGuardChk');
+        const st = document.getElementById('edgeGuardState');
+        if (chk) chk.checked = !!active;
+        if (st) {
+          st.textContent = active
+            ? 'Der Wächter ist aktiv. Gemessene Helligkeit unten: ' +
+              (clear === undefined ? '?' : clear) + ' (Kante bei unter 500).'
+            : 'Der Wächter ist ausgeschaltet — der Roboter fährt über die Tischkante hinaus.';
+        }
+      }
       function geoSetFwd() {
         const el = document.getElementById('geoFwdIn');
         const st = document.getElementById('geoSetState');
@@ -6463,12 +6496,21 @@ function updateConnectionUI(isConn, text) {
         sendCommand('STEPS?');
         sendCommand('ANG?');
         sendCommand('SPEED?');
+        sendCommand('EDGE?');
       }
       // Statuszeilen des Roboters, die bisher niemand gelesen hat.
       function handleDiagMessage(msg) {
         const cal = document.getElementById('parentCalState');
         const geo = document.getElementById('parentGeoState');
         if (cal) {
+          if (msg.startsWith('EDGE=')) {
+            // Format: EDGE=<aktiv 0|1>,<Clear>,<Rot>
+            const p = msg.substring(5).split(',');
+            edgeGuardUiShow(p[0] === '1', parseInt(p[1], 10));
+            return true;
+          }
+          if (msg === 'EDGE:ON')  { edgeGuardUiShow(true);  return true; }
+          if (msg === 'EDGE:OFF') { edgeGuardUiShow(false); return true; }
           if (msg.startsWith('CAL:ROT=')) {
             // Format: CAL:ROT=*(r,g,b) GELB=-(r,g,b) ...
             const parts = msg.substring(4).split(' ');
