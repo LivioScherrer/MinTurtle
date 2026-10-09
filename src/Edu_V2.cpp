@@ -519,14 +519,14 @@ constexpr uint16_t EDGE_RAW_C_RELEASE_DISP = 400;  // darueber = wieder frei
   // Ausgeschaltet wird er nur in den Farbsensor-Einstellungen der Web-UI.
   if (cmd == "EDGE:ON") {
     edgeGuardSet(true);
-    configSaveBool("edgeGuard", true);
     sendStatus("EDGE:ON");
     return true;
   }
+  // EDGE:OFF gibt es nicht mehr: der Wächter ist immer an. Abgelehnt statt
+  // ignoriert, damit eine alte Web-UI eine klare Antwort bekommt.
   if (cmd == "EDGE:OFF") {
-    edgeGuardSet(false);
-    configSaveBool("edgeGuard", false);
-    sendStatus("EDGE:OFF");
+    sendStatus("EDGE:ALWAYS_ON");
+    Serial.println("[KANTE] EDGE:OFF abgelehnt - der Wächter ist immer an");
     return true;
   }
   if (cmd == "EDGE:RESET") {
@@ -541,10 +541,11 @@ constexpr uint16_t EDGE_RAW_C_RELEASE_DISP = 400;  // darueber = wieder frei
     snprintf(eb, sizeof(eb), "EDGE=%u,%u,%u",
              edgeGuardActive() ? 1u : 0u, (unsigned)rawSensorC, (unsigned)rawSensorR);
     sendStatus(eb);
-    Serial.printf("[KANTE] %s | Clear=%u (Kante < %u, frei ab %u) | Rot=%u\n",
+    Serial.printf("[KANTE] %s | Clear=%u (Kante < %u, frei ab %u) | Rot=%u%s\n",
                   edgeGuardActive() ? "aktiv" : "aus",
                   (unsigned)rawSensorC, (unsigned)EDGE_RAW_C_MAX_DISP,
-                  (unsigned)EDGE_RAW_C_RELEASE_DISP, (unsigned)rawSensorR);
+                  (unsigned)EDGE_RAW_C_RELEASE_DISP, (unsigned)rawSensorR,
+                  motorEmergencyActive() ? " | NOT-HALT aktiv" : "");
     return true;
   }
   // Diagnose: kompakte Zeile nach BLE + ausfuehrlicher Status auf Serial.
@@ -1661,12 +1662,12 @@ void setup() {
 
 configLoad();
 
-// Tischkanten-Waechter nach dem Laden der NVS uebernehmen. Muss VOR dem Start
-  // des Farbsensor-Tasks passieren: edgeGuardTick() wird von dort aufgerufen und
-  // wuerde sonst die ersten Messungen ignorieren, weil der Schalter noch aus
-  // steht - beim Anfahren direkt nach dem Einschalten waere die Kante genau dann
+// Tischkanten-Waechter: immer an, ohne Schalter und ohne NVS. Muss VOR dem
+  // Start des Farbsensor-Tasks passieren: edgeGuardTick() wird von dort
+  // aufgerufen und wuerde sonst die ersten Messungen ignorieren - beim
+  // Anfahren direkt nach dem Einschalten waere die Kante genau dann
   // ungeschuetzt, wenn es gefaehrlich wird.
-edgeGuardSet(config.edgeGuard);
+edgeGuardSet(true);
 
 initSteppers();
   Serial.println("[MOTOR] Motor-Task auf Core 0 gestartet (feste Geschwindigkeit, sanftes Anfahren)");

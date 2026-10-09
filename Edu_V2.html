@@ -6461,7 +6461,12 @@ function updateConnectionUI(isConn, text) {
             return true;
           }
           if (msg === 'EDGE:ON')  { edgeGuardUiShow(true);  return true; }
-          if (msg === 'EDGE:OFF') { edgeGuardUiShow(false); return true; }
+          if (msg === 'EDGE:ALWAYS_ON') {
+            const st = document.getElementById('edgeGuardState');
+            if (st) st.textContent = 'Der Wächter ist immer an und lässt sich nicht ausschalten.';
+            edgeGuardUiShow(true);
+            return true;
+          }
           if (msg.startsWith('CAL:ROT=')) {
             // Format: CAL:ROT=*(r,g,b) GELB=-(r,g,b) ...
             const parts = msg.substring(4).split(' ');
