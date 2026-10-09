@@ -148,19 +148,8 @@ static volatile bool s_emergency = false;
       // motorReady-Check ist hier deshalb nicht noetig (und waere in der
       // 50-us-Schleife auch unnoetiger Overhead).
       //
-      // Not-Halt zuerst und noch VOR dem Mutex: motorEmergencyStop() schreibt
-      // die Zustandsvariablen absichtlich ohne Sperre. Ohne diesen Zweig
-      // wuerde die Rampe hier s_curL/R wieder hochzaehlen und die Motoren
-      // wieder anwerfen - der Waechter haelt sie dann fuer genau einen Tick
-      // still und laesst sie weiterfahren. Genau der Fehler, den es ohne
-      // diese Zeile gabe.
-      if (s_emergency) {
-        stepperHalt(stepperL);
-        stepperHalt(stepperR);
-        s_curL = 0.0f; s_curR = 0.0f;
-        s_tgtL = 0.0f; s_tgtR = 0.0f;
-        continue;
-      }
+      // Not-Halt-Zweig DEAKTIVIERT (Wächter komplett raus): siehe edgeGuardTick.
+      // Der Puls-Task läuft wieder wie vor dem Wächter.
       if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
         // Einmal pro 50-us-Tick lesen, beide Motoren nutzen denselben Wert.
         const bool ramp = s_rampOn;
@@ -419,7 +408,19 @@ void configureOne(TMC2209Diag& d, bool& msOkOut) {
   // pdn_disable = UART statt PDN-Pin. mstep_reg_select = MRES aus dem
   // Register statt aus den MS-Pins - siehe den MRES-Hinweis am Ende.
   // multistep_filt = 1 (Glattung des Puffilings ueber 750 Hz).
-  uint32_t gconf = GCONF_PDN_DISABLE | GCONF_MSTEP_REG_SELECT | GCONF_MULTISTEP_FILT;
+  //
+  // i_scale_analog (Bit 0) = 1 ist GEMESSEN, nicht geraten. Mit Bit 0 = 0
+  // fuhr der Roboter nicht mehr: Zaehler laufen voll, Silizium fuehrt nur
+  // einen Bruchteil aus (MSCNT +136 von 2654), Motoren pfeifen, v = 0.
+  // Mit Bit 0 = 1 (Zustand vor dem Entfernen der Bibliotheks-Schreibzugriffe,
+  // GCONF las sich als 0x1C1) faehrt er.
+  // Physik: Bit 0 = 1 heisst "interner Messpfad" (fuer grosse
+  // Fuehlerwiderstaende). Wenn das Drehmoment braucht, stimmt die Annahme
+  // "560 mOhm" aus HARDWARE_FAKTEN.md nicht - dann sind die verbauten
+  // Fuehler deutlich groesser. OFFEN: Aufdruck der Stromfuehler auf der
+  // Platine ablesen und die Doku danach korrigieren.
+  uint32_t gconf = GCONF_PDN_DISABLE | GCONF_MSTEP_REG_SELECT | GCONF_MULTISTEP_FILT
+                 | 0x01u;   // i_scale_analog, GEMESSEN (siehe oben)
   if (s_spread) gconf |= GCONF_EN_SPREADCYCLE;
   tmcWriteChecked(d, TMC_REG_GCONF, gconf, GCONF_MASK, "GCONF");
 
@@ -861,10 +862,7 @@ static void takeMotorMutex() {
 // unter EINEM Mutex-Halt gesetzt, sodass kein Zeitfenster zwischen zwei
 // Befehlen entstehen kann.
 static void setMotorSpeedLocked(int motorIdx, float speed, bool useRamp) {
-  // Not-Halt (Tischkante). Steht VOR allem, auch vor speed == 0: der
-  // Stopp-Zweig wuerde sonst weiterhin sauber abbremsen und damit den
-  // Zustand "die Motoren sind wirklich still" wieder aufloesen.
-  if (s_emergency) return;
+  // Not-Halt-Prüfung DEAKTIVIERT (Wächter komplett raus): siehe edgeGuardTick.
   if (speed == 0.0f) {
     // ---- WEICHES ABBREMSEN (Taste losgelassen) ----
     // NUR das Ziel auf 0. Der Puls-Task laesst die Ist-Geschwindigkeit dann
@@ -1107,11 +1105,7 @@ void prepPositionMoves(long stepsL, long stepsR) {
 
 // Voraussetzung: motorMutex ist gehalten.
 static void prepPositionMoveLocked(int motorIdx, long physicalSteps) {
-  // Not-Halt (Tischkante): keine neue Position setzen. Das deckt jeden
-  // Fahrweg ab - Fahren, Drehen, Distanz- und Farbbausteine, Linienfolger,
-  // Spiele und Slalom laufen alle ueber prepPositionMove/prepPositionMoves
-  // bzw. setMotorSpeed. Es gibt keinen Pfad daran vorbei.
-  if (s_emergency) return;
+  // Not-Halt-Prüfung DEAKTIVIERT (Wächter komplett raus): siehe edgeGuardTick.
   {
     AccelStepper& s = (motorIdx == 0) ? stepperL : stepperR;
     volatile float& cur = (motorIdx == 0) ? s_curL : s_curR;
@@ -1624,7 +1618,8 @@ void tmcSetSpreadCycle(bool spread) {
   tmcEnable();                 // GCONF aendert den EN-Zustand nicht, aber der
                                // Moduswechsel ist der Moment, an dem beide
                                // Motoren auf derselben Position starten sollen
-  uint32_t gconf = GCONF_PDN_DISABLE | GCONF_MSTEP_REG_SELECT | GCONF_MULTISTEP_FILT;
+  uint32_t gconf = GCONF_PDN_DISABLE | GCONF_MSTEP_REG_SELECT | GCONF_MULTISTEP_FILT
+                 | 0x01u;   // i_scale_analog, GEMESSEN (siehe configureOne)
   if (s_spread) gconf |= GCONF_EN_SPREADCYCLE;
   tmcWriteChecked(tmcL, TMC_REG_GCONF, gconf, GCONF_MASK, "GCONF");
   tmcWriteChecked(tmcR, TMC_REG_GCONF, gconf, GCONF_MASK, "GCONF");

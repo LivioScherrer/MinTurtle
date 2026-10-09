@@ -191,6 +191,14 @@ static bool tableEdgeDetected() {
 // Kante noch im Sichtfeld des nachlaufenden Sensors ist - der Roboter stuende
 // dann still und koennte nie wieder losfahren.
 void edgeGuardTick(uint16_t rawClear) {
+  // DEAKTIVIERT: Wächter komplett aus dem Fahrweg genommen, als wäre er nie
+  // im Code gewesen. Der Roboter fuhr nicht mehr, seit die Not-Halt-Maschinerie
+  // (s_emergency) im Fahrweg hängt; Verdacht: der Halt klemmt oder löst bei
+  // Vibration/Schatten Fehlaus. Bis das geklärt ist, wird hier nichts mehr
+  // gezählt, nichts gestoppt, nichts gelatcht. EDGE? meldet weiter die
+  // Helligkeit, damit man sie beobachten kann.
+  (void)rawClear;
+  return;
   if (!s_edgeGuardOn) { s_edgeCount = 0; s_edgeBlocked = false; return; }
 
   if (s_edgeBlocked) {
