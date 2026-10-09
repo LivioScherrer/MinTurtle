@@ -5335,16 +5335,18 @@ function updateConnectionUI(isConn, text) {
         if (st) st.textContent = 'Sende EDGE:' + (on ? 'ON' : 'OFF') + ' …';
         sendCommand('EDGE:' + (on ? 'ON' : 'OFF'));
       }
-      function edgeGuardUiShow(active, clear) {
+      function edgeGuardUiShow(active, clear, emergency) {
         const chk = document.getElementById('edgeGuardChk');
         const st = document.getElementById('edgeGuardState');
         if (chk) chk.checked = !!active;
         if (st) {
-          st.textContent = active
+          let txt = active
             ? 'Der Wächter ist aktiv. Gemessene Helligkeit unten: ' +
               (clear === undefined ? '?' : clear) +
-              ' — Abgrund liegt unter 300, freigegeben wird er ab 600.'
+              ' — Abgrund liegt unter 300, freigegeben wird er ab 400.'
             : 'Der Wächter ist ausgeschaltet — der Roboter fährt über die Tischkante hinaus.';
+          if (emergency) txt += ' NOT-HALT AKTIV — erst „Freigeben" drücken, sonst fährt nichts.';
+          st.textContent = txt;
         }
       }
       function geoSetFwd() {
@@ -6455,9 +6457,9 @@ function updateConnectionUI(isConn, text) {
         const geo = document.getElementById('parentGeoState');
         if (cal) {
           if (msg.startsWith('EDGE=')) {
-            // Format: EDGE=<aktiv 0|1>,<Clear>,<Rot>
+            // Format: EDGE=<aktiv 0|1>,<Clear>,<Rot>[,<NotHalt 0|1>]
             const p = msg.substring(5).split(',');
-            edgeGuardUiShow(p[0] === '1', parseInt(p[1], 10));
+            edgeGuardUiShow(p[0] === '1', parseInt(p[1], 10), p[3] === '1');
             return true;
           }
           if (msg === 'EDGE:ON')  { edgeGuardUiShow(true);  return true; }

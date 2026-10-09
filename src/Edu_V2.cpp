@@ -537,9 +537,10 @@ constexpr uint16_t EDGE_RAW_C_RELEASE_DISP = 400;  // darueber = wieder frei
     return true;
   }
   if (cmd == "EDGE?") {
-    char eb[40];
-    snprintf(eb, sizeof(eb), "EDGE=%u,%u,%u",
-             edgeGuardActive() ? 1u : 0u, (unsigned)rawSensorC, (unsigned)rawSensorR);
+    char eb[48];
+    snprintf(eb, sizeof(eb), "EDGE=%u,%u,%u,%u",
+             edgeGuardActive() ? 1u : 0u, (unsigned)rawSensorC, (unsigned)rawSensorR,
+             motorEmergencyActive() ? 1u : 0u);
     sendStatus(eb);
     Serial.printf("[KANTE] %s | Clear=%u (Kante < %u, frei ab %u) | Rot=%u%s\n",
                   edgeGuardActive() ? "aktiv" : "aus",
