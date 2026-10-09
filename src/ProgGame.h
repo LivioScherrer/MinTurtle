@@ -97,3 +97,18 @@ void progRunSlalom(const char* targetColor);
 
 // Abbruch (aus handleCommand / hardStop / Disconnect)
 void progStop();
+
+// ---- Tischkanten-Waechter ----
+// Der Roboter soll nicht vom Tisch fallen. Der TCS34725 sitzt nach unten;
+// ueber der Kante faellt sein Clear-Kanal (Gesamthelligkeit) auf fast 0.
+// Ausgewertet wird im Sensor-Task (ColorSensor.cpp, ~alle 150 ms), NICHT im
+// Fahrpfad - der 50-us-Puls-Task bleibt davon unberuehrt.
+//
+// Drei Messungen in Folge unter der Schwelle, dann sofortiger Halt. Drei
+// deshalb: eine schwarze Linie auf dem Tisch sieht genauso dunkel aus wie der
+// Abgrund, ist aber nur kurz. Dauer statt Einzelwert trennt die beiden Faelle.
+void edgeGuardTick(uint16_t rawClear);   // aus dem Sensor-Task
+void edgeGuardSet(bool on);               // Web-UI-Schalter
+bool edgeGuardActive();
+bool edgeGuardTripped();                  // true einmalig, danach wieder false
+void edgeGuardReset();                    // Zaehler und Merker loeschen

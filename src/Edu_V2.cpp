@@ -506,6 +506,27 @@ static bool cmdDist(const String& cmd) {
   }
   if (cmd == "DISTAUTO:ON") { distSetAuto(true); sendStatus("DISTAUTO:ON"); return true; }
   if (cmd == "DISTAUTO:OFF") { distSetAuto(false); sendStatus("DISTAUTO:OFF"); return true; }
+
+  // Tischkanten-Waechter. Der Sensor sitzt nach unten; ueber der Kante faellt
+  // die Gesamthelligkeit auf fast 0, drei Messungen in Folge -> sofortiger Halt.
+  if (cmd == "EDGE:ON")  { edgeGuardSet(true);  sendStatus("EDGE:ON");  return true; }
+  if (cmd == "EDGE:OFF") { edgeGuardSet(false); sendStatus("EDGE:OFF"); return true; }
+  if (cmd == "EDGE:RESET") {
+    edgeGuardReset();
+    sendStatus("EDGE:RESET");
+    Serial.println("[KANTE] Zaehler zurueckgesetzt - Roboter wieder freigegeben");
+    return true;
+  }
+  if (cmd == "EDGE?") {
+    char eb[40];
+    snprintf(eb, sizeof(eb), "EDGE=%u,%u,%u",
+             edgeGuardActive() ? 1u : 0u, (unsigned)rawSensorC, (unsigned)rawSensorR);
+    sendStatus(eb);
+    Serial.printf("[KANTE] %s | Clear=%u (Schwelle 60) | Rot=%u\n",
+                  edgeGuardActive() ? "aktiv" : "aus",
+                  (unsigned)rawSensorC, (unsigned)rawSensorR);
+    return true;
+  }
   // Diagnose: kompakte Zeile nach BLE + ausfuehrlicher Status auf Serial.
   if (cmd == "DISTDIAG" || cmd == "DIST:DIAG") {
     distDiagPrint();

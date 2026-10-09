@@ -3,6 +3,7 @@
 #include "ColorSensor.h"
 #include "Config.h"
 #include "I2CBus.h"
+#include "ProgGame.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <semphr.h>
@@ -212,6 +213,7 @@ void colorSensorTask(void* parameter) {
         }
       } else {
         failCount = 0;
+        edgeGuardTick(rawC);   // muss VOR der Kalibrierung stehen: nutzt die Rohwerte
 
         int r = calibrateColor(rawR, config.blackR, config.whiteR);
         int g = calibrateColor(rawG, config.blackG, config.whiteG);

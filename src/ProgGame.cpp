@@ -45,6 +45,39 @@ static volatile uint8_t progCurLoop = 0;
 static uint32_t colMatchStart = 0;
 static int8_t   colMatchIdx   = -1;
 
+// ---- Tischkanten-Erkennung ueber den Clear-Kanal des Farbsensors ----
+// Der TCS34725 sitzt nach unten. Ueber der Tischkante kommt kein Licht zurueck,
+// der Clear-Kanal (rawSensorC, Gesamthelligkeit ohne Farbfilter) faellt auf fast 0.
+//
+// EDGE_RAW_C_MAX: Schwelle in Rohwerten. Der Sensor liefert auf dem Tisch je nach
+// Beleuchtung dreistellige Werte; ueber der Kante bleiben ein bis zwei zweistellige
+// Werte uebrig. Die Schwelle liegt bewusst tief, damit eine dunkle Stelle auf dem
+// Tisch (schwarze Linie, Schatten) NICHT als Kante gilt - zaehlt wird die Dauer.
+constexpr uint16_t EDGE_RAW_C_MAX   = 60;   // darunter = kein Boden mehr
+constexpr uint8_t  EDGE_CONFIRM_N   = 3;    // 3 Messungen in Folge unter der Schwelle
+constexpr uint8_t  EDGE_TASK_TICKS  = 3;    // Sensor-Task liest alle ~150 ms
+
+static volatile uint8_t s_edgeCount = 0;    // aufeinanderfolgende Treffer
+static volatile bool    s_edgeLatched = false;   // Kante erkannt, Motoren gestoppt
+static volatile bool    s_edgeGuardOn = false;   // Schalter aus dem Web-UI
+
+// Einmalige Kantenmeldung: der Motor-Stopp darf nicht bei jedem Sensor-Tick
+// erneut in den Log schreiben, aber die UEBERGANG in den Zustand "Kante"
+// ist gemeldenswert - sie ist der Moment, in dem der Roboter stehenbleibt.
+bool edgeGuardTripped() {
+  if (!s_edgeLatched) return false;
+  s_edgeLatched = false;
+  return true;
+}
+bool edgeGuardActive()   { return s_edgeGuardOn; }
+void edgeGuardReset()    { s_edgeCount = 0; s_edgeLatched = false; }
+void edgeGuardSet(bool on) {
+  s_edgeGuardOn = on;
+  edgeGuardReset();
+  if (on) Serial.println("[KANTE] Waechter aktiv - stoppt an der Tischkante");
+  else    Serial.println("[KANTE] Waechter aus");
+}
+
 static void colorPollReset() { colMatchStart = 0; colMatchIdx = -1; }
 
 // true wenn die Sensor-Bedingung (Farbe 0-3 oder Distanz 4/5) erfuellt ist.
@@ -71,6 +104,45 @@ static bool sensorHitImmediate(uint8_t idx) {
   char name[16];
   getCurrentColorName(name, sizeof(name));
   return strcasecmp(name, PROG_COLOR_NAMES[idx]) == 0;
+}
+
+// Tischkante: der Sensor sitzt nach unten und sieht ueber der Tischkante
+// nichts mehr. Der Clear-Kanal (rawSensorC) ist die Gesamthelligkeit ohne
+// Farbfilter - ueber der Kante faellt er auf nahezu 0, das ist unabhaengig von
+// der Farbe des Tisches. Ein zweiter Sensor nach unten waere das robustere
+// Prinzip, vorhanden ist aber nur der TCS34725.
+//
+// Bewusst KEINE Farbauswertung: schwarze Linien auf hellem Tisch sehen genauso
+// dunkel aus wie der Abgrund. Mit Clear-Kanal und Helligkeitsschwelle ist eine
+// schwarze Linie aber nur kurz dunkel, waehrend die Kante dauerhaft dunkel
+// bleibt - deshalb zaehlen hier aufeinanderfolgende Messungen, nicht eine.
+static bool tableEdgeDetected() {
+  if (!colorSensorOk) return false;      // Sensor tot: nicht als Kante werten
+  if (xSemaphoreTake(colorSem, pdMS_TO_TICKS(5)) != pdTRUE) return false;
+  const uint16_t clear = rawSensorC;
+  xSemaphoreGive(colorSem);
+  return clear < EDGE_RAW_C_MAX;
+}
+
+// Vom Sensor-Task alle ~150 ms aufgerufen (ColorSensor.cpp). Zaehlt
+// aufeinanderfolgende Messungen unterhalb der Schwelle und loest genau einmal
+// aus. Wird hier - nicht im Fahrpfad - ausgewertet, damit der 50-us-Puls-Task
+// nichts auf dem Weg hat.
+void edgeGuardTick(uint16_t rawClear) {
+  if (!s_edgeGuardOn) { s_edgeCount = 0; return; }
+  if (rawClear < EDGE_RAW_C_MAX) {
+    if (s_edgeCount < 255) s_edgeCount++;
+    if (s_edgeCount >= EDGE_CONFIRM_N) {
+      stopMotors();                       // sofort und ohne Rueckfrage
+      if (!s_edgeLatched) {
+        Serial.printf("[KANTE] Tischkante nach %u Messungen (Clear=%u < %u) - "
+                      "Motoren gestoppt\n", s_edgeCount, rawClear, EDGE_RAW_C_MAX);
+      }
+      s_edgeLatched = true;
+    }
+  } else {
+    s_edgeCount = 0;
+  }
 }
 
 // Slalom-Zielfarb-Check waehrend der Fahrt (debounced + Flanken-Logik).
@@ -694,15 +766,11 @@ struct ProgCtx {
   uint8_t headIndex   = 0;       // Index des umgebenden Loop-Kopfs (fuer SUB-Meldung)
 };
 
-static inline bool progGameActive() {
-  return currentGame == GAME_PROG || currentGame == GAME_SLALOM;
-}
-
 // Fuehrt progSteps[from..to) aus (to ist exklusiv).
 // Rueckgabe: true, wenn ctx.untilColor gesehen wurde (beendet den Bis-Loop).
 static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
   bool seen = false;
-  for (uint8_t i = from; i < to && progGameActive() && !seen; i++) {
+  for (uint8_t i = from; i < to && gameAllowsMotorRun() && !seen; i++) {
     ProgStep& s = progSteps[i];
     if (s.op == OP_END) continue;                 // gehoert zum umgebenden Loop
     esp_task_wdt_reset();
@@ -726,7 +794,7 @@ static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
       if (s.op == OP_REPEAT && s.val < 0) {
         // "solange Sensor == Slot"
         const uint8_t target = (uint8_t)(-(int)s.val - 1);
-        for (uint8_t k = 0; k < PROG_UNTIL_MAX_ITER && progGameActive(); k++) {
+        for (uint8_t k = 0; k < PROG_UNTIL_MAX_ITER && gameAllowsMotorRun(); k++) {
           if (!sensorMatches(target)) break;
           if (progExecRange(i + 1, end, inner)) { seen = true; break; }
           bleProcessEvents(); espNowProcessEvents();
@@ -736,14 +804,14 @@ static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
         }
       } else {
         const uint16_t reps = (s.op == OP_REPEAT) ? (uint16_t)s.val : PROG_UNTIL_MAX_ITER;
-        for (uint16_t k = 0; k < reps && progGameActive() && !seen; k++) {
+        for (uint16_t k = 0; k < reps && gameAllowsMotorRun() && !seen; k++) {
           if (progExecRange(i + 1, end, inner)) { seen = true; break; }
           bleProcessEvents(); espNowProcessEvents();
           ledStripTick();
           vTaskDelay(pdMS_TO_TICKS(PROG_LOOP_GAP_MS));
           esp_task_wdt_reset();
         }
-        if (s.op == OP_UNTIL && !seen && progGameActive()) {
+        if (s.op == OP_UNTIL && !seen && gameAllowsMotorRun()) {
           sendStatusF("PROG:MAXITER:%s", PROG_COLOR_NAMES[s.color]);
         }
       }
@@ -770,7 +838,7 @@ static bool progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
     if (progExecSimple(s.op, s.val, cc)) seen = true;
 
     // Slalom: Zielfarbe nach jedem Baustein pruefen
-    if (ctx.slalom && progGameActive() && slalomTargetStable(ctx.slalomTarget)) {
+    if (ctx.slalom && gameAllowsMotorRun() && slalomTargetStable(ctx.slalomTarget)) {
       slalomFinish(ctx.slalomTarget);
     }
     bleProcessEvents();
