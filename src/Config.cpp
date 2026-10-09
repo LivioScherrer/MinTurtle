@@ -59,34 +59,43 @@ void configLoad() {
   config.spinSpeed = prefs.getUShort("spinSpeed", SPIN_SPEED_DEFAULT);
   config.spinMs    = prefs.getUShort("spinMs", SPIN_MS_DEFAULT);
 
-  config.blackR        = prefs.getUShort("blackR", 152);
-  config.blackG        = prefs.getUShort("blackG", 137);
-  config.blackB        = prefs.getUShort("blackB", 98);
-  config.whiteR        = prefs.getUShort("whiteR", 4143);
-  config.whiteG        = prefs.getUShort("whiteG", 4258);
-  config.whiteB        = prefs.getUShort("whiteB", 3036);
+  // Defaults sind die Abend-Werte vom 2026-10 (COM9, Original-Lampe):
+  // Schwarz 222/216/146, Weiss 4857/5574/3811 - aus dem NVS-Log als der
+  // wirksame Satz nachgewiesen. Mit den uralten Defaults (152/4143) war
+  // Gelb nicht erkennbar.
+  config.blackR        = prefs.getUShort("blackR", 222);
+  config.blackG        = prefs.getUShort("blackG", 216);
+  config.blackB        = prefs.getUShort("blackB", 146);
+  config.whiteR        = prefs.getUShort("whiteR", 4857);
+  config.whiteG        = prefs.getUShort("whiteG", 5574);
+  config.whiteB        = prefs.getUShort("whiteB", 3811);
   if (prefs.isKey("minSat")) config.minColorSaturation = prefs.getFloat("minSat", 0.40f);
   else { config.minColorSaturation = 0.40f; prefs.putFloat("minSat", config.minColorSaturation); }
   config.obsDistMM = (int16_t)prefs.getInt("obsDist", 100);
   config.obsRelMM  = (int16_t)prefs.getInt("obsRel", 130);
   config.obsOffsetMM = (int16_t)prefs.getInt("obsOff", 0);
   config.obsScale    = prefs.getFloat("obsScale", 1.0f);
-  config.calRot.r      = prefs.getUChar("calRotR", 0);
-  config.calRot.g      = prefs.getUChar("calRotG", 0);
-  config.calRot.b      = prefs.getUChar("calRotB", 0);
-  config.calRot.calibrated    = prefs.getBool("calRotSet", false);
-  config.calGelb.r     = prefs.getUChar("calGelbR", 0);
-  config.calGelb.g     = prefs.getUChar("calGelbG", 0);
-  config.calGelb.b     = prefs.getUChar("calGelbB", 0);
-  config.calGelb.calibrated   = prefs.getBool("calGelbSet", false);
-  config.calGruen.r    = prefs.getUChar("calGruenR", 0);
-  config.calGruen.g    = prefs.getUChar("calGruenG", 0);
-  config.calGruen.b    = prefs.getUChar("calGruenB", 0);
-  config.calGruen.calibrated  = prefs.getBool("calGruenSet", false);
-  config.calBlau.r     = prefs.getUChar("calBlauR", 0);
-  config.calBlau.g     = prefs.getUChar("calBlauG", 0);
-  config.calBlau.b     = prefs.getUChar("calBlauB", 0);
-  config.calBlau.calibrated   = prefs.getBool("calBlauSet", false);
+  // Defaults = Abend-Werte vom 2026-10, je direkt nach dem Speichern als
+  // sich selbst erkannt: Rot (120,31,33), Gelb (234,212,104),
+  // Gruen (40,69,47), Blau (18,53,104). calibrated=true ist Absicht: ohne
+  // das wuerde refColorName() sie ignorieren und ein frischer Roboter
+  // (leeres NVS, z.B. Roboter 2) fiele auf die Heuristik zurueck.
+  config.calRot.r      = prefs.getUChar("calRotR", 120);
+  config.calRot.g      = prefs.getUChar("calRotG", 31);
+  config.calRot.b      = prefs.getUChar("calRotB", 33);
+  config.calRot.calibrated    = prefs.getBool("calRotSet", true);
+  config.calGelb.r     = prefs.getUChar("calGelbR", 234);
+  config.calGelb.g     = prefs.getUChar("calGelbG", 212);
+  config.calGelb.b     = prefs.getUChar("calGelbB", 104);
+  config.calGelb.calibrated   = prefs.getBool("calGelbSet", true);
+  config.calGruen.r    = prefs.getUChar("calGruenR", 40);
+  config.calGruen.g    = prefs.getUChar("calGruenG", 69);
+  config.calGruen.b    = prefs.getUChar("calGruenB", 47);
+  config.calGruen.calibrated  = prefs.getBool("calGruenSet", true);
+  config.calBlau.r     = prefs.getUChar("calBlauR", 18);
+  config.calBlau.g     = prefs.getUChar("calBlauG", 53);
+  config.calBlau.b     = prefs.getUChar("calBlauB", 104);
+  config.calBlau.calibrated   = prefs.getBool("calBlauSet", true);
   // Schutz: zu kleine white-Werte -> default Kalibrierung
   if (config.whiteR < 200 || config.whiteG < 200 || config.whiteB < 200) {
     config.blackR = 152; config.blackG = 137; config.blackB = 98;

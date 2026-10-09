@@ -73,6 +73,10 @@ constexpr uint8_t QUIZ_MAX_COLOR_USE = 4;  // jede Farbe max. so oft im Quiz ver
 
 bool gameMoveBusy = false;
 
+// Herkunft des Befehls: true = Web-UI ueber BLE, false = Serial-Monitor.
+// Wird von handleBleCommand() gesetzt, von cmdCal() gelesen (Kalibrier-Sperre).
+static volatile bool s_cmdFromBle = false;
+
 // Gemeinsame Warte-Schleife fuer alle blockierenden Bewegungen.
 // bAbortOnNoGame=true bricht ab, sobald currentGame auf GAME_NONE geht
 // (Notfall-Stop ueber STOP / BLE-Disconnect), sonst laeuft der Move durch.
@@ -765,8 +769,23 @@ constexpr uint16_t EDGE_RAW_C_RELEASE_DISP = 400;  // darueber = wieder frei
 }
 
 // ---- Farb-Kalibrierung: CAL:BLACK / WHITE / ROT / GELB / GRUEN / BLAU / ? ----
+// Einmal kalibriert, dann gilt es: Schreibzugriffe (BLACK/WHITE/ROT/GELB/
+// GRUEN/BLAU) sind ueber die Web-UI (BLE) GESPERRT und antworten CAL:LOCKED.
+// Ueber Serial (USB, Service-Weg) bleiben sie offen. Lesen (CAL:?, CAL:COLOR)
+// geht auf beiden Wegen. Grund: versehentliches Neukalibrieren per Knopfdruck
+// hat schon einmal die funktionierende Einlernung mit falschen Werten
+// ueberschrieben - das darf nicht wieder passieren.
 static bool cmdCal(const String& cmd) {
   char buf[48];
+  const bool isWrite = (cmd == "CAL:BLACK" || cmd == "CAL:WHITE" ||
+                        cmd == "CAL:RED" || cmd == "CAL:YELLOW" ||
+                        cmd == "CAL:GREEN" || cmd == "CAL:BLUE");
+  if (isWrite && s_cmdFromBle) {
+    sendStatus("CAL:LOCKED");
+    Serial.printf("[CAL] %s ueber Web-UI abgelehnt - Kalibrierung ist gesperrt "
+                  "(geht nur ueber Serial)\n", cmd.c_str());
+    return true;
+  }
   if (cmd == "CAL:BLACK") {
     // Sperre wirklich noetig: gelingt sie nicht, waeren rawSensorR/G/B stale
     // oder - schlimmer - ein halb geschriebener Satz. Vorher speicherte der
@@ -1597,6 +1616,16 @@ static bool cmdSlalom(const String& cmd) {
   return true;
 }
 
+// Herkunft des Befehls: true = Web-UI ueber BLE, false = Serial-Monitor (USB).
+// Die Kalibrierung ist ueber die Web-UI GESPERRT (einmal kalibriert, dann
+// passt das) - ueber Serial bleibt sie als Service-Weg offen. Deshalb gibt es
+// zwei Einstiege statt einem Parameter durch ein Dutzend Funktionen.
+void handleCommand(const char* cmdStr);   // unten definiert
+void handleBleCommand(const char* cmdStr) {
+  s_cmdFromBle = true;
+  handleCommand(cmdStr);
+  s_cmdFromBle = false;
+}
 void handleCommand(const char* cmdStr) {
   String cmd(cmdStr);
   cmd.trim();

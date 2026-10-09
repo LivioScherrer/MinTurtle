@@ -7,8 +7,11 @@ BLECharacteristic* statusChar = nullptr;
 bool deviceConnected = false;
 QueueHandle_t bleEventQueue = nullptr;
 
-// Forward-Declaration: Command-Handler aus main
+// Forward-Declaration: Command-Handler aus main. BLE geht ueber
+// handleBleCommand (setzt das Herkunfts-Flag fuer die Kalibrier-Sperre),
+// Serial ruft handleCommand direkt.
 extern void handleCommand(const char* cmdStr);
+extern void handleBleCommand(const char* cmdStr);
 
 class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* server) override {
@@ -107,7 +110,7 @@ void bleProcessEvents() {
         onBleDisconnected();
         break;
       case BLE_EVT_COMMAND:
-        handleCommand(evt.cmd);
+        handleBleCommand(evt.cmd);
         break;
     }
   }

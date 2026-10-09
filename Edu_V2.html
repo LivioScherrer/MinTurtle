@@ -3379,7 +3379,7 @@
                 </svg></div>
               <div>
                 <div class="tile-ttl">Farben kalibrieren</div>
-                <div class="tile-desc">Schwarz, Weiß und Farben einstellen</div>
+                <div class="tile-desc">Kalibrierstand ansehen (gesperrt)</div>
               </div>
             </div>
             <div class="tile" data-view="parents" data-cat="setup">
@@ -4324,6 +4324,7 @@ function updateConnectionUI(isConn, text) {
         if (msg === 'PROG:BUSY' || msg === 'QUIZ:BUSY' || msg === 'LINE:BUSY' ||
             msg === 'RACE:BUSY' || msg === 'MEMORY:BUSY' || msg === 'SLALOM:BUSY' ||
             msg === 'CAL:BLACK BUSY' || msg === 'CAL:WHITE BUSY' ||
+            msg === 'CAL:LOCKED' ||
             msg === 'PROG:BUSY:SLALOM') {
           const BUSY_TEXT = {
             'PROG:BUSY':         'Es laeuft schon ein Programm. Erst Stop druecken.',
@@ -4334,7 +4335,8 @@ function updateConnectionUI(isConn, text) {
             'MEMORY:BUSY':       'Es laeuft schon ein anderes Spiel. Erst beenden.',
             'SLALOM:BUSY':       'Es laeuft schon ein anderes Spiel. Erst beenden.',
             'CAL:BLACK BUSY':    'Roboter gerade beschaeftigt - Schwarz-Messung nicht gespeichert. Gleich nochmal.',
-            'CAL:WHITE BUSY':    'Roboter gerade beschaeftigt - Weiss-Messung nicht gespeichert. Gleich nochmal.'
+            'CAL:WHITE BUSY':    'Roboter gerade beschaeftigt - Weiss-Messung nicht gespeichert. Gleich nochmal.',
+            'CAL:LOCKED':        'Kalibrierung ist gesperrt - geht nur über Serial (USB), nicht über diese Seite.'
           };
           const el = document.getElementById('view-' + currentViewId());
           const fb = el ? el.querySelector('.feedback-msg') : null;
@@ -9617,10 +9619,23 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
           alert('Bitte erst mit dem Roboter verbinden!');
           return;
         }
-        calStep = 0;
-        calWaitingFor = null;
-        if (calWaitTimer) { clearTimeout(calWaitTimer); calWaitTimer = null; }
-        renderCalWizard();
+        // Kalibrierung ist GESPERRT: einmal kalibriert, dann gilt es. Die
+        // Firmware lehnt CAL:BLACK/WHITE/RED/... über BLE mit CAL:LOCKED ab,
+        // deshalb zeigt der Assistent keine Messknöpfe mehr - nur den Stand.
+        const body = document.getElementById('calWizardBody');
+        if (body) {
+          body.innerHTML = '<div class="game-desc">Die Farbkalibrierung ist ' +
+            'gesperrt und kann über diese Seite nicht geändert werden. ' +
+            'Der aktuelle Stand steht unten bei „Kalibrierungsstand". ' +
+            'Neu kalibrieren geht nur über den Serial-Monitor (USB).</div>' +
+            '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">' +
+            '<button class="btn btn-sm btn-grey" id="calBtnState">Stand abfragen</button>' +
+            '<button class="btn btn-grey" id="calBtnCancelWait">Schließen</button></div>';
+          const bq = document.getElementById('calBtnState');
+          if (bq) bq.addEventListener('click', () => sendCommand('CAL:?'));
+          const bc = document.getElementById('calBtnCancelWait');
+          if (bc) bc.addEventListener('click', () => closeCalWizard());
+        }
         document.getElementById('calWizardModal').classList.add('open');
       }
 
