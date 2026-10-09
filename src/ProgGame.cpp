@@ -191,39 +191,33 @@ static bool tableEdgeDetected() {
 // Kante noch im Sichtfeld des nachlaufenden Sensors ist - der Roboter stuende
 // dann still und koennte nie wieder losfahren.
 void edgeGuardTick(uint16_t rawClear) {
-  // DEAKTIVIERT: Wächter komplett aus dem Fahrweg genommen, als wäre er nie
-  // im Code gewesen. Der Roboter fuhr nicht mehr, seit die Not-Halt-Maschinerie
-  // (s_emergency) im Fahrweg hängt; Verdacht: der Halt klemmt oder löst bei
-  // Vibration/Schatten Fehlaus. Bis das geklärt ist, wird hier nichts mehr
-  // gezählt, nichts gestoppt, nichts gelatcht. EDGE? meldet weiter die
-  // Helligkeit, damit man sie beobachten kann.
-  (void)rawClear;
-  return;
+  // SCHRITT 1 (Wächter-Rückbau): zählen + melden + anhalten. Kein Latch, kein
+  // Not-Halt. Zwei Messungen unter der Schwelle halten die Motoren an und
+  // melden einmal. Danach ist der nächste Fahrbefehl sofort wieder möglich -
+  // solange der Sensor über der Kante bleibt, hält jeder Tick erneut an.
+  // In jedem Modus, da der Sensor-Task unabhängig läuft.
+  //
+  // Rückfrage aus dem Bisect: Der Stillstand lag NICHT am Wächter (er war zu
+  // dem Zeitpunkt bereits neutralisiert), sondern an IRUN = 15. Deshalb darf
+  // der Wächter zurückkommen - aber in Stufen, je mit Fahrprobe.
   if (!s_edgeGuardOn) { s_edgeCount = 0; s_edgeBlocked = false; return; }
 
-  if (s_edgeBlocked) {
-    if (rawClear > EDGE_RAW_C_RELEASE) {
-      s_edgeBlocked = false;
-      s_edgeCount = 0;
-      motorReleaseEmergency();   // Not-Halt aufheben - erst jetzt darf wieder gefahren werden
-      Serial.printf("[KANTE] Boden wieder da (Clear=%u > %u) - freigegeben\n",
-                    rawClear, EDGE_RAW_C_RELEASE);
-    }
-    return;
-  }
-
+  // SCHRITT 1: kein s_edgeBlocked-Latch, kein motorEmergencyStop.
+  // Zwei Messungen unter der Schwelle halten die Motoren an (stopMotors) und
+  // melden einmal. Danach ist der nächste Fahrbefehl sofort wieder möglich;
+  // solange der Sensor über der Kante bleibt, hält jeder Tick erneut an.
   if (rawClear < EDGE_RAW_C_MAX) {
     if (s_edgeCount < 255) s_edgeCount++;
-    if (s_edgeCount >= EDGE_CONFIRM_N) {
-      motorEmergencyStop();               // sofort und ohne Rueckfrage; bleibt bis zur Freigabe
-      if (!s_edgeLatched) {
-        Serial.printf("[KANTE] Tischkante nach %u Messungen (Clear=%u < %u) - "
-                      "Motoren gestoppt\n", s_edgeCount, rawClear, EDGE_RAW_C_MAX);
-      }
-      s_edgeLatched = true;
-      s_edgeBlocked = true;               // erst bei Clear > RELEASE wieder frei
+    if (s_edgeCount == EDGE_CONFIRM_N) {
+      stopMotors();                       // sofort und ohne Rueckfrage
+      Serial.printf("[KANTE] Tischkante nach %u Messungen (Clear=%u < %u) - "
+                    "Motoren gestoppt\n", s_edgeCount, rawClear, EDGE_RAW_C_MAX);
     }
   } else {
+    if (s_edgeCount >= EDGE_CONFIRM_N) {
+      Serial.printf("[KANTE] Boden wieder da (Clear=%u) - Zaehler zurueckgesetzt\n",
+                    rawClear);
+    }
     s_edgeCount = 0;
   }
 }
