@@ -1900,7 +1900,7 @@ static void ledPatternUpdate() {
   }
   if (speedL != 0.0f || speedR != 0.0f) {
     // Freifahren: Lauflicht in Fahrtrichtung, Drehen = zwei Punkte nach aussen.
-    uint8_t dir = LED_DIR_IDLE;
+    LedDriveDir dir = LED_DIR_IDLE;
     if (keyW && !keyS)      dir = LED_DIR_FWD;
     else if (keyS && !keyW) dir = LED_DIR_BACK;
     ledStripShowDrive(dir);

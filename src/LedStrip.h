@@ -13,6 +13,15 @@
 // Farbdeutung (kurz): blau = App verbunden, orange = wartet auf App,
 // gruen = bereit/erkannt/Erfolg, rot = Alarm/Fehler, violett = Memory,
 // gelb = Rennen, weiss (Balken) = Fortschritt.
+//
+// API-Regeln:
+//   * Alle Muster-Funktionen heissen ledStripShow* und nehmen nur typ-sichere
+//     Enums (LedColorId, LedDriveDir, LedLineState) - keine rohen uint8_t,
+//     keine Magie-Strings ausser bei der Ziel-Farbe vom Farbsensor.
+//   * Generische Primitive (Solid/Blink/Breathe) fuer neue Modi, spezielle
+//     Muster (Drive/Progress/Countdown/...) nur wo die Animation dazugehoert.
+//   * Ob ein Override (Alarm/Blitz) gerade laeuft, fragt man mit
+//     ledIsOverrideActive() - nicht ueber die Variable direkt.
 #pragma once
 
 #include <Arduino.h>
@@ -23,6 +32,7 @@
 
 extern Adafruit_NeoPixel ledStrip;
 // true, solange der Not-Aus-Alarm blinkt (wird von ledStripShowAlert() gesetzt).
+// Bitte nur noch lesen; zum Pruefen lieber ledIsOverrideActive() nutzen.
 extern volatile bool ledAlertActive;
 
 // Vordefinierte Farben fuer Statusmuster, z.B. ledStripShowProgress(..., LED_C_GREEN).
@@ -37,6 +47,9 @@ enum LedColorId : uint8_t {
   LED_C_WHITE
 };
 uint32_t ledColor(uint8_t id);
+// Name (Farbsensor / Slalom / S-Block) -> RGB-Farbe. Gibt Violett-RGB
+// fuer unbekannte Namen zurueck. Oeffentlich, damit Tests/Debug sie nutzen koennen.
+uint32_t ledColorByName(const char* name);
 
 // Fahrtrichtung fuer das Fahr-Lauflicht (Freifahren).
 enum LedDriveDir : uint8_t {
@@ -59,22 +72,34 @@ enum LedLineState : uint8_t {
 void ledStripSetup();
 // In loop() aufrufen: zeichnet das aktuelle Muster (max. 25 Bilder/s).
 void ledStripTick();
+// true, solange Alarm/Ergebnisblitz die Musterwahl uebersteuern.
+bool ledIsOverrideActive();
+
+// ---- Generische Primitive (fuer neue Modi ohne Spezial-Muster) ----
+// Alle LEDs dauerhaft in einer Farbe.
+void ledStripShowSolid(LedColorId color);
+// Alle LEDs blinken in einer Farbe (periodMs Vollperiode, 50 % an).
+void ledStripShowBlink(LedColorId color, uint16_t periodMs = 500);
+// Alle LEDs atmen in einer Farbe (periodMs Vollperiode auf+ab).
+void ledStripShowBreathe(LedColorId color, uint16_t periodMs = 2000);
 
 // ---- Musterwahl (Alarm hat immer Vorrang) ----
 // Zielfarbe (Slalom-Bauphase, S-Block): leuchtet pulsierend in der Farbe.
 void ledStripShowTarget(const char* colorName);
+void ledStripShowTarget(LedColorId color);
 // Ruhezustand: blau atmend = App verbunden, orange atmend = wartet auf App.
 void ledStripShowStatus(bool bleConnected);
 // Slalom-Paarung steht (Gegner verbunden, Spiel noch nicht gestartet): cyan atmend.
 void ledStripShowPaired();
-// Freifahren: Lauflicht in Fahrtrichtung (dir = LED_DIR_*).
-void ledStripShowDrive(uint8_t dir);
+// Freifahren: Lauflicht in Fahrtrichtung.
+void ledStripShowDrive(LedDriveDir dir);
 // Fortschrittsbalken (done von total) + blinkender naechster Punkt.
-void ledStripShowProgress(uint8_t done, uint8_t total, uint8_t colorId);
+void ledStripShowProgress(uint8_t done, uint8_t total, LedColorId color);
 // Memory: Roboter zeigt gerade die Sequenz (violettes Lauflicht).
 void ledStripShowMemoryShow();
-// Linienfolger: Muster nach Zustand (LED_LINE_*, siehe LineFollower.h).
-void ledStripShowLine(uint8_t state);
+inline void ledStripShowMemory() { ledStripShowMemoryShow(); }
+// Linienfolger: Muster nach Zustand (siehe LineFollower.h).
+void ledStripShowLine(LedLineState state);
 // Rennen: gelbes Lauflicht.
 void ledStripShowRace();
 // Startampel: rot fuellt sich bis GO, dann gruen (msLeft/totalMs aus Slalom-Timer).

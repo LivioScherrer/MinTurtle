@@ -18,8 +18,8 @@ pio run -t upload       # auf den Roboter flashen (COM11 in platformio.ini)
 pio device monitor      # Serial-Log (115200 baud)
 ```
 
-Ziel: `seeed_xiao_esp32s3`, Flash 3.3 MB (aktuell ~42 % belegt), RAM
-327 KB (aktuell ~21 % belegt).
+Ziel: `seeed_xiao_esp32s3`, Flash 3.3 MB (Stand 2026-10-10: 43,4 % belegt), RAM
+327 KB (Stand 2026-10-10: 20,9 % belegt).
 
 Zwei Web-Seiten, beide Single File, kein Build-Schritt. Sie sprechen denselben
 BLE-Dienst an und werden direkt aus dem Browser geöffnet (Chromium-Browser
@@ -181,12 +181,14 @@ kurze Haltezeit.
 | Slalom Countdown | Startampel: erst 2, dann 4, dann 6 rote LEDs, bei GO die ganze Reihe gruen |
 | Slalom entschieden | Sieg = Regenbogen, Niederlage = rotes Atmen |
 | Not-Aus (`STOP`) | rotes Doppelblinken, 3 s |
+| Tischkante ausgeloest (gesperrt bis Boden/`EDGE:RESET`) | alle LEDs rot blinkend |
 
 Zwei Regeln sind bewusst so gewaehlt:
 
 1. **Waehrend Farbmessungen bleibt der Ring dunkel** (Slalom-Rennen,
    Quiz-Lesephase, ausgefuehrte Programme). Eigenes LED-Licht koennte sonst
-   als Farbe auf dem Boden erkannt werden. Der Not-Aus-Alarm blinkt trotzdem.
+   als Farbe auf dem Boden erkannt werden. Der Not-Aus-Alarm und das
+   Kanten-Rot blinken trotzdem - Sicherheit geht vor Messgenauigkeit.
 2. **Der S-Block** (`Licht`-Baustein) nutzt dieselbe Anzeige: Slots 0-3 zeigen
    die Zielfarbe, Slot 4/5 die Distanz-Bedeutung NAH (dunkelrot) / FREI
    (dunkelgruen), Slot 6 schaltet aus.
@@ -563,16 +565,15 @@ Dispatch-Liste am Ende von `handleCommand()` eintragen.
 
 ### Tischkanten-Wächter
 
-**Standardmäßig eingeschaltet.** Der Sensor sitzt nach unten; über der
+**Immer eingeschaltet (Schalter entfernt).** Der Sensor sitzt nach unten; über der
 Kante fällt die Gesamthelligkeit auf fast null, zwei Messungen in Folge
-genügen für den sofortigen Halt. Der Schalter steht in der NVS
-(`edgeGuard`) und wird beim Boot übernommen - die Wächter-Logik selbst
-liegt in `ProgGame.cpp`.
+genügen für den sofortigen Halt. Die Wächter-Logik liegt in `ProgGame.cpp`.
+Ein altes NVS mit gespeichertem "aus" wird beim Boot automatisch geheilt.
 
 | Befehl | Wirkung |
 |---|---|
-| `EDGE:ON` | Wächter einschalten (NVS-persistent) |
-| `EDGE:OFF` | Wächter abschalten (NVS-persistent) |
+| `EDGE:ON` | bestaetigt `EDGE:ON` (immer aktiv) |
+| `EDGE:OFF` | wird ignoriert, antwortet `EDGE:ON` (Abschalten entfernt; alte gecachte Seiten schicken es noch) |
 | `EDGE:RESET` | Kanten-Zähler und Sperre löschen - der Roboter wird wieder freigegeben |
 | `EDGE?` | `EDGE=<aktiv 0\|1>,<Clear>,<Rot>` plus ausführliche Zeile auf Serial |
 
@@ -823,15 +824,15 @@ auf dem Gerät:
 | danach | jede Messung `Range-Status 4` (PhaseFail) |
 | Messwerte | ca. 10 % gueltig, stark streuend |
 
-Zwei Regeln folgen daraus und werden in `DistanceSensor.cpp` eingehalten:
+Geloest seit 2026-10 per `patch_vl53l0x.py` (per `extra_scripts = pre:` in `platformio.ini` eingebunden, laeuft vor jedem Build). Drei Eingriffe, alle minimal und idempotent:
 
-1. **Während der Initialisierung gehoert 0x29 dem VL53L0X allein.**
-   `distSetup()` prueft die Lage und waehlt den passenden Pfad:
-   - 0x29 frei -> Initialisierung ueber 0x29 (exakt der Weg der frueher
-     funktionierenden Fassung, siehe `backup_vor-revert/`)
-   - 0x29 belegt -> Initialisierung mit Zieladresse 0x30; DataInit laeuft dann
-     zwar im Konflikt, der entscheidende NVM-Zugriff aber sauber auf 0x30
-2. **Vor jedem `begin()` eine frische Instanz erzeugen** (`loxResetInstance()`).
+1. **Adresswechsel VOR DataInit.** Der Originaltreiber machte `DataInit @ 0x29` und zog erst danach auf die Zieladresse um — genau dort kollidierte er mit dem TCS34725. Der Patch zieht per `setAddress(TARGET)` vor `DataInit` um (nur wenn TARGET noch nicht antwortet, reine Adressphase, fuer beide Geraete harmlos). `DataInit`/`StaticInit` laufen damit komplett auf 0x30, wo der Bus sauber ist.
+2. **`eduRefSpadRecalibrate()` als Rettungsweg (`DISTREF`).** `begin()` ruft die Ref-SPAD-Kalibrierung selbst auf, scheitert bei korruptem NVM mit -50 und liefert `false` — der Aufrufer kaeme an die Kalibrierung nie heran. Die ergaenzte Methode holt `DataInit`/`StaticInit` selbst nach und fuehrt die Kalibrierung danach erneut aus, ohne Loeten.
+3. **Good-SPAD-Map-Initialisierung.** In `vl53l0x_api_calibration.cpp` stand nur der Kommentar `"Currently the good spad map is initialised to 'All good'"` — der Code nullte nur `RefSpadEnables`, die Map kam ausschliesslich aus dem NVM. Leere Bytes werden jetzt als "SPAD gut" (0xFF) gefuellt; eine belegte Map bleibt unangetastet.
+
+Weiterhin gilt zusaetzlich:
+
+- **Vor jedem `begin()` eine frische Instanz erzeugen** (`loxResetInstance()`).
    `get_info_from_device()` liest die NVM-Daten nur *einmal* pro Objekt
    (`ReadDataFromDeviceDone`). Ein einmal eingefrorener Fehlwert bliebe sonst
    die ganze Sitzung bestehen. Achtung: **keine** Zuweisung
@@ -839,35 +840,15 @@ Zwei Regeln folgen daraus und werden in `DistanceSensor.cpp` eingehalten:
    `pMyDevice = &MyDevice`, dessen Kopie auf die zerstoerte temporaere Instanz
    zeigen wuerde (LoadProhibited-Crash). Deshalb Placement-New.
 
-### Aktueller Stand (auf dem Geraet verifiziert)
+### Aktueller Stand (2026-10-10, am Roboter bestaetigt)
 
-| Farbsensor | 0x29 | Ergebnis |
-|---|---|---|
-| **ausgesteckt** | frei | Init erfolgreich, Continuous-Modus, **46/46 gueltige Messungen**, 191-198 mm bei 20 cm Ziel, `Range-Status 0` |
-| angesteckt | doppelt belegt | Konflikt - siehe unten |
+| Bus | Ergebnis |
+|---|---|
+| TCS34725 auf 0x29 + VL53L0X auf 0x30 (per Patch) | **Parallelbetrieb funktioniert.** Farbsensor in Betrieb, Farb-Spiele moeglich, kein I2C-Multiplexer noetig. |
 
-### Wenn der Farbsensor wieder dazukommt
+Ein **XSHUT-Pin hilft hier nicht** — er haelt den VL53L0X im Reset, und genau dann kann er nicht initialisiert werden; sobald er freigegeben wird, startet er wieder auf 0x29. Der Farbsensor hat zudem eine feste Adresse und kann nicht umziehen. Der Patch oben ist der gewaehlte Weg.
 
-Dann ist 0x29 dauerhaft doppelt belegt. Ein **XSHUT-Pin hilft hier nicht** -
-er haelt den VL53L0X im Reset, und genau dann kann er nicht initialisiert
-werden; sobald er freigegeben wird, startet er wieder auf 0x29 und kollidiert
-mit dem TCS34725. Der Farbsensor hat zudem eine feste Adresse, kann also nicht
-umgezogen werden.
-
-Ohne Eingriff in die Hardware bleiben nur zwei Wege:
-
-1. **Farbsensor abgezogen lassen** - der Distanzsensor liefert dann
-   zuverlaessig Werte (verifiziert: 46/46 gueltig, 191-198 mm bei 20 cm).
-   Der Roboter funktioniert dann ohne Farberkennung.
-2. **I2C-Multiplexer** (z. B. TCA9548A, wenige Euro) zwischen die Sensoren.
-   Damit bekommt jeder Sensor einen eigenen Kanal und die vollstaendige
-   Firmware funktioniert wie geplant. Alternative: die Sensoren an getrennte
-   I2C-Busse haengen.
-
-Die Firmware erkennt die Lage selbst: ist beim Boot nichts auf 0x29, wird der
-VL53L0X ueber 0x29 initialisiert (sauberer Pfad); ist 0x29 belegt, gibt es
-automatisch auf den Notpfad ueber 0x30 mit eingebautem Single-Shot-Fallback.
-Diagnose: `DISTSCAN` zeigt den Bus-Zustand vom Boot-Zeitpunkt.
+Diagnose bei Problemen: `DISTSCAN` zeigt den Bus-Zustand vom Boot-Zeitpunkt, `DISTREF` stoesst die Ref-SPAD-Neukalibrierung an.
 
 ### Diagnose-Kommandos
 
@@ -876,6 +857,7 @@ Diagnose: `DISTSCAN` zeigt den Bus-Zustand vom Boot-Zeitpunkt.
 | `DISTDIAG` | Modus, letzter Wert, Range-Status, Fehlerzaehler |
 | `DISTSCAN` | Bus-Zustand vom Boot-Zeitpunkt (beweist Power-Cycle-Wirkung) |
 | `DISTDEBUG` | jeden Init-Schritt mit Library-Debug nachvollziehen |
+| `DISTREF` | Ref-SPAD-Neukalibrierung anstossen (Rettungsweg aus `patch_vl53l0x.py`, ohne Loeten) |
 | `I2C?` | vollstaendiger Bus-Scan 0x08..0x77 |
 
 ---
@@ -891,10 +873,6 @@ Schrittweiten) und speichert sie zurueck.
 
 ## Bekannte offene Punkte
 
-- **VL53L0X und Farbsensor koennen nicht gleichzeitig an einem I2C-Bus
-  betrieben werden.** Aktuell ist der Farbsensor dafuer abgezogen; der
-  Distanzsensor liefert damit zuverlaessig Werte (46/46 gueltig). Fuer den
-  Parallelbetrieb ist ein I2C-Multiplexer (z. B. TCA9548A) noetig - XSHUT
-  loest das nicht.
 - Keine automatisierten Tests. `configValidate()` und die
   `ProgGame`-Parserergebnisse waeren die naheliegenden Kandidaten.
+- Rampe gegen Vibration noch nicht verifiziert (`HARDWARE_FAKTEN.md` Pkt. 4).
