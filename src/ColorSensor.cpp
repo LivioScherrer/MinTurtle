@@ -53,22 +53,17 @@ int calibrateColor(uint16_t raw, uint16_t blackVal, uint16_t whiteVal) {
 // Nur wirklich eingelernte Referenzen wirken. Ohne CAL:ROT.. ist das
 // Verhalten bitweise unveraendert. Reine Rechnung, kein I2C, keine Sperre,
 // kein delay - der 150-ms-Task wartet nicht.
-static const char* refColorName(int r, int g, int b, float tol) {
+// Chromatik-Abstand zweier Farben (r,g,b)/Summe. Bleibt bei gleichmaessig
+// veraenderter Beleuchtung konstant - Details siehe Kommentar bei
+// detectColorName(). Reine Rechnung, kein I2C, keine Sperre, kein delay -
+// der 150-ms-Task wartet nicht.
+static float chromaDist(int r, int g, int b, uint8_t fr, uint8_t fg, uint8_t fb) {
   const float sm = (float)(r + g + b);
-  if (sm < 1.0f) return nullptr;
-  const char* const names[4] = { "ROT", "GELB", "GRUEN", "BLAU" };
-  const ColorRef* const refs[4] = { &config.calRot, &config.calGelb,
-                                    &config.calGruen, &config.calBlau };
-  for (int i = 0; i < 4; i++) {
-    if (!refs[i]->calibrated) continue;
-    const float sr = (float)(refs[i]->r + refs[i]->g + refs[i]->b);
-    if (sr < 1.0f) continue;
-    const float d = fabsf((float)r / sm - (float)refs[i]->r / sr)
-                  + fabsf((float)g / sm - (float)refs[i]->g / sr)
-                  + fabsf((float)b / sm - (float)refs[i]->b / sr);
-    if (d <= tol) return names[i];
-  }
-  return nullptr;
+  const float sr = (float)(fr + fg + fb);
+  if (sm < 1.0f || sr < 1.0f) return 99.0f;
+  return fabsf((float)r / sm - (float)fr / sr)
+       + fabsf((float)g / sm - (float)fg / sr)
+       + fabsf((float)b / sm - (float)fb / sr);
 }
 
 const char* detectColorName(int r, int g, int b) {
@@ -80,17 +75,43 @@ const char* detectColorName(int r, int g, int b) {
       abs(r - g) < 60 && abs(g - b) < 60 && abs(r - b) < 60) {
     return "WEISS";
   }
-  // Eingelernte Referenzen schlagen die festen Heuristiken. Steht bewusst
-  // HINTER SCHWARZ und WEISS: sonst wuerde eine eingelernte Zielfarbe die
-  // Referenzflaeche wegfangen und Linienfolger, Tischkanten-Waechter und die
-  // weisse Flaeche beim Einlernen verlieren ihr Weiss. Findet sich keine
-  // Referenz, laeuft es unveraendert in die Heuristik.
+  // Eingelernte Referenzen gegen gelernten Boden: WETTKAMPF statt Reihenfolge.
+  // Steht bewusst HINTER SCHWARZ und WEISS: sonst wuerde eine eingelernte
+  // Zielfarbe die Referenzflaeche wegfangen und Linienfolger,
+  // Tischkanten-Waechter und die weisse Flaeche beim Einlernen verlieren
+  // ihr Weiss.
   //
-  // Toleranz 0,18: die kleinste Trennung zweier eingelernter Farben liegt bei
-  // 0,34 (Gelb gegen Gruen), also bei 53 % davon - und rund siebenmal so gross
-  // wie der groesste beobachtete Helligkeits-Drift von 0,075.
-  const char* ref = refColorName(r, g, b, 0.18f);
-  if (ref) return ref;
+  // Warum Wettkampf: ein holzfarbener (gelblicher) Boden liegt farblich nah
+  // an der GELB-Referenz. Feste Reihenfolge "erst Refs" meldet den Boden als
+  // GELB - der Farbenslalom stoppt sofort auf freiem Tisch. Reihenfolge
+  // "erst Boden" wuerde umgekehrt ein rotes Plaettchen auf rotem Tisch als
+  // BODEN melden. Deshalb gewinnt, wer farblich NAEHER dran ist - die
+  // Referenz muss dafuer DEUTLICH naeher sein (0,05 Vorsprung): ein Marker
+  // trifft seine Referenz fast exakt, der Boden nur ungefaehr.
+  //
+  // Toleranzen: Refs 0,18 (kleinste Trennung zweier Farben 0,34, also 53 %),
+  // Boden 0,15 (enger: Boden gilt nur bei echter Aehnlichkeit).
+  const char* const refNames[4] = { "ROT", "GELB", "GRUEN", "BLAU" };
+  const ColorRef* const refPtrs[4] = { &config.calRot, &config.calGelb,
+                                       &config.calGruen, &config.calBlau };
+  const char* bestRef = nullptr;
+  float bestRefD = 99.0f;
+  for (int i = 0; i < 4; i++) {
+    if (!refPtrs[i]->calibrated) continue;
+    const float d = chromaDist(r, g, b, refPtrs[i]->r, refPtrs[i]->g, refPtrs[i]->b);
+    if (d < bestRefD) { bestRefD = d; bestRef = refNames[i]; }
+  }
+  float floorD = 99.0f;
+  if (config.floorCalibrated)
+    floorD = chromaDist(r, g, b, config.floorR, config.floorG, config.floorB);
+  const bool refHit = (bestRef != nullptr && bestRefD <= 0.18f);
+  const bool floorHit = (floorD <= 0.15f);
+  if (floorHit && refHit) {
+    if (bestRefD + 0.05f < floorD) return bestRef;  // Marker klar naeher
+    return "BODEN";
+  }
+  if (refHit) return bestRef;
+  if (floorHit) return "BODEN";
   // dominant channel
   int maxC = r > g ? (r > b ? r : b) : (g > b ? g : b);
   if (maxC < 50) return "UNBEKANNT";  // zu dunkel fuer echte Farbe

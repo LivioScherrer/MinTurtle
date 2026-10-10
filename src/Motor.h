@@ -377,6 +377,30 @@ void prepPositionMoves(long stepsL, long stepsR);
 // Thread-sicher (liest volatile Zaehler).
 bool motorStillRunning();
 
+// Treiber aufwecken (EN + ggf. UART-Rekonfiguration), VOR einem Mutex-Halt.
+// Die vier Anfahr-Wrapper rufen das selbst - noetig ist es nur, wenn wie in
+// progMove() ein MSCNT-Schnappschuss VOR den ersten Pulsen genommen werden
+// soll (wecken + vermessen + fahren duerfen keine Pulse dazwischen haben).
+void motorWakeDrivers();
+// MSCNT-Schnappschuss beider Treiber (10-Bit-Sequenzerstand). false = nicht
+// lesbar (Boot-Fehler oder Standby) - dann ist nichts pruefbar, kein Fehler.
+// Nur auf Core 1 (Loop/Befehle), nie aus dem Puls-Task.
+bool motorMscntSnapshot(uint16_t& msL, uint16_t& msR);
+// Schrittverlust-Heilung nach einer Positionsfahrt: vergleicht den
+// MSCNT-Voranschlag mit den befohlenen Schritten (cmdL/cmdR physikalisch, wie
+// an prepPositionMoves() uebergeben, beforeL/beforeR vom Schnappschuss davor)
+// und holt eine Differenz automatisch nach (max. 1 Nachholfahrt + 1
+// Nachpruefung). true = verifiziert oder geheilt, false = nicht heilbar
+// (Aufrufer bricht ab + meldet PROG:STEPLOSS).
+//
+// Was das sieht - und was nicht: MSCNT zaehlt die STEP-Impulse AM TREIBER.
+// Es erkennt Treiber-Anomalien (Reset-Sprung, stoerende Impulse), NICHT aber
+// mechanisches Durchrutschen des Rotors (Blockade, Schlupf) - dafuer gaebe es
+// nur StallGuard/Encoder. Exakt ist die Pruefung fuer Differenzen unter einem
+// halben Zaehlerumlauf (512 Counts = 2xMicrosteps Schritte); darueber wird
+// nichts erfunden, nur gemeldet.
+bool motorHealMove(int32_t cmdL, int32_t cmdR, uint16_t beforeL, uint16_t beforeR);
+
 // motorSettle() ist ABSICHTLICH nicht mehr vorhanden. Es fuhr vor dem
 // Programmstart zwei Vollschritte hin UND exakt zwei zurueck, "damit die
 // Raeder auf derselben Microstep-Index stehen" - das ist winkelneutral und
@@ -421,8 +445,9 @@ void tmcBootDiag();
 // Auslieferungswerte und sind auf den ersten Blick unauffaellig.
 void tmcRegDump();
 // ---- Treiber-Messung: Schrittverlust und Schlupf BEOBACHTEN ----
-// Reine Diagnose. Die Firmware regelt danach nichts nach, korrigiert nichts
-// und haelt den Roboter nicht an - das Verhalten ist vorher wie nachher.
+// Reine Diagnose (MOT:DIAG/MOT:SPD?). Die Messung selbst regelt nichts nach -
+// das automatische Nachholen nach Positionsfahrten steht separat in
+// motorHealMove() und nutzt denselben MSCNT-Zaehler.
 // Lesbar sind: SG_RESULT (0x41), GSTAT (0x01), VACTUAL (0x22), TSTEP (0x12),
 // MSCNT (0x6A) und DRV_STATUS (0x6F).
 //

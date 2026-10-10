@@ -41,6 +41,7 @@ enum ProgOp : uint8_t {
   OP_LED,       // S<c>        LED auf Slot c setzen (0-3 Farben, 4/5 IR, 6 aus)
   OP_PAUSE,     // Z<n>        Pause n x 100 ms
   OP_STOP,      // Q           Vollstopp
+  OP_SPEED,     // T<n>        Tempo n mm/s fuer alles, was danach faehrt (nur Programm, danach gilt das alte)
   // --- nur vom Parser erzeugt ---
   OP_END        // Schliesst eine Schleife
 };
@@ -105,11 +106,18 @@ void progStop();
 // Ausgewertet wird im Sensor-Task (ColorSensor.cpp, ~alle 150 ms), NICHT im
 // Fahrpfad - der 50-us-Puls-Task bleibt davon unberuehrt.
 //
-// Drei Messungen in Folge unter der Schwelle, dann sofortiger Halt. Drei
+// Zwei Messungen in Folge unter der Schwelle, dann sofortiger Halt. Zwei
 // deshalb: eine schwarze Linie auf dem Tisch sieht genauso dunkel aus wie der
 // Abgrund, ist aber nur kurz. Dauer statt Einzelwert trennt die beiden Faelle.
 void edgeGuardTick(uint16_t rawClear);   // aus dem Sensor-Task
-void edgeGuardSet(bool on);               // Web-UI-Schalter
+void edgeGuardSet(bool on);               // Web-UI-Schalter (NVS-persistent)
 bool edgeGuardActive();
-bool edgeGuardTripped();                  // true einmalig, danach wieder false
 void edgeGuardReset();                    // Zaehler und Merker loeschen
+// ---- Boden-Referenz (Auto-Lernen bei jedem BLE-Verbinden) ----
+// floorLearn: speichert kalibrierte RGB (0..255) + Roh-Clear als "Boden".
+// Der Boden-Abgleich selbst steht in ColorSensor.cpp (chromaDist-Wettkampf
+// gegen die CAL-Referenzen): Farben stehen hoeher als der Boden - ein rotes
+// Plaettchen mit CAL:ROT bleibt ROT, auch auf rotem Tisch.
+void floorLearn(uint8_t r, uint8_t g, uint8_t b, uint16_t c);
+uint16_t edgeGuardMaxNow();       // aktive Kanten-Schwelle (Boden-adaptiv)
+uint16_t edgeGuardReleaseNow();   // aktive Freigabe-Schwelle (Boden-adaptiv)

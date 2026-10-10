@@ -59,10 +59,13 @@ namespace {
 
   bool readLineDetected() {
     // Linie = jede Farbe ausser WEISS (und UNBEKANNT)
+    // BODEN (gelernter Untergrund) ist ebenfalls keine Linie - sonst wuerde
+    // der Folger auf farbigem Tisch (z.B. rot) staendig "Linie" sehen.
     char nm[16] = "UNBEKANNT";
     getCurrentColorName(nm, sizeof(nm));
     if (strcasecmp(nm, "WEISS") == 0)    return false;
     if (strcasecmp(nm, "UNBEKANNT") == 0) return false;
+    if (strcasecmp(nm, "BODEN") == 0)    return false;
     return true;
   }
 

@@ -20,6 +20,39 @@ ProgStep progSteps[PROG_MAX_STEPS];
 uint8_t  progLen    = 0;
 bool     progActive = false;
 
+// ---- Programm-Tempo (T-Block): gilt nur waehrend des Laufs ----
+// Der T-Block stellt config.driveSpeedMM um (RAM only, KEIN NVS - sonst
+// wuerde ein Kinderprogramm das Roboter-Tempo dauerhaft verstellen).
+// Beim Start merken, bei Ende/Abbruch/Stop zurueckstellen, damit danach
+// wieder das alte Tempo gilt.
+static float s_progSavedSpeed = 150.0f;
+static bool  s_progSavedValid = false;
+static void progSpeedSave() {
+  if (!s_progSavedValid) { s_progSavedSpeed = config.driveSpeedMM; s_progSavedValid = true; }
+}
+static void progSpeedRestore() {
+  if (!s_progSavedValid) return;
+  s_progSavedValid = false;
+  if (config.driveSpeedMM != s_progSavedSpeed) {
+    config.driveSpeedMM = s_progSavedSpeed;
+    motorUpdateSpeeds();
+    Serial.printf("[PROG] Tempo zurueck auf %.0f mm/s\n", (double)s_progSavedSpeed);
+  }
+}
+// Tempo aus dem T-Block (mm/s): wie SPEED:, aber ohne NVS. Kappen wie dort,
+// damit Anzeige (Blockwert) == Realitaet.
+static void progSpeedSet(int16_t mms) {
+  float want = (float)mms;
+  if (want < SPEED_MM_S_MIN) want = SPEED_MM_S_MIN;
+  if (want > SPEED_MM_S_MAX) want = SPEED_MM_S_MAX;
+  const float maxReach = MAX_DRIVE_STEPS_S / configStepsPerMM();
+  if (want > maxReach) want = floorf(maxReach);
+  config.driveSpeedMM = want;
+  motorUpdateSpeeds();
+  Serial.printf("[PROG] Tempo T%d -> %.0f mm/s (gilt bis Programmende)\n",
+                (int)mms, (double)want);
+}
+
 constexpr uint32_t PROG_STEP_GAP_MS = 120;  // Pause zwischen Top-Level-Bloecken
 constexpr uint32_t PROG_LOOP_GAP_MS = 100;  // Pause zwischen Loop-Durchlaeufen
 constexpr uint32_t SLALOM_TARGET_HOLD_MS = 250;  // Zielfarbe stabil sehen, bevor der Slalom stoppt
@@ -111,27 +144,72 @@ constexpr uint16_t EDGE_RAW_C_RELEASE = 400; // darueber = wieder frei (Tischmin
 constexpr uint8_t  EDGE_CONFIRM_N   = 2;     // 2 Messungen in Folge (~300 ms)
 
 static volatile uint8_t s_edgeCount = 0;    // aufeinanderfolgende Treffer
-static volatile bool    s_edgeLatched = false;   // Kante erkannt, gemeldet
 static volatile bool    s_edgeGuardOn = false;   // Schalter aus der NVS
 static volatile bool    s_edgeBlocked = false;   // Hysterese: gesperrt bis zum Boden
 
-// Einmalige Kantenmeldung: der Motor-Stopp darf nicht bei jedem Sensor-Tick
-// erneut in den Log schreiben, aber die UEBERGANG in den Zustand "Kante"
-// ist gemeldenswert - sie ist der Moment, in dem der Roboter stehenbleibt.
-bool edgeGuardTripped() {
-  if (!s_edgeLatched) return false;
-  s_edgeLatched = false;
-  return true;
-}
 bool edgeGuardActive()   { return s_edgeGuardOn; }
-void edgeGuardReset()    { s_edgeCount = 0; s_edgeLatched = false; s_edgeBlocked = false; }
+void edgeGuardReset()    { s_edgeCount = 0; s_edgeBlocked = false; }
 void edgeGuardSet(bool on) {
+  const bool changed = (s_edgeGuardOn != on);
   s_edgeGuardOn = on;
+  config.edgeGuard = on;
+  // Nur bei Aenderung in die NVS: spart Schreibzyklen (Boot schreibt sonst
+  // bei jedem Start denselben Wert erneut).
+  if (changed) configSaveBool("edgeGuard", on);
   edgeGuardReset();
-  if (on) Serial.println("[KANTE] Waechter aktiv - stoppt an der Tischkante");
+  if (on) Serial.println("[KANTE] Waechter aktiv - stoppt an der Tischkante (alle Modi)");
   else    Serial.println("[KANTE] Waechter aus");
 }
 
+// ---- Boden-adaptive Schwellen ----
+// Grundwerte EDGE_RAW_C_MAX/RELEASE bleiben die Obergrenze: damit wird ein
+// schwarzes Papier (489) nie zur Kante, auch auf sehr hellem Boden.
+// Auf dunklem Boden (kleines floorC) schrumpfen die Schwellen mit:
+// Kante = Boden/2, frei = Boden*2/3 (mind. 20 ueber der Kante = Hysterese).
+uint16_t edgeGuardMaxNow() {
+  if (config.floorCalibrated && config.floorC > 0) {
+    uint16_t dyn = config.floorC / 2;
+    if (dyn > EDGE_RAW_C_MAX) dyn = EDGE_RAW_C_MAX;
+    if (dyn < 40) dyn = 40;
+    return dyn;
+  }
+  return EDGE_RAW_C_MAX;
+}
+uint16_t edgeGuardReleaseNow() {
+  if (config.floorCalibrated && config.floorC > 0) {
+    uint16_t dyn = (uint16_t)(((uint32_t)config.floorC * 2) / 3);
+    if (dyn > EDGE_RAW_C_RELEASE) dyn = EDGE_RAW_C_RELEASE;
+    const uint16_t mx = edgeGuardMaxNow();
+    if (dyn <= mx) dyn = (uint16_t)(mx + 20);
+    return dyn;
+  }
+  return EDGE_RAW_C_RELEASE;
+}
+
+// ---- Boden-Referenz ----
+// NVS-Schreibzyklen sind endlich, und der Boden wird bei JEDEM BLE-Verbinden
+// neu gelernt (die Webseite reconnectet bis zu 5-mal). Deshalb wird nur
+// geschrieben, wenn sich etwas aendert: 5 Keys pro Verbindung waeren sonst
+// Dauerlast auf dem Flash. Die typische Aenderung ist die Tageslicht- oder
+// Tischplatz-Differenz, nicht jeder Verbindungsversuch.
+void floorLearn(uint8_t r, uint8_t g, uint8_t b, uint16_t c) {
+  const bool neu = !config.floorCalibrated ||
+                   config.floorR != r || config.floorG != g ||
+                   config.floorB != b || config.floorC != c;
+  config.floorR = r; config.floorG = g; config.floorB = b;
+  config.floorC = c; config.floorCalibrated = true;
+  if (neu) {
+    configSaveUChar("floorR", r);
+    configSaveUChar("floorG", g);
+    configSaveUChar("floorB", b);
+    configSaveUShort("floorC", c);
+    configSaveBool("floorSet", true);
+  }
+  edgeGuardReset();
+  Serial.printf("[BODEN] gelernt: rgb(%u,%u,%u) Clear=%u%s -> Kante<%u frei>%u\n",
+                r, g, b, c, neu ? "" : " (unveraendert)",
+                edgeGuardMaxNow(), edgeGuardReleaseNow());
+}
 static void colorPollReset() { colMatchStart = 0; colMatchIdx = -1; }
 
 // true wenn die Sensor-Bedingung (Farbe 0-3 oder Distanz 4/5) erfuellt ist.
@@ -160,24 +238,6 @@ static bool sensorHitImmediate(uint8_t idx) {
   char name[16];
   getCurrentColorName(name, sizeof(name));
   return strcasecmp(name, PROG_COLOR_NAMES[idx]) == 0;
-}
-
-// Tischkante: der Sensor sitzt nach unten und sieht ueber der Tischkante
-// nichts mehr. Der Clear-Kanal (rawSensorC) ist die Gesamthelligkeit ohne
-// Farbfilter - ueber der Kante faellt er auf nahezu 0, das ist unabhaengig von
-// der Farbe des Tisches. Ein zweiter Sensor nach unten waere das robustere
-// Prinzip, vorhanden ist aber nur der TCS34725.
-//
-// Bewusst KEINE Farbauswertung: schwarze Linien auf hellem Tisch sehen genauso
-// dunkel aus wie der Abgrund. Mit Clear-Kanal und Helligkeitsschwelle ist eine
-// schwarze Linie aber nur kurz dunkel, waehrend die Kante dauerhaft dunkel
-// bleibt - deshalb zaehlen hier aufeinanderfolgende Messungen, nicht eine.
-static bool tableEdgeDetected() {
-  if (!colorSensorOk) return false;      // Sensor tot: nicht als Kante werten
-  if (xSemaphoreTake(colorSem, pdMS_TO_TICKS(5)) != pdTRUE) return false;
-  const uint16_t clear = rawSensorC;
-  xSemaphoreGive(colorSem);
-  return clear < EDGE_RAW_C_MAX;
 }
 
 // Vom Sensor-Task alle ~150 ms aufgerufen (ColorSensor.cpp). Zaehlt
@@ -210,26 +270,28 @@ void edgeGuardTick(uint16_t rawClear) {
   // setMotorSpeedLocked/prepPositionMoveLocked). Freigabe auf zwei Wegen:
   // von selbst bei Boden (Hysterese) oder von Hand per EDGE:RESET.
   if (s_edgeBlocked) {
-    if (rawClear > EDGE_RAW_C_RELEASE) {
+    const uint16_t rel = edgeGuardReleaseNow();
+    if (rawClear > rel) {
       s_edgeBlocked = false;
       s_edgeCount = 0;
       motorReleaseEmergency();
       Serial.printf("[KANTE] Boden wieder da (Clear=%u > %u) - freigegeben\n",
-                    rawClear, EDGE_RAW_C_RELEASE);
+                    rawClear, rel);
     } else {
       stopMotors();   // Sperre steht: trotzdem losgefahren -> sofort wieder anhalten
     }
     return;
   }
 
-  if (rawClear < EDGE_RAW_C_MAX) {
+  const uint16_t mx = edgeGuardMaxNow();
+  if (rawClear < mx) {
     if (s_edgeCount < 255) s_edgeCount++;
     if (s_edgeCount == EDGE_CONFIRM_N) {
       stopMotors();                       // sofort und ohne Rueckfrage
       motorEmergencyStop();               // neue Befehle verwerfen, bis freigegeben
       Serial.printf("[KANTE] Tischkante nach %u Messungen (Clear=%u < %u) - "
                     "Motoren gestoppt, gesperrt bis zum Boden\n",
-                    s_edgeCount, rawClear, EDGE_RAW_C_MAX);
+                    s_edgeCount, rawClear, mx);
       s_edgeBlocked = true;
     }
   } else {
@@ -327,7 +389,20 @@ static bool progMove(int32_t sL, int32_t sR, int8_t colorCheck) {
 // wirkt das Drehmoment kurzzeitig nur einseitig und der Roboter steht
 // schief. Genau das war vorher moeglich, weil zwischen den beiden Aufrufen der
 // 50-us-Puls-Task den Mutex bekommen konnte.
-prepPositionMoves(sL * (long)config.leftSign, sR * (long)config.rightSign);
+  // Treiber wach + MSCNT-Basis VOR den ersten Pulsen - aber nur wenn dieser
+  // Baustein ueberhaupt fahren soll. prepPositionMoves() weckt die Treiber
+  // zwar selbst, das geschieht dort aber erst im Mutex-Halt; vorher gelesen
+  // werden muss die Basis schon vorher, sonst saehe die Pruefung Pulse, die
+  // es noch nicht gab. Bei steps == 0 gibt es nichts zu pruefen.
+  uint16_t msL = 0, msR = 0;
+  bool msOk = false;
+  if (sL != 0 || sR != 0) {
+    motorWakeDrivers();
+    msOk = motorMscntSnapshot(msL, msR);
+  }
+  const int32_t physL = sL * (long)config.leftSign;
+  const int32_t physR = sR * (long)config.rightSign;
+  prepPositionMoves(physL, physR);
   // Slalom: merken, ob wir schon AUF der Zielfarbe starten. Dann erst nach
   // einem Weg-Gang wieder triggern (Flanken-Logik, siehe slalomHitPoll).
   if (colorCheck >= 0 && colorCheck < (int8_t)PROG_SENSOR_IR_HIGH) {
@@ -365,6 +440,17 @@ prepPositionMoves(sL * (long)config.leftSign, sR * (long)config.rightSign);
     espNowProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(5));
   }
+  // Nachholen: nur bei normal beendeter Fahrt (kein Farb-Hit, kein Abbruch,
+  // kein Not-Halt - ein Kanten-Stopp gehoert dem Waechter, nicht der Heilung;
+  // dort wuerde Nachfahren in die Kante fahren).
+  // Ein nicht heilbarer Fall MELDET nur, er bricht das Programm NICHT ab:
+  // eine Nachholfahrt, die selbst fehlschlaegt, wurde als Stopp-Signal
+  // missverstanden und hat Programme mitten in der Strecke beendet.
+  if (!colorHit && gameAllowsMotorRun() && !motorEmergencyActive() && msOk) {
+    if (!motorHealMove(physL, physR, msL, msR)) {
+      Serial.println("[PROG] Schrittverlust nicht heilbar - gemeldet, Programm laeuft weiter");
+    }
+  }
   return colorHit;
 }
 
@@ -389,7 +475,6 @@ prepPositionMoves(sL * (long)config.leftSign, sR * (long)config.rightSign);
 //
 // Rueckgabe true = Bedingung hat den Lauf beendet, false = Sicherheitsnetz.
 static bool progDriveUntil(int8_t slot, int16_t targetMM, int32_t maxMM) {
-  // Ohne Bedingung waere das ein "fahr einfach los bis zum Sicherheitsnetz".
   // Bewusst zurueckweisen statt still weiterzufahren - ein Aufruferfehler
   // darf nicht wie ein geplanter Block aussehen.
   if (slot < 0 && targetMM <= 0) {
@@ -424,7 +509,12 @@ static bool progDriveUntil(int8_t slot, int16_t targetMM, int32_t maxMM) {
   Serial.printf("[PROG] fahre bis %s (Sicherheitsnetz: %.1f m / %lu s)\n",
                 was, (double)((float)maxMM / 1000.0f), (unsigned long)PROG_DRIVE_UNTIL_MAX_MS);
 
-  setMotorSpeeds(FIXED_DRIVE_SPEED, FIXED_DRIVE_SPEED, true);   // beide Seiten, eine Rampe
+  // Eine Fahrt, beide Seiten, eine Rampe - exakt der Pfad wie vor dem
+  // Tempo-Deckel-Versuch. Der Deckel wurde zurueckgenommen: er brauchte eine
+  // eigene Motor-API, die die Vorzeichen der Verdrahtung je Rad umgehen
+  // musste, und genau dabei ist die Verdahtung (leftSign != rightSign) auf
+  // dem Weg verloren gegangen.
+  setMotorSpeeds(FIXED_DRIVE_SPEED, FIXED_DRIVE_SPEED, true);
   for (;;) {
     if (!gameAllowsMotorRun()) break;
     const uint32_t now = millis();
@@ -601,6 +691,10 @@ static bool progExecSimple(uint8_t op, int16_t val, int8_t colorCheck) {
       vTaskDelay(pdMS_TO_TICKS(150));
       return false;
     }
+    case OP_SPEED: {
+      progSpeedSet(val);
+      return false;
+    }
     case OP_WAIT: {
       if (val < 0) {
         // Bedingtes Warten: bis Sensor == target (|val|-1), Farbe oder Distanz (4/5)
@@ -661,6 +755,7 @@ static int16_t clampVal(uint8_t op, long v) {
     case OP_WAIT_FREE:              lo = 10;  hi = 1500;  break; // mm
     case OP_PAUSE:                  lo = 1;   hi = 30;    break; // x 100 ms
     case OP_LED:                    lo = 0;   hi = 6;     break; // Slot
+    case OP_SPEED:                  lo = (long)SPEED_MM_S_MIN; hi = (long)SPEED_MM_S_MAX; break; // mm/s
     default: break;
   }
   if (v < lo) v = lo;
@@ -685,6 +780,7 @@ static bool opFromChar(char c, uint8_t& op) {
     case 'S': op = OP_LED;        return true;
     case 'Z': op = OP_PAUSE;      return true;
     case 'Q': op = OP_STOP;       return true;
+    case 'T': op = OP_SPEED;      return true;
     default: return false;
   }
 }
@@ -1008,6 +1104,7 @@ void progRun() {
   progActive = true;
   currentGame = GAME_PROG;
   colorPollReset();
+  progSpeedSave();   // T-Block-Tempo gilt nur bis Programmende
   sendStatus("PROG:RUNNING");
   Serial.printf("[PROG] Start, %u Instruktionen\n", progLen);
 
@@ -1020,6 +1117,7 @@ void progRun() {
   progExecRange(0, progLen, ctx);
 
   stopMotors(); speedL = 0; speedR = 0;
+  progSpeedRestore();
   const bool aborted = (currentGame != GAME_PROG);
   progActive = false;
   currentGame = GAME_NONE;
@@ -1071,6 +1169,7 @@ void progRunSlalom(const char* targetColor) {
   progActive = true;
   currentGame = GAME_SLALOM;
   colorPollReset();
+  progSpeedSave();   // T-Block-Tempo gilt nur bis Programmende
   char msg[48];
   snprintf(msg, sizeof(msg), "SLALOM:TARGET:%s", targetColor ? targetColor : "ROT");
   sendStatus(msg);
@@ -1088,12 +1187,13 @@ void progRunSlalom(const char* targetColor) {
   ctx.defaultColor = (int8_t)targetIdx;   // F/B ohne eigenes Ziel -> Slalomziel
   progExecRange(0, progLen, ctx);
 
-  if (slalomFinished) return;              // Ziel wurde im Executor erreicht
+  if (slalomFinished) { progSpeedRestore(); return; }  // Ziel wurde im Executor erreicht
 
   // Programmende ohne Treffer: nicht gewonnen, Runde weiter
   stopMotors(); speedL = 0; speedR = 0;
   progActive = false;
   currentGame = GAME_NONE;
+  progSpeedRestore();
   sendStatus("SLALOM:DONE");
   Serial.println("[SLALOM] Programmende ohne Treffer");
 }
@@ -1103,6 +1203,7 @@ void progStop() {
   progActive = false;
   currentGame = GAME_NONE;   // laufende Bewegungen brechen selbst ab
   stopMotors(); speedL = 0; speedR = 0;
+  progSpeedRestore();
   sendStatus("PROG:ABORT");
   Serial.println("[PROG] Stop angefordert");
 }

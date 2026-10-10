@@ -73,6 +73,7 @@ static uint32_t colorByName(const char* name) {
   if (strcasecmp(name, "BLAU") == 0)    return ledStrip.Color(0, 0, 255);
   if (strcasecmp(name, "WEISS") == 0)   return ledStrip.Color(255, 255, 255);
   if (strcasecmp(name, "SCHWARZ") == 0) return ledStrip.Color(0, 0, 0);
+  if (strcasecmp(name, "BODEN") == 0)   return ledStrip.Color(40, 40, 40);
   // S-Block Slots 4/5: Distanz-Anzeige (NAH/FREI), siehe ProgGame.h.
   if (strcasecmp(name, "NAH") == 0)     return ledStrip.Color(180, 0, 0);
   if (strcasecmp(name, "FREI") == 0)    return ledStrip.Color(0, 180, 0);

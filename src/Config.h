@@ -167,16 +167,19 @@ constexpr float MAX_DRIVE_STEPS_S = 20000.0f;
 //    32 Microsteps ->  53,1 Schritte/mm -> bei 240 mm/s  12'738 Schritte/s  ok
 //    16 Microsteps ->  26,5 Schritte/mm -> bei 240 mm/s   6'369 Schritte/s  ok
 //
-// Oberhalb von 32 bekommt der Motor nur jeden fuenften Puls. Er dreht dann
-// nicht, sondern pfeift: SpreadCycle baut bei so sporadischen Pulsen kein
-// Drehmoment auf. Genau das ist passiert, als die NVS 256 Microsteps
-// gespeichert hatte - der Roboter fuhr erst, nachdem per TMC:MS: ein
-// fahrbarer Wert gesetzt wurde.
+// Oberhalb von 32 braucht dasselbe Tempo deutlich mehr Schritte/s und
+// kann ueber MAX_DRIVE_STEPS_S landen. Dann wuerde der Motor nur jeden
+// x-ten Puls bekommen und pfeifen statt drehen (gemessen). Deshalb wird
+// das Tempo in Edu_V2.cpp (SPEED:/TMC:MS:) auf die Puls-Task-Grenze
+// gekappt - Anzeige == Realitaet. 256 bleibt waehlbar, faehrt dann
+// einfach langsamer.
 //
-// Deshalb wird die Microstep-Zahl beim Booten und beim Setzen geprueft und
-// notfalls auf MICROSTEPS_MAX abgesenkt. Wer feinere Aufloesung braucht,
-// zahlt sie mit Tempo, und das ist eine bewusste Entscheidung im UI.
-constexpr uint16_t MICROSTEPS_MAX = 32;
+// Erlaubte Microstep-Zahl: 1..256 (alle Zweierpotenzen). Feine Werte
+// brauchen bei gleichem Tempo mehr Schritte/s (siehe Tabelle oben) - das
+// Tempo wird deshalb in Edu_V2.cpp (SPEED:/TMC:MS:) auf
+// MAX_DRIVE_STEPS_S/configStepsPerMM() gekappt, Anzeige == Realitaet.
+// Wer 256 will, bekommt 256 - faehrt dann aber langsamer.
+constexpr uint16_t MICROSTEPS_MAX = 256;
 
 // Schritte inkl. Microsteps fuer eine Anzahl VOLLschritte. Das ist die
 // praezise Form des Fahrens: der Motor zaehlt seine eigenen Vollschritte.
@@ -272,6 +275,16 @@ struct Config {
   ColorRef calGelb;
   ColorRef calGruen;
   ColorRef calBlau;
+  // Tischkanten-Waechter: dauerhaft gespeichert (NVS "edgeGuard", per
+  // EDGE:ON / EDGE:OFF aus den Einstellungen). true = gilt in allen Modi.
+  bool edgeGuard = true;
+  // Boden-Referenz: wird bei jedem BLE-Verbinden automatisch aus dem
+  // Farbsensor unter dem Roboter gelernt (Farbe + Helligkeit). Gilt als
+  // "Boden": Kante = deutlich dunkler als floorC, Farbe BODEN nur wenn
+  // keine eingelernte CAL-Referenz passt (Farben stehen hoeher als Boden).
+  uint8_t floorR = 0, floorG = 0, floorB = 0;
+  uint16_t floorC = 0;
+  bool floorCalibrated = false;
 };
 
 extern Config config;

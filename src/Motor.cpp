@@ -257,15 +257,13 @@ bool s_enabled = false;
 volatile unsigned long s_lastMotionMs = 0;
   bool s_msConfirmed = false;
 
-  // Erlaubt sind nur Zweierpotenzen - und hoechstens MICROSTEPS_MAX (Config.h).
-  //
-  // Die Obergrenze ist kein Wunsch, sondern eine Rechnung: der 50-us-Puls-Task
-  // schafft 20 000 Schritte/s. Bei 38-mm-Rad und 256 Microsteps braucht
-  // 240 mm/s aber 101 902 Schritte/s. Der Motor bekaeme jeden fuenften Puls
-  // und pieifte, statt zu drehen (gemessen auf dem Roboter). 32 Microsteps
-  // passen mit 12 738 Schritte/s, 64 brauchen schon 25 476.
+  // Erlaubt sind alle Zweierpotenzen 1..256. Feine Werte brauchen mehr
+  // Schritte/s pro mm - das Tempo wird in Edu_V2.cpp (SPEED:/TMC:MS:)
+  // auf MAX_DRIVE_STEPS_S/configStepsPerMM() gekappt, damit Anzeige ==
+  // Realitaet gilt. 256 ist damit bei langsamem Tempo fahrbar.
   bool validMicrosteps(uint16_t v) {
-    return v == 1 || v == 2 || v == 4 || v == 8 || v == 16 || v == 32;
+    return v == 1 || v == 2 || v == 4 || v == 8 || v == 16 || v == 32 ||
+           v == 64 || v == 128 || v == 256;
   }
 
   uint8_t mresCodeFor(uint16_t ms) {
@@ -955,6 +953,12 @@ static void setMotorSpeedLocked(int motorIdx, float speed, bool useRamp) {
 
 void setMotorSpeed(int motorIdx, float speed, bool useRamp) {
   if (!motorReady) return;   // siehe motorReady
+  // NUR bei echter Anfahrt wecken. Ein Stillstands-Befehl (speed == 0) darf
+  // die Treiber NICHT aufwecken - sonst rekonfiguriert der Roboter nach
+  // jedem Auto-Standby seine Treiber erneut, nur weil driveUpdate() alle
+  // 50 ms einmal (0,0) meldet. Das war ein Dauerzustand: EN immer an,
+  // Dauergeräusch, blockierte Main-Loop.
+  if (speed != 0.0f) motorWakeDrivers();
   // Fail-Safe: nachhaken, statt das Ziel stillschweigend zu verwerfen.
   // Der Mutex wird alle 50 us vom Motor-Task genommen. Ein still verworfenes
   // Ziel ist genau der Fehler "ein Motor faehrt erst spaeter los als der
@@ -970,6 +974,8 @@ void setMotorSpeed(int motorIdx, float speed, bool useRamp) {
 
 void setMotorSpeeds(float speedL, float speedR, bool useRamp) {
   if (!motorReady) return;   // siehe motorReady
+  // Siehe setMotorSpeed(): wecken nur, wenn wirklich gefahren wird.
+  if (speedL != 0.0f || speedR != 0.0f) motorWakeDrivers();
   // EIN Mutex-Halt fuer beide Seiten - das ist der ganze Punkt dieser
   // Funktion. Zwei einzelne Aufrufe haetten dazwischen den Mutex wieder
   // freigegeben, und genau in diesem Fenster bekommen die Raeder
@@ -1036,6 +1042,79 @@ bool motorSyncMicrosteps() {
   return true;
 }
 
+// ---- MSCNT-Pruefung + Nachholen (Schrittverlust-Heilung) ----
+// Gueltig nur auf Core 1 (Loop/Befehle): UART, kein Mutex - wie die Diagnose
+// (der Puls-Task fasst UART nie an).
+bool motorMscntSnapshot(uint16_t& msL, uint16_t& msR) {
+  if (!motorReady || !s_enabled) return false;
+  msL = (uint16_t)(tmcL.read(TMC_REG_MSCNT) & 0x03FFu);
+  msR = (uint16_t)(tmcR.read(TMC_REG_MSCNT) & 0x03FFu);
+  return true;
+}
+
+// Fehlende MSCNT-Counts: (erwartet - gemessen) mod 1024. 0 = alles da.
+// Werte >512 sind mehrdeutig (Unter- vs. Ueberschuss nicht trennbar).
+static uint32_t mscntShortCounts(uint16_t before, uint16_t after, uint32_t expCounts) {
+  const uint32_t meas = ((uint32_t)after - (uint32_t)before) & 1023u;
+  return (expCounts - meas) & 1023u;
+}
+
+bool motorHealMove(int32_t cmdL, int32_t cmdR, uint16_t beforeL, uint16_t beforeR) {
+  if (!motorReady || !s_enabled) return true;   // Standby: nichts pruefbar, kein Fehler
+  // Counts pro STEP-Puls: 256/Microsteps (MRES-Tabelle: 256->1, 16->16, 1->256).
+  // s_microsteps ist immer aus {1,2,4,8,16,32}, die Division geht exakt auf.
+  const uint32_t perStep = 256u / (uint32_t)s_microsteps;
+  uint16_t aL, aR;
+  if (!motorMscntSnapshot(aL, aR)) return true;
+  const uint32_t expL = (uint32_t)labs(cmdL) * perStep;
+  const uint32_t expR = (uint32_t)labs(cmdR) * perStep;
+  const uint32_t shortL = mscntShortCounts(beforeL, aL, expL);
+  const uint32_t shortR = mscntShortCounts(beforeR, aR, expR);
+  if (shortL == 0 && shortR == 0) return true;   // Normalfall: verifiziert, kein Log
+  if (shortL > 512 || shortR > 512) {
+    Serial.printf("[STEP] Mehrdeutig (fehlen L=%lu R=%lu Counts) - nichts nachgeholt\n",
+                  (unsigned long)shortL, (unsigned long)shortR);
+    return false;
+  }
+  // In ganze Schritte, Original-Richtung. Nicht durch perStep teilbar =
+  // krummer Stand (z.B. MRES-Wechsel mitten in der Fahrt): aufgerundet +
+  // unten vermerkt, sonst fehlte der Rest ewig.
+  const int32_t stepsL = (int32_t)((shortL + perStep - 1u) / perStep);
+  const int32_t stepsR = (int32_t)((shortR + perStep - 1u) / perStep);
+  const int32_t fixL = (cmdL >= 0 ? stepsL : -stepsL);
+  const int32_t fixR = (cmdR >= 0 ? stepsR : -stepsR);
+  Serial.printf("[STEP] L=%ld R=%ld Schritte fehlen - hole nach\n",
+                (long)stepsL, (long)stepsR);
+  sendStatus("PROG:STEPFIX");
+  // KEINE Treiber-Rekonfiguration hier. Eine Rekonfiguration mitten im
+  // Betrieb (GCONF/CHOPCONF/IHOLD_IRUN neu, ~30 UART-Transaktionen) erzeugt
+  // ein hörbares Umschalten und war zusammen mit dem Leerlauf-Wake der Grund
+  // fuer das Dauergeräusch. Stattdessen wird die Basis einfach neu gelesen -
+  // was den Zaehler auch versetzt haben mag, gilt fuer die Nachholfahrt als
+  // Ausgangslage.
+  uint16_t mL, mR;
+  if (!motorMscntSnapshot(mL, mR)) return false;
+  const uint32_t fixCL = (uint32_t)labs(fixL) * perStep;
+  const uint32_t fixCR = (uint32_t)labs(fixR) * perStep;
+  prepPositionMoves(fixL, fixR);
+  const uint32_t t0 = millis();
+  while (motorStillRunning() && millis() - t0 < 2 * MOTOR_SYNC_MAX_MS) {
+    bleProcessEvents();
+    esp_task_wdt_reset();
+    vTaskDelay(pdMS_TO_TICKS(1));
+  }
+  if (motorStillRunning()) { stopMotors(); return false; }
+  uint16_t nL, nR;
+  if (!motorMscntSnapshot(nL, nR)) return false;
+  // Exakt: Counts sind digital, Toleranz gibt es keine.
+  if (mscntShortCounts(mL, nL, fixCL) == 0 && mscntShortCounts(mR, nR, fixCR) == 0) {
+    Serial.println("[STEP] Nachgeholt + verifiziert");
+    return true;
+  }
+  Serial.println("[STEP] Nachholen schlug fehl");
+  return false;
+}
+
 // Both wheels onto the same microstep index. See Motor.h for the why.
 void stopMotors() {
      // Fail-Safe wie beim Stopp-Zweig in setMotorSpeed(): ein Stopp darf nie
@@ -1090,6 +1169,7 @@ static void prepPositionMoveLocked(int motorIdx, long physicalSteps);
 
 void prepPositionMove(int motorIdx, long physicalSteps) {
   if (!motorReady) return;   // siehe motorReady
+  if (physicalSteps != 0) motorWakeDrivers();   // siehe setMotorSpeed()
   if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
     prepPositionMoveLocked(motorIdx, physicalSteps);
     xSemaphoreGive(motorMutex);
@@ -1098,6 +1178,7 @@ void prepPositionMove(int motorIdx, long physicalSteps) {
 
 void prepPositionMoves(long stepsL, long stepsR) {
   if (!motorReady) return;   // siehe motorReady
+  if (stepsL != 0 || stepsR != 0) motorWakeDrivers();   // siehe setMotorSpeed()
   // EIN Mutex-Halt fuer beide Seiten - siehe Kommentar in Motor.h. Reihenfolge
   // links zuerst wie bisher, damit sich nichts am Ablauf aendert.
   if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
@@ -1522,6 +1603,17 @@ void tmcEnable() {
   if (wasOff) tmcEnsureConfigured();
 }
 
+// Treiber vor dem Mutex-Halt aufwecken - aber NUR wenn wirklich gefahren werden
+// soll. Reihenfolge, Timing und Sicherheitsregeln siehe Motor.h.
+void motorWakeDrivers() {
+  if (!motorReady) return;   // siehe motorReady
+  if (!s_enabled) tmcEnable();
+}
+
+// Auskommentiert gehalten: der Wetter-koennte-es-besser-wissen-Helfer wird
+// nicht gebraucht, weil die Wrapper die Null-Pruefung selbst machen (siehe
+// Kommentar dort).
+
 void tmcDisable() {
   stopMotors();
   digitalWrite(PIN_EN, HIGH);
@@ -1619,6 +1711,19 @@ bool tmcSetMicrosteps(uint16_t ms) {
 }
 
 void tmcSetSpreadCycle(bool spread) {
+  // Moduswechsel NUR im Stillstand. GCONF.EN_SPREADCYCLE wird mitten in einer
+  // Fahrt gesetzt -> beide Treiber schalten ihre Chopper-Art um, was einen
+  // kurzen Drehmoment- und Drehzahl-Einbruch von mehreren Millisekunden
+  // bedeutet (gemessen ~10 ms Stillstand). Und motorSyncMicrosteps() waere
+  // wirkungslos, weil es bei laufenden Motoren bewusst zurueckkehrt - die
+  // Raeder stuenden danach mitten in der Fahrt in verschiedenen Mikroschritt-
+  // Phasen. Beides ist vermeidbar: der Aufrufer (Web-UI/Serial) bekommt statt
+  //dessen eine klare Ablehnung und kann es im Stillstand wiederholen.
+  if (motorStillRunning() || fabsf(s_curL) > 0.0f || fabsf(s_curR) > 0.0f) {
+    Serial.println("[TMC] Moduswechsel abgelehnt - Roboter faehrt. Erst anhalten, dann wechseln.");
+    sendStatus("TMC:BUSY");
+    return;
+  }
   s_spread = spread;
   tmcEnable();                 // GCONF aendert den EN-Zustand nicht, aber der
                                // Moduswechsel ist der Moment, an dem beide

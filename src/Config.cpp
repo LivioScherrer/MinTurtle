@@ -35,6 +35,10 @@ void configLoad() {
                   "setze %u\n", config.tmcMicrosteps, MICROSTEPS_MAX,
                   (unsigned)MICROSTEPS_MAX);
     config.tmcMicrosteps = MICROSTEPS_MAX;
+    // Gekappten Wert zurueckschreiben, sonst laege bei jedem Boot wieder der
+    // unbrauchbare Wert im NVS und RAM/NVS liefen dauerhaft auseinander
+    // (dieselbe Verwirrung wie ein uebrig gebliebener Alt-Wert).
+    prefs.putUShort("tmcMS", config.tmcMicrosteps);
   }
 
   // Einlernung in mm/Grad. Signatur nur aus Motor + Rad: Microsteps sind
@@ -96,6 +100,14 @@ void configLoad() {
   config.calBlau.g     = prefs.getUChar("calBlauG", 53);
   config.calBlau.b     = prefs.getUChar("calBlauB", 104);
   config.calBlau.calibrated   = prefs.getBool("calBlauSet", true);
+  // Tischkanten-Waechter (dauerhaft) + Boden-Referenz (Auto-Lernen bei Connect).
+  config.edgeGuard      = prefs.getBool("edgeGuard", true);
+  config.floorR         = prefs.getUChar("floorR", 0);
+  config.floorG         = prefs.getUChar("floorG", 0);
+  config.floorB         = prefs.getUChar("floorB", 0);
+  config.floorC         = prefs.getUShort("floorC", 0);
+  config.floorCalibrated = prefs.getBool("floorSet", false);
+  if (config.floorCalibrated && config.floorC == 0) config.floorCalibrated = false;
   // Schutz: zu kleine white-Werte -> default Kalibrierung
   if (config.whiteR < 200 || config.whiteG < 200 || config.whiteB < 200) {
     config.blackR = 152; config.blackG = 137; config.blackB = 98;
@@ -157,11 +169,20 @@ void configValidate() {
   if (!inRange(config.driveSpeedMM, SPEED_MM_S_MIN, SPEED_MM_S_MAX)) {
     config.driveSpeedMM = 150.0f; changed = true;
   }
+  // Puls-Task-Grenze (siehe SPEED: in Edu_V2.cpp): ein gespeichertes Tempo
+  // muss an den geladenen Microsteps erreichbar sein, sonst stuende nach dem
+  // Boot eine Zahl da, die der Roboter nie faehrt.
+  if (config.driveSpeedMM > MAX_DRIVE_STEPS_S / configStepsPerMM()) {
+    config.driveSpeedMM = floorf(MAX_DRIVE_STEPS_S / configStepsPerMM());
+    changed = true;
+  }
   // Rampe und Anlaufdrehung: 0 ist bei beiden ein gueltiger Wert ("aus"),
   // deshalb hier UND statt < MIN || > MAX. Die Grenzen muessen mit
   // RAMP_MS_MIN/MAX bzw. SPIN_*_MIN/MAX in Config.h uebereinstimmen -
   // sonst waere ein per altem Build gespeicherter Wert weiterhin gueltig und
   // die Grenze nur im UI, nicht in der Firmware.
+  // Alle drei (Modus/Rampe/Spin) sind in den Einstellungen einstellbar
+  // und werden hier nur auf Gueltigkeit geprueft, nicht zwangsfixiert.
   if (config.rampMs < RAMP_MS_MIN || config.rampMs > RAMP_MS_MAX) {
     config.rampMs = RAMP_MS_DEFAULT; changed = true;
   }
@@ -204,10 +225,12 @@ void configValidate() {
   }
   // Der Motorstrom wird hier nicht mehr validiert: er steht fest in Motor.h
   // (TMC_CURRENT_MA_FIXED = 200 mA) und hat kein NVS-Feld mehr. Die
-  // Microstep-Zahl dagegen bleibt einstellbar und wird hier geprueft.
+  // Microstep-Zahl dagegen bleibt einstellbar (1..256) und wird hier geprueft.
   if (config.tmcMicrosteps != 1 && config.tmcMicrosteps != 2 &&
       config.tmcMicrosteps != 4 && config.tmcMicrosteps != 8 &&
-      config.tmcMicrosteps != 16 && config.tmcMicrosteps != 32) {
+      config.tmcMicrosteps != 16 && config.tmcMicrosteps != 32 &&
+      config.tmcMicrosteps != 64 && config.tmcMicrosteps != 128 &&
+      config.tmcMicrosteps != 256) {
     // Ungueltige Microsteps -> Default. Abhaengige Schrittzahlen werden
     // nirgends gespeichert, also gibt es hier nichts mitzuziehen.
     config.tmcMicrosteps = 16;

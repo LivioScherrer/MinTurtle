@@ -144,6 +144,52 @@ void gameStop(uint32_t ms) {
   gameMoveBusy = false;
 }
 
+static void waitForStepsDone(bool bAbortOnNoGame);   // Definition weiter unten
+
+// ===================== Schrittverlust in Spiel-/Quiz-Fahrten =====================
+// Ein Helper fuer ALLE positionsbasierten Fahrten ausserhalb der Code-Bausteine
+// (Quiz, Memory, Rennen, Test-Helper). Reihenfolge wie im Code-Baustein-Pfad
+// (progMove): Treiber wecken, MSCNT-Basis lesen, fahren, warten, heilen.
+//
+// WICHTIG - drei Regeln, die hier schon einmal falsch waren und den Roboter
+// lahmgelegt haben:
+//  1. Nur bei echter Fahrt wecken und nur dann eine Basis lesen. Ein
+//     0-Schritt-Befehl darf keine Treiberrekonfiguration ausloesen.
+//  2. Nicht heilen, wenn das Spiel beendet wurde oder der Not-Halt steht -
+//     dort gehoert der Halt jemand anderem, und eine Nachholfahrt wuerde
+//     gegen den Abbruch hin faehren.
+//  3. Ein Fehlschlag wird GEMELDET, nicht zum Stopp-Signal: als Abbruch
+//     missverstanden beendete es Spiele mitten in der Strecke.
+static void gameMoveStepsVerified(int32_t physL, int32_t physR,
+                                  bool bAbortOnNoGame, int32_t budgetMs) {
+  uint16_t msL = 0, msR = 0;
+  bool msOk = false;
+  if (physL != 0 || physR != 0) {
+    motorWakeDrivers();   // Treiber vor dem Mutex wecken (UART braucht ihn nicht)
+    msOk = motorMscntSnapshot(msL, msR);
+  }
+  prepPositionMoves(physL, physR);
+  if (budgetMs > 0) {
+    // Eigene Wartevariante mit Zeitbudget (Test-Helper, 5 s wie vorher).
+    const uint32_t start = millis();
+    while (motorStillRunning() && (int32_t)(millis() - start) < budgetMs) {
+      esp_task_wdt_reset();
+      bleProcessEvents();
+      vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
+    }
+    if (motorStillRunning()) stopMotors();
+  } else {
+    waitForStepsDone(bAbortOnNoGame);
+  }
+  // Nur heilen, wenn die Fahrt regulaer endete: bei Spielabbruch, Not-Halt oder
+  // Kantenwaechter-Sperre gehoert das Anhalten jemand anderem, nicht der Heilung.
+  if (msOk && !motorEmergencyActive() && currentGame != GAME_NONE) {
+    if (!motorHealMove(physL, physR, msL, msR)) {
+      Serial.println("[SPIEL] Schrittverlust nicht heilbar");
+    }
+  }
+}
+
 // Wartet, bis beide Stepper stehen. bAbortOnNoGame=true bricht bei
 // Spielabbruch ab (currentGame == GAME_NONE).
 static void waitForStepsDone(bool bAbortOnNoGame) {
@@ -181,9 +227,8 @@ static void waitForStepsDone(bool bAbortOnNoGame) {
 // Beruecksichtigt config.leftSign/rightSign fuer die Verkabelung.
 void gameDriveForwardSteps(int32_t steps) {
   gameMoveBusy = true;
-  prepPositionMoves(steps * static_cast<long>(config.leftSign),
-                    steps * static_cast<long>(config.rightSign));
-  waitForStepsDone(true);
+  gameMoveStepsVerified(steps * static_cast<long>(config.leftSign),
+                        steps * static_cast<long>(config.rightSign), true, 0);
   gameMoveBusy = false;
 }
 
@@ -193,24 +238,16 @@ void gameDriveForwardSteps(int32_t steps) {
 void gameDriveBackwardSteps(int32_t steps) {
   if (steps < 0) steps = -steps;
   gameMoveBusy = true;
-  prepPositionMoves(-(long)steps * (long)config.leftSign,
-                    -(long)steps * (long)config.rightSign);
-  waitForStepsDone(true);
+  gameMoveStepsVerified(-(long)steps * (long)config.leftSign,
+                        -(long)steps * (long)config.rightSign, true, 0);
   gameMoveBusy = false;
 }
 
 // Test-Helper: fahre n Schritte ohne currentGame-Abhaengigkeit, mit Timeout.
 // Wird vom STEPS:-Befehl genutzt, um den richtigen Wert fuer 3cm zu finden.
 void testDriveSteps(int32_t steps) {
-  prepPositionMoves(steps * static_cast<long>(config.leftSign),
-                    steps * static_cast<long>(config.rightSign));
-  uint32_t start = millis();
-  while (motorStillRunning() && millis() - start < 5000) {
-    esp_task_wdt_reset();
-    bleProcessEvents();
-    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
-  }
-  if (motorStillRunning()) stopMotors();
+  gameMoveStepsVerified(steps * static_cast<long>(config.leftSign),
+                        steps * static_cast<long>(config.rightSign), false, 5000);
 }
 
 // Positionsbasierte Drehung auf der Stelle: beide Motoren bekommen
@@ -225,9 +262,8 @@ static void gameTurnSteps(int32_t steps, bool bLeft) {
   gameMoveBusy = true;
   const long l = bLeft ? -steps : steps;
   const long r = bLeft ? steps : -steps;
-  prepPositionMoves(l * static_cast<long>(config.leftSign),
-                    r * static_cast<long>(config.rightSign));
-  waitForStepsDone(true);
+  gameMoveStepsVerified(l * static_cast<long>(config.leftSign),
+                        r * static_cast<long>(config.rightSign), true, 0);
   gameMoveBusy = false;
 }
 
@@ -236,15 +272,8 @@ void gameTurnRightSteps(int32_t steps) { gameTurnSteps(steps, false); }
 
 // Test-Helper: drehe auf der Stelle (rechts) um 'steps' Schritte pro Rad.
 void testTurnSteps(int32_t steps) {
-  prepPositionMoves( steps * static_cast<long>(config.leftSign),
-                    -steps * static_cast<long>(config.rightSign));
-  uint32_t start = millis();
-  while (motorStillRunning() && millis() - start < 5000) {
-    esp_task_wdt_reset();
-    bleProcessEvents();
-    vTaskDelay(pdMS_TO_TICKS(GAME_TICK_MS));
-  }
-  if (motorStillRunning()) stopMotors();
+  gameMoveStepsVerified( steps * static_cast<long>(config.leftSign),
+                        -steps * static_cast<long>(config.rightSign), false, 5000);
 }
 
 // =====================================================
@@ -410,6 +439,34 @@ void onBleConnected() {
   deviceConnected = true;
   lastCommandTime = millis();
   Serial.println("[BLE] Verbunden");
+  // Boden-Auto-Lernen: Untergrund unter dem Roboter wird als "Boden"
+  // gespeichert (Farbe + Helligkeit). Der Roboter steht beim Verbinden auf
+  // dem Tisch - genau dort soll die Referenz herkommen. Nur bei gueltiger
+  // Messung (Sensor lebt, genug Licht = kein Abgrund): sonst bleibt der
+  // alte Boden erhalten.
+  edgeGuardReset();
+  motorReleaseEmergency();
+  if (colorSensorOk) {
+    uint16_t rR = 0, rG = 0, rB = 0, rC = 0;
+    int cR = 0, cG = 0, cB = 0;
+    bool have = false;
+    if (colorSem && xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) == pdTRUE) {
+      rR = rawSensorR; rG = rawSensorG; rB = rawSensorB; rC = rawSensorC;
+      cR = sensorR; cG = sensorG; cB = sensorB;
+      have = true;
+      xSemaphoreGive(colorSem);
+    }
+    // Mindest-Helligkeit 150: darunter ist es Abgrund (85..124), kein Boden.
+    if (have && rC >= 150) {
+      floorLearn((uint8_t)constrain(cR, 0, 255), (uint8_t)constrain(cG, 0, 255),
+                 (uint8_t)constrain(cB, 0, 255), rC);
+      char fb[64];
+      snprintf(fb, sizeof(fb), "FLOOR=%d,%d,%d,%u", cR, cG, cB, (unsigned)rC);
+      sendStatus(fb);
+    } else {
+      Serial.println("[BODEN] keine gueltige Messung beim Verbinden - alter Boden bleibt");
+    }
+  }
   sendStatus("EduBot V2 bereit");
 }
 
@@ -511,26 +568,28 @@ static bool cmdDist(const String& cmd) {
   if (cmd == "DISTAUTO:ON") { distSetAuto(true); sendStatus("DISTAUTO:ON"); return true; }
   if (cmd == "DISTAUTO:OFF") { distSetAuto(false); sendStatus("DISTAUTO:OFF"); return true; }
 
-  // Tischkanten-Schwellen fuer die Anzeige in EDGE?. Die WAECHTER-LOGik und
-  // damit die Wahrheit liegt in ProgGame.cpp (EDGE_RAW_C_MAX,
-  // EDGE_RAW_C_RELEASE, EDGE_CONFIRM_N, edgeGuardTick). Hier nur gespiegelt.
-constexpr uint16_t EDGE_RAW_C_MAX_DISP    = 300;   // darunter = Kante
-constexpr uint16_t EDGE_RAW_C_RELEASE_DISP = 400;  // darueber = wieder frei
+  // Tischkanten-Schwellen fuer die Anzeige in EDGE?. Die WAECHTER-LOGIK und
+  // damit die Wahrheit liegt in ProgGame.cpp (edgeGuardMaxNow(),
+  // edgeGuardReleaseNow(), edgeGuardTick). Hier keine Konstanten mehr:
+  // EDGE? meldet die boden-adaptiven Live-Werte.
 
   // Tischkanten-Waechter. Der Sensor sitzt nach unten; ueber der Kante faellt
   // die Gesamthelligkeit auf fast 0, zwei Messungen in Folge -> sofortiger Halt.
-  // Standardmaessig EINGESCHALTET (config.edgeGuard, NVS-Schluessel "edgeGuard").
-  // Ausgeschaltet wird er nur in den Farbsensor-Einstellungen der Web-UI.
+  // Per EDGE:ON / EDGE:OFF aus den Einstellungen, dauerhaft im NVS
+  // (config.edgeGuard). Eingeschaltet gilt er in ALLEN Modi: der Sensor-Task
+  // laeuft unabhaengig (freies Fahren, Position, Blockprogramm, Linie, Spiele).
+  // Der Boden (Farbe + Helligkeit) wird bei jedem Verbinden automatisch
+  // gelernt: Kante = deutlich dunkler als Boden, Bodenfarbe = BODEN
+  // (Farben/CAL-Referenzen stehen hoeher als der Boden).
   if (cmd == "EDGE:ON") {
     edgeGuardSet(true);
     sendStatus("EDGE:ON");
     return true;
   }
-  // EDGE:OFF gibt es nicht mehr: der Wächter ist immer an. Abgelehnt statt
-  // ignoriert, damit eine alte Web-UI eine klare Antwort bekommt.
   if (cmd == "EDGE:OFF") {
-    sendStatus("EDGE:ALWAYS_ON");
-    Serial.println("[KANTE] EDGE:OFF abgelehnt - der Wächter ist immer an");
+    edgeGuardSet(false);
+    sendStatus("EDGE:OFF");
+    Serial.println("[KANTE] Waechter ausgeschaltet (NVS) - gilt in keinem Modus");
     return true;
   }
   if (cmd == "EDGE:RESET") {
@@ -548,9 +607,22 @@ constexpr uint16_t EDGE_RAW_C_RELEASE_DISP = 400;  // darueber = wieder frei
     sendStatus(eb);
     Serial.printf("[KANTE] %s | Clear=%u (Kante < %u, frei ab %u) | Rot=%u%s\n",
                   edgeGuardActive() ? "aktiv" : "aus",
-                  (unsigned)rawSensorC, (unsigned)EDGE_RAW_C_MAX_DISP,
-                  (unsigned)EDGE_RAW_C_RELEASE_DISP, (unsigned)rawSensorR,
+                  (unsigned)rawSensorC, (unsigned)edgeGuardMaxNow(),
+                  (unsigned)edgeGuardReleaseNow(), (unsigned)rawSensorR,
                   motorEmergencyActive() ? " | NOT-HALT aktiv" : "");
+    return true;
+  }
+  // Boden-Referenz abfragen: FLOOR=<gesetzt 0|1>,<R>,<G>,<B>,<Clear>.
+  if (cmd == "FLOOR?") {
+    char fb[64];
+    snprintf(fb, sizeof(fb), "FLOOR=%u,%u,%u,%u,%u",
+             config.floorCalibrated ? 1u : 0u, config.floorR, config.floorG,
+             config.floorB, (unsigned)config.floorC);
+    sendStatus(fb);
+    Serial.printf("[BODEN] %s rgb(%u,%u,%u) Clear=%u\n",
+                  config.floorCalibrated ? "gesetzt" : "keiner",
+                  config.floorR, config.floorG, config.floorB,
+                  (unsigned)config.floorC);
     return true;
   }
   // Diagnose: kompakte Zeile nach BLE + ausfuehrlicher Status auf Serial.
@@ -947,24 +1019,56 @@ static bool cmdTmc(const String& cmd) {
       // bereits selbst - und zwar VOR dem Readback, mit Rollback bei
       // Misserfolg. Hier steht deshalb nur noch das Persistieren.
       configSaveUShort("tmcMS", config.tmcMicrosteps);
+      // Tempo nachziehen: feinere Steps brauchen mehr Schritte/s pro mm.
+      // Wuerde das gespeicherte Tempo die Puls-Task-Grenze reissen, stuende
+      // eine Zahl da, die der Roboter nicht faehrt - also kappen (Anzeige ==
+      // Realitaet). Die Web-UI fragt nach TMC:MS= eh SPEED? und zeigt den
+      // gekappten Wert; hier kommt er zusaetzlich sofort.
+      const float maxReachMS = MAX_DRIVE_STEPS_S / configStepsPerMM();
+      if (config.driveSpeedMM > maxReachMS) {
+        config.driveSpeedMM = floorf(maxReachMS);
+        configSaveField("driveSpeed", config.driveSpeedMM);
+        motorUpdateSpeeds();
+        Serial.printf("[SPEED] Tempo auf %.0f mm/s gekappt (%u Microsteps)\n",
+                      (double)config.driveSpeedMM, config.tmcMicrosteps);
+      }
       Serial.printf("[GEO] %u Microsteps: %.1f mm = %ld Schritte, %.1f Grad = %ld Schritte\n",
                     config.tmcMicrosteps, (double)config.quizForwardMM,
                     (long)configForwardSteps(), (double)config.quizTurnDeg,
                     (long)configTurnSteps());
       snprintf(buf, sizeof(buf), "TMC:MS=%u", tmcGetMicrosteps()); sendStatus(buf);
+      snprintf(buf, sizeof(buf), "SPEED=%.0f,%.0f", (double)config.driveSpeedMM,
+               (double)FIXED_DRIVE_SPEED); sendStatus(buf);
       tmcSendCompactStatus();
     } else {
       sendStatus("TMC:BAD_MS");
     }
     return true;
   }
-  if (cmd == "TMC:MODE:SPREAD") {
-    tmcSetSpreadCycle(true); config.tmcSpread = true; configSaveBool("tmcSpread", true);
-    sendStatus("TMC:MODE=SPREAD"); tmcSendCompactStatus(); return true;
-  }
-  if (cmd == "TMC:MODE:STEALTH") {
-    tmcSetSpreadCycle(false); config.tmcSpread = false; configSaveBool("tmcSpread", false);
-    sendStatus("TMC:MODE=STEALTH"); tmcSendCompactStatus(); return true;
+  // Moduswechsel: tmcSetSpreadCycle() lehnt ab, wenn der Roboter faehrt (siehe
+  // dort). Deshalb wird der neue Wert erst nach der Bestaetigung gesetzt und
+  // gespeichert - sonst wuerde config.tmcSpread von einem abgelehnten Wechsel
+  // falsch gemeldet und beim naechsten Boot wiederhergestellt.
+  if (cmd == "TMC:MODE:SPREAD" || cmd == "TMC:MODE:STEALTH") {
+    const bool want = (cmd == "TMC:MODE:SPREAD");
+    if (tmcSpreadCycle() == want) {
+      sendStatus(want ? "TMC:MODE=SPREAD" : "TMC:MODE=STEALTH");
+      tmcSendCompactStatus();
+      return true;
+    }
+    tmcSetSpreadCycle(want);
+    // Erfolgspruefung ueber den echten Zustand: tmcSetSpreadCycle() kann den
+    // Wechsel verweigert haben (TMC:BUSY gesendet).
+    if (tmcSpreadCycle() != want) {
+      sendStatus("TMC:BUSY");
+      Serial.println("[CMD] Moduswechsel abgelehnt (Roboter faehrt)");
+      return true;
+    }
+    config.tmcSpread = want;
+    configSaveBool("tmcSpread", want);
+    sendStatus(want ? "TMC:MODE=SPREAD" : "TMC:MODE=STEALTH");
+    tmcSendCompactStatus();
+    return true;
   }
   if (cmd == "TMC:EN:1") { tmcEnable(); sendStatus("TMC:EN=1"); tmcSendCompactStatus(); return true; }
   if (cmd == "TMC:EN:0") { tmcDisable(); sendStatus("TMC:EN=0"); tmcSendCompactStatus(); return true; }
@@ -1060,14 +1164,28 @@ static bool cmdSpeed(const String& cmd) {
   if (cmd.startsWith("SPEED:")) {
     float mmS = cmd.substring(6).toFloat();
     if (!inRange(mmS, SPEED_MM_S_MIN, SPEED_MM_S_MAX)) { sendStatus("SPEED:BAD"); return true; }
-    config.driveSpeedMM = mmS;
-    configSaveField("driveSpeed", mmS);
+    // Garantie Anzeige == Realitaet: Der 50-us-Puls-Task schafft
+    // MAX_DRIVE_STEPS_S Schritte/s. Was darueber laege, wuerde stillschweigend
+    // langsamer fahren - dieselbe Zahl stuende, je nach Microsteps kaeme aber
+    // anderes Tempo heraus. Deshalb wird hier gekappt statt schoengetan.
+    // (70 mm/s o.Ae. sind an allen Microsteps 1..32 erreichbar und nie betroffen.)
+    const float maxReach = MAX_DRIVE_STEPS_S / configStepsPerMM();
+    float applied = mmS;
+    if (applied > maxReach) {
+      applied = floorf(maxReach);
+      Serial.printf("[SPEED] %.0f mm/s an %u Microsteps nicht erreichbar "
+                    "(Grenze %.0f mm/s) - auf %.0f gekappt\n",
+                    (double)mmS, config.tmcMicrosteps,
+                    (double)maxReach, (double)applied);
+    }
+    config.driveSpeedMM = applied;
+    configSaveField("driveSpeed", applied);
     motorUpdateSpeeds();
-    snprintf(buf, sizeof(buf), "SPEED=%.0f,%.0f", (double)mmS, (double)FIXED_DRIVE_SPEED);
+    snprintf(buf, sizeof(buf), "SPEED=%.0f,%.0f", (double)applied, (double)FIXED_DRIVE_SPEED);
     sendStatus(buf);
     Serial.printf("[SPEED] %.0f mm/s = %.0f Schritte/s (%u Microsteps)%s\n",
-                  (double)mmS, (double)FIXED_DRIVE_SPEED, config.tmcMicrosteps,
-                  (double)mmS * configStepsPerMM() > MAX_DRIVE_STEPS_S
+                  (double)applied, (double)FIXED_DRIVE_SPEED, config.tmcMicrosteps,
+                  (double)applied * configStepsPerMM() > MAX_DRIVE_STEPS_S
                     ? " - am Puls-Task begrenzt" : "");
     return true;
   }
@@ -1692,12 +1810,12 @@ void setup() {
 
 configLoad();
 
-// Tischkanten-Waechter: immer an, ohne Schalter und ohne NVS. Muss VOR dem
+// Tischkanten-Waechter aus dem NVS (EDGE:ON/OFF, Standard an). Muss VOR dem
   // Start des Farbsensor-Tasks passieren: edgeGuardTick() wird von dort
   // aufgerufen und wuerde sonst die ersten Messungen ignorieren - beim
   // Anfahren direkt nach dem Einschalten waere die Kante genau dann
   // ungeschuetzt, wenn es gefaehrlich wird.
-edgeGuardSet(true);
+edgeGuardSet(config.edgeGuard);
 
 initSteppers();
   Serial.println("[MOTOR] Motor-Task auf Core 0 gestartet (feste Geschwindigkeit, sanftes Anfahren)");
