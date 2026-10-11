@@ -148,8 +148,8 @@ static volatile bool s_emergency = false;
       // motorReady-Check ist hier deshalb nicht noetig (und waere in der
       // 50-us-Schleife auch unnoetiger Overhead).
       //
-      // Not-Halt-Zweig DEAKTIVIERT (Wächter komplett raus): siehe edgeGuardTick.
-      // Der Puls-Task läuft wieder wie vor dem Wächter.
+      // Bewusst kein Not-Halt-Zweig im Puls-Task: der Tischkanten-Waechter
+      // (edgeGuardTick im Sensor-Task) haelt ueber motorEmergencyStop() an.
       if (xSemaphoreTake(motorMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
         // Einmal pro 50-us-Tick lesen, beide Motoren nutzen denselben Wert.
         const bool ramp = s_rampOn;

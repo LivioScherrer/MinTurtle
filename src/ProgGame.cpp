@@ -951,7 +951,7 @@ static int8_t progExecRange(uint8_t from, uint8_t to, ProgCtx ctx) {
     char pathBuf[32];
     pathBuf[0] = '\0';
     for (uint8_t pi = 0; pi < msgPathLen; pi++) {
-      char tmp[4];
+      char tmp[8];
       snprintf(tmp, sizeof(tmp), "%s%u", (pi ? "." : ""), (unsigned)msgPath[pi]);
       strcat(pathBuf, tmp);
     }

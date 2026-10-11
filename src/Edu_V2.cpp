@@ -423,11 +423,11 @@ void onBleConnected() {
   edgeGuardReset();
   motorReleaseEmergency();
   if (colorSensorOk) {
-    uint16_t rR = 0, rG = 0, rB = 0, rC = 0;
+    uint16_t rC = 0;
     int cR = 0, cG = 0, cB = 0;
     bool have = false;
     if (colorSem && xSemaphoreTake(colorSem, pdMS_TO_TICKS(50)) == pdTRUE) {
-      rR = rawSensorR; rG = rawSensorG; rB = rawSensorB; rC = rawSensorC;
+      rC = rawSensorC;
       cR = sensorR; cG = sensorG; cB = sensorB;
       have = true;
       xSemaphoreGive(colorSem);
@@ -824,7 +824,6 @@ static bool cmdDist(const String& cmd) {
 // hat schon einmal die funktionierende Einlernung mit falschen Werten
 // ueberschrieben - das darf nicht wieder passieren.
 static bool cmdCal(const String& cmd) {
-  char buf[48];
   const bool isWrite = (cmd == "CAL:BLACK" || cmd == "CAL:WHITE" ||
                         cmd == "CAL:RED" || cmd == "CAL:YELLOW" ||
                         cmd == "CAL:GREEN" || cmd == "CAL:BLUE");

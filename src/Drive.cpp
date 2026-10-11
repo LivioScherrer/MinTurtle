@@ -172,7 +172,7 @@ void driveDebug(char* out, size_t n) {
   motorStepPositions(posL, posR);
   snprintf(out, n,
     "DRV:keys=%d%d%d%d want=%s spd=%.0f/%.0f fix=%.0f lst=%.0f/%.0f "
-    "pos=%ld/%ld d=%ld lock=%d game=%d cmdAlter=%lums timeout=%ums laeuft=%d "
+    "pos=%ld/%ld d=%ld lock=%d game=%d cmdAlter=%lums timeout=%lums laeuft=%d "
     "sign=%d/%d en=%d",
     keyW, keyA, keyS, keyD, want,
     (double)speedL, (double)speedR, (double)FIXED_DRIVE_SPEED,

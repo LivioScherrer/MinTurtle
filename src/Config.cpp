@@ -114,7 +114,7 @@ void configLoad() {
     config.whiteR = 4143; config.whiteG = 4258; config.whiteB = 3036;
   }
     Serial.printf("[NVS] einlernung: vorwaerts=%.1f mm drehung=%.1f Grad "
-                "tempo=%.0f mm/s tmc=%u/%u/%u/%d geoSig=0x%08lX (soll 0x%08lX)%s\n",
+                "tempo=%.0f mm/s tmc=%u/%u geoSig=0x%08lX (soll 0x%08lX)%s\n",
                 (double)config.quizForwardMM, (double)config.quizTurnDeg,
                 (double)config.driveSpeedMM,
                 config.tmcMicrosteps,
@@ -183,7 +183,9 @@ void configValidate() {
   // die Grenze nur im UI, nicht in der Firmware.
   // Alle drei (Modus/Rampe/Spin) sind in den Einstellungen einstellbar
   // und werden hier nur auf Gueltigkeit geprueft, nicht zwangsfixiert.
-  if (config.rampMs < RAMP_MS_MIN || config.rampMs > RAMP_MS_MAX) {
+  // RAMP_MS_MIN ist 0 und rampMs uint16_t: "< MIN" waere immer falsch,
+  // deshalb nur die Obergrenze pruefen.
+  if (config.rampMs > RAMP_MS_MAX) {
     config.rampMs = RAMP_MS_DEFAULT; changed = true;
   }
   if (config.spinSpeed > SPIN_SPEED_MAX) { config.spinSpeed = SPIN_SPEED_DEFAULT; changed = true; }
