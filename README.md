@@ -701,6 +701,19 @@ in der Web-UI direkt unter dem Tempo einstellbar.
 | `SLALOM:STOP` / `SLALOM:UNPAIR` | Slalom abbrechen / trennen |
 | `LINE:START` / `LINE:STOP` | Linienfolger |
 | `MEMORY:START` / `MEMORY:START:<n>` / `MEMORY:INPUT:<n>` / `MEMORY:STOP` | Memory (3..`MEMORY_MAX_LEN`) |
+| `HALT` | Weicher Spiel-Stopp (Motoren aus, Spiel bleibt aktiv, Antwort `HALT:OK`) - davon leben A5/B1 |
+| `AMPEL:START` / `AMPEL:NEXT` / `AMPEL:CHEATPRESS` / `AMPEL:STOP` | A5 Ampel (Reaktionsspiel, Schummler-Runde 1:6) |
+| `AMPEL:ARMED` / `AMPEL:RED` / `AMPEL:RESULT:<mm>,<0-2>` / `AMPEL:EARLY` / `AMPEL:MISSED` | Runden-Meldungen A5 (Nachrollweg + Punkte) |
+| `AMPEL:CHEAT` / `AMPEL:CHEATWIN` / `AMPEL:CHEATLATE` / `AMPEL:STAGE:<1-5>` / `AMPEL:STOPPED` / `AMPEL:BUSY` | Schummler-Meldungen, Stufe (Rot-Fenster 2-6 s bis 2 s fix), Stopp/Belegt |
+| `ZAHL:START:<cm>` (10..100, 10er) / `ZAHL:STOP` | B1 Zahlentreffer (auf Markierung bremsen) |
+| `ZAHL:GO:<cm>` / `ZAHL:RESULT:<mmAbw>,<0-2>` / `ZAHL:OVERRUN` / `ZAHL:STAGE:<1-5>` / `ZAHL:STOPPED` / `ZAHL:BUSY` | B1-Meldungen (Abweichung mit Vorzeichen, Stufe = Tempo 100-180 mm/s) |
+| `GEHEIM:START` / `GEHEIM:START:<cm>` / `GEHEIM:STOP` | B8 Geheim-Strecke (Schaetzung raten; ohne Secret wird erst gewuerfelt) |
+| `GEHEIM:READY` / `GEHEIM:GO` / `GEHEIM:RESULT:<mmAbw>,<0-2>` / `GEHEIM:STAGE:<1-3>` / `GEHEIM:STOPPED` / `GEHEIM:BUSY` | B8-Meldungen (+ = weiter als geraten; Stufe = Bereich + Toleranz) |
+| `PARK:START` / `PARK:STOP` | B9 Einparken (auf Hindernis zurollen, mit HALT bremsen) |
+| `PARK:GO` / `PARK:STAGE:<1-3>` / `PARK:RESULT:<mm>,<0-2>` / `PARK:TOUCH` / `PARK:EMPTY` / `PARK:STOPPED` / `PARK:BUSY` | B9-Meldungen (Restabstand; Stufe = Baender 10/8/6 + 20/15/12 cm) |
+| `ZEIT:START:<0-3>` / `ZEIT:STOP` | B10 Zeitfahren (Zielfarbe Rot/Gelb/Gruen/Blau, HALT = Aufgabe) |
+| `ZEIT:GO` / `ZEIT:RESULT:<ms>,<0-2>` / `ZEIT:NOTFOUND` / `ZEIT:STOPPED` / `ZEIT:BUSY` | B10-Meldungen (2 = neue Bestzeit, 1 = angekommen) |
+| `DUEL:START` / `DUEL:STOP` / `DUEL:?` | 1:1-Duell fuer A5/B1/B8/B9/B10 (Punkte per ESP-NOW, Ziel 10) |
 | `PROG:SET:<enc>` / `PROG:RUN` / `PROG:STOP` | Programmierung. `PROG:SET` sendet das Encoding, `PROG:RUN` startet erst nach `PROG:READY:<n>` (Timeout 1,5 s). `PROG:STOP` bricht **jedes** laufende Programm ab (auch innerhalb von Schleifen). |
 | `PROG:AT:<pfad>` | Lauf-Anzeige: Pfad-Indizes statt flacher Index. `0` = 1. Top-Level-Baustein, `0.3` = 4. Baustein im Body des 1. Loops, `0.3.1` = 2. Baustein im Body einer darin verschachtelten Schleife. Ersetzt `PROG:STEP`/`PROG:SUB`. |
 

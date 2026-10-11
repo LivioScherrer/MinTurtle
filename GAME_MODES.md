@@ -1,14 +1,79 @@
 # Neue Spiel-Modi: Planung EduBot V2
 
-Planung fuer 19 neue Spiel-Modi des EduBot. Basis sind die in `README.md` und
-`HARDWARE_FAKTEN.md` beschriebene Firmware und Hardware. Dieser Plan beschreibt
-Konzept, Mechanik, Lernwert und Aufwand je Modus; er ist keine
-Implementierungsanleitung.
+Planung fuer die neuen Spiel-Modi des EduBot (10 Modi; A1/A2 sowie B2, A6, B7, B4, C1, B5, A9, B6, B3 und C2 sind gestrichen).
+Basis sind die in `README.md` und `HARDWARE_FAKTEN.md` beschriebene Firmware
+und Hardware. Dieser Plan beschreibt Konzept, Mechanik, Lernwert und Aufwand
+je Modus; die detaillierte Umsetzung von Fundament + Welle 1 steht in
+`GAME_MODES_W0_W1.md`.
+
+> **Nutzerentscheidung 2026-10-10: keine Kollisions-Spiele.** A1 (Koenig des
+> Berges) und A2 (Sumo) sind gestrichen — bei beiden sollen sich die Roboter
+> gegenseitig schubsen. A4 bleibt: „Fangen" zaehlt ueber Abstand < 15 cm,
+> ohne Kontakt. A8 (Fussball) darf nur ohne Roboter-zu-Roboter-Kontakt
+> gebaut werden, sonst entfaellt es.
 
 Stand: 2026-10-10. Der Farbsensor (TCS34725) ist in Betrieb (am Roboter
 bestaetigt) — Farb-Spiele sind moeglich, ein I2C-Multiplexer ist nicht mehr
 notwendig (der Patch in `patch_vl53l0x.py` loest den Adresskonflikt mit dem
 VL53L0X).
+
+---
+
+## 0. Umsetzungsstand (2026-10-10)
+
+**Umgesetzt und gebaut (5 Modi):** A5 Ampel (Einzel + Schummler-Runde),
+B1 Zahlentreffer, B8 Geheim-Strecke, B9 Einparken, B10 Zeitfahren.
+
+Fundament (W0) steht: `HALT` (weicher Spiel-Stopp), PrecisionProbe,
+GameCommon (Manual-Freigabe, Kanten-Suspend als Session-Flag,
+Tempo-Override RAM-only), UI-Grundgeruest (Tiles, Views, Status-Handler,
+Fahr-Tasten in den Spiel-Views). Firmware-Stand: 43,9 % Flash, 20,9 % RAM.
+
+**UI/Symbolik + Verifikation (2026-10-10, zweiter Durchgang):** Beide Modi
+haben kindgerechte Symbolik statt Textwueste — 3-Lampen-Ampel mit Leucht-Glow
+(A5), Zahlenstrahl mit Ziel- und Stopp-Marke (B1, Firmware sendet dafuer die
+VORZEICHENBEHAFTETE Abweichung: zu weit/zu kurz). Automatisierter
+Browser-Test (Playwright, 90/90 Checks): alle Kommandos, UI-Reaktionen,
+Timer und Mobile 375 px verifiziert, keine JS-Fehler. Screenshots:
+`qa-a5-ampel-rot.png`, `qa-dashboard-tiles.png`.
+
+**Multiplayer-Duell + Button-Fixes (2026-10-10, dritter Durchgang):**
+Die Modi **A5, B1, B8, B9 und B10** haben jetzt ein eingebautes 1:1-Duell
+(ESP-NOW, Pairing wie beim Rennen — `RACE:SCAN` / `RACE:PAIR`): beide
+Roboter spielen ihren Modus, die Punkte werden per Funk verglichen
+(`SLALOM_CMD_DUEL`, Modul `Duel.cpp`). Wer zuerst 10 Punkte hat, gewinnt.
+**Kein Kontakt zwischen den Robotern** — nur der Punktestand
+wird geteilt. Ohne aktives Duell laeuft alles unveraendert als
+Einzelspieler. UI: Duell-Panel in jeder der fünf Views (einklappbar,
+versteckt sich waehrend laufender Runden von selbst; Punktestand
+„Du x : y Gegner", Sieg-/Niederlage-Banner). Button-Fixes: Pfeiltasten-Steuerung funktioniert
+jetzt in ALLEN Fahr-Views, das Tasten-Highlight trifft das richtige Panel,
+die STOPP!-Knoepfe sind erst waehrend des Spiels aktiv (Knoepfe ohne Wirkung
+verwirrten). Playwright-Verifikation:
+35/35 Duell- und Button-Checks, 32/33 Regressions-Checks (1 Testartefakt,
+kein Bug), vollstaendiger Button-Audit ueber beide Views, keine
+JS-Fehler. Screenshot: `qa-duell-panel.png`.
+
+**Stufen + B8 (2026-10-11, vierter Durchgang):** A5 und B1 haben
+Schwierigkeits-Stufen nach dem Blockly-Prinzip (gleiche Regeln, wachsender
+Anspruch): A5 verengt je 3 Erfolge das Rot-Fenster (2-6 s bis 2 s fix,
+max. Stufe 5), B1 rollt je 3 Erfolge 20 mm/s schneller (100-180 mm/s,
+max. Stufe 5). Wertung und Ziel bleiben immer gleich (fair). Neuer Modus
+**B8 Geheim-Strecke** (unten): Schaetzen + Kalibrieren als dritte
+Faehigkeit neben Reaktion (A5) und Bremsen (B1).
+
+Abweichungen zur Spec (`GAME_MODES_W0_W1.md`), alle bewusst:
+
+- **A5-Schummler:** Der Roboter stoppt von selbst und die UI fragt
+  "Schummler!" — eindeutig spielbare Variante.
+- **Duell vorgezogen:** Das 1:1-Punkte-Duell (A5/B1, spaeter B8) kam schon in
+  Welle 1 als Stretch, weil es nur das vorhandene Race-Pairing nutzt —
+  Welle 3 braucht dafuer nichts mehr zu tun.
+
+**Noch offen:** A3 Heiss-Kalt und A4 Fangen (Pose-Welle W3), A7 Staffel,
+A8 Fussball, C3 Spiegel-Tanz. Ein synchrones Runden-Rennen (gemeinsames
+Rot-Signal beim A5-Duell) ist noch nicht dabei — das jetzige Duell vergleicht
+die Punkte unabhaengig, ohne Funk-Timing.
 
 ---
 
@@ -83,11 +148,11 @@ Modul macht daraus ein Spielelement:
   < 3 cm = gut, sonst daneben).
 - Ergebnis geht per `sendStatus` an die Web-UI (gleicher Weg wie `RACE:ME:`
   oder `QUIZ:CHECKING`).
-- Genutzt von den Modi A5, B1 und B2 — dort ist die gemessene Abweichung der
-  Spielstand. Die Toleranz-Schwellen stehen im Modul, damit alle drei Modis
+- Genutzt von den Modi A5 und B1 — dort ist die gemessene Abweichung der
+  Spielstand. Die Toleranz-Schwellen stehen im Modul, damit beide Modi
   dieselbe „Fairness" haben.
 
-### 2.3 Integrationsmuster (fuer alle 19 Modi identisch)
+### 2.3 Integrationsmuster (fuer alle Modi identisch)
 
 Jeder Modus haelt sich an das Muster, das `MemoryGame` und `LineFollower`
 vorgeben — dadurch bleibt `Edu_V2.cpp` ueberschaubar:
@@ -105,50 +170,20 @@ vorgeben — dadurch bleibt `Edu_V2.cpp` ueberschaubar:
 
 ---
 
-## 3. Die 19 Spiel-Modi
+## 3. Die Spiel-Modi
 
 ### A-Reihe: Action und Spass
 
-#### A1 - König des Berges (King of the Hill)
+#### A1 - Koenig des Berges (King of the Hill) - GESTRICHEN
 
-- **Spieler:** 2-4 Roboter (Paarungen nacheinander)
-- **Aufbau:** Ein Ring aus schwarzem Klebeband (ca. 80-120 cm Durchmesser) auf
-  hellem Boden. Jeder Roboter startet in der Mitte.
-- **Ablauf:** Nach dem Start fahren beide Roboter los. Ziel ist es, selbst im
-  Ring zu bleiben und den Gegner herauszuplaeren. Beruehrt ein Roboter das
-  schwarze Band, faellt er heraus: 3 Sekunden Strafbox ausserhalb, dann
-  zurueck in die Mitte. Danach geht die Runde weiter.
-- **Sieg:** Best-of-3 Runden, oder wer nach 120 Sekunden noch oben steht.
-- **Hardware:** Tischkanten-Waechter (derselbe Helligkeitsabfall wie bei
-  `EDGE`), LED-Ring, ESP-NOW fuer den Runden-Austausch.
-- **Wichtigster Implementierungspunkt:** Der normale Kanten-Waechter sperrt
-  den Roboter bis `EDGE:RESET` — fuer ein Spiel viel zu hart. Der Modus
-  bekommt einen **eigenen Kanten-Check im Tick** (gleiche Schwelle, keine
-  dauerhafte Sperre): erkennen, Strafbox fahren, weiterspielen.
-- **Lernen:** kaum, aber: Regelverstaendnis, Fairness, „wieder aufstehen".
-- **Spassfaktor:** hoch — der Klassiker unter den Kinderspielen.
-- **Aufwand:** klein.
+Gestrichen am 2026-10-10 (Nutzerentscheidung): Das Spiel funktioniert nur,
+wenn die Roboter sich gegenseitig aus dem Ring schubsen — Kollisionen am
+Fahrzeug (Motoren, Raeder, Chassis) sind nicht gewuenscht.
 
-#### A2 - Sumo-Ringen
+#### A2 - Sumo-Ringen - GESTRICHEN
 
-- **Spieler:** 2 Roboter
-- **Aufbau:** Wie A1, aber der Ring ist kleiner (ca. 60 cm), damit es schnell
-  geht.
-- **Ablauf:** Roboter drehen sich langsam suchend, bis der Distanzsensor ein
-  Hindernis unter 25 cm erkennt -> Vollladung vorwaerts. Wer aus dem Ring
-  fliegt, verliert. Zwei Betriebsarten:
-  - **AUTO:** beide Roboter kaempfen allein — die Kinder schauen zu und
-    jubeln. Ideal fuer Vorfuehrungen.
-  - **MANUAL:** Ein Kind faehrt per App, der Gegner-Roboter ist autonom.
-- **Gegner-Erkennung:** primaer ueber die Pose aus Abschnitt 2.1 (robust,
-    unabhaengig von der Einbaulage des Distanzsensors). Der Distanzsensor
-    bestaetigt die Beruehrung, wenn er den anderen Roboter sieht — die
-    Einbaulage muss am Geraet geprueft werden (Sichtweisst bis 25 cm).
-- **Sieg:** 3 Siege in Folge, oder wer nach 90 Sekunden mehr Runden gewonnen
-    hat.
-- **Lernen:** kaum — reine Arena-Action.
-- **Spassfaktor:** sehr hoch, besonders als Zuschauerspiel.
-- **Aufwand:** mittel (KI-Tuning: Angriffstempo, Suchverhalten).
+Gestrichen am 2026-10-10 (Nutzerentscheidung): reines Roboter-gegen-Roboter-
+Stossen, siehe A1.
 
 #### A3 - Heiss-Kalt-Suche / Robo-Verstecken
 
@@ -177,8 +212,9 @@ vorgeben — dadurch bleibt `Edu_V2.cpp` ueberschaubar:
 - **Spieler:** 2 Roboter (1 Jaeger, 1 Fluechtling; ein Kind lenkt)
 - **Ablauf:** Der Jaeger-Roboter verfolgt automatisch den Fluechtling anhand
   der Pose-Distanz: weit weg = langsames Suchen, nah = Spurten. Das Kind
-  faehrt den Fluechtling per App. Beruehrung (unter 15 cm) gibt dem Jaeger
-  einen Punkt, dann Rollentausch.
+  faehrt den Fluechtling per App. Faellt der Abstand unter 15 cm, ist der
+  Fluechtling gefangen (reine Abstandsmeldung der Pose, KEIN Kontakt), der
+  Jaeger bekommt einen Punkt, dann Rollentausch.
 - **Taktik-Element „Einfrieren":** Ein UI-Knopf haelt den Fluechtling 5
   Sekunden lang still. In dieser Zeit wird keine Pose gesendet — der Jaeger
   ist blind gegen ihn (24 Sekunden Abklingzeit, damit es nicht gespammt
@@ -203,24 +239,12 @@ vorgeben — dadurch bleibt `Edu_V2.cpp` ueberschaubar:
 - **Erweiterung „Schummler":** Auf Wunsch ignoriert der Roboter selbst
   manchmal das Rot (Zufall, 1 von 6 Runden) und rollt weiter. Wer es zuerst
   bemerkt und den „Schummler!"-Knopf drueckt, bekommt den Punkt.
+- **Stufen:** Je 3 erfolgreiche Runden steigt die Stufe (max. 5, `AMPEL:STAGE`);
+  das Rot-Fenster schrumpft pro Stufe um 1 s (2-6 s bis 2 s fix). Die Wertung
+  (< 5 cm Stern, < 15 cm gut) bleibt immer gleich.
 - **Lernen:** Impulskontrolle, Reaktionszeit — paedagogisch wertvoll.
 - **Spassfaktor:** sehr hoch, Party-tauglich, einfache Regel.
 - **Aufwand:** klein (nutzt die Praezisions-Pruefroutine aus 2.2).
-
-#### A6 - Hand-Faenger (Zauberhand)
-
-- **Spieler:** 1 Roboter, kein App-Zwang
-- **Ablauf:** Der Roboter haelt per Distanzsensor konstanten Abstand zu
-  deiner Hand: Hand naeher -> er weicht zurueck, Hand weiter -> er folgt.
-  Fuehre die Hand, und der Roboter folgt dir durch den Raum — ganz ohne
-  Smartphone (nur Start/Stop per UI-Knopf).
-- **Spiel-Element „Fuettern":** Blaue Zone am Boden = „satt" (Roboter haelt
-  3 Sekunden still, dann Regenbogen + Punkt). Rote Zone = „Falle" (Beruehrung
-  unter 5 Sekunden = 5 Sekunden Einfrieren mit rotem LED-Standbild).
-- **Lernen:** geschlossener Regelkreis erleben — der Roboter regelt sich
-  selbst, ohne dass jemand programmiert.
-- **Spassfaktor:** sehr hoch, weil ohne App sofort begreifbar.
-- **Aufwand:** klein (Regelkreis auf den Distanzsensor, 2 Farbzonen).
 
 #### A7 - Staffel-Rennen
 
@@ -262,24 +286,6 @@ vorgeben — dadurch bleibt `Edu_V2.cpp` ueberschaubar:
   Fußball" mit runden Pappscheiben statt Ball (gleiche Regeln, weniger
   Rollwiderstand).
 
-#### A9 - Minenfeld
-
-- **Spieler:** 1 Roboter, oder 2 im Duell
-- **Aufbau:** Ein Kurs (Klebeband-Pfad oder freie Flaeche) mit 5-8 schwarzen
-  „Minen" (runde Aufkleber, 4-6 cm). Startfeld weiss, Zielfeld blau.
-- **Ablauf:** 5 Sekunden Zeit, um die Mine zu umfahren (Block maximale
-  Fahrstrecke begrenzen):
-  1. Kind faehrt den Roboter per App oder programmiert blind mit Bloecken.
-  2. Beruehrt der Roboter eine schwarze Mine: rotes Aufblitzen, 5 Sekunden
-     Strafzeit, der Roboter wird zurueckgesetzt auf den letzten Checkpoint.
-  3. Zielfeld erreicht: Zeit wird gestoppt.
-- **Duell:** Zwei Roboter, gleicher Kurs, schnellste minenfreie Fahrt
-  gewinnt.
-- **Lernen:** Risiko-Einschätzung, Iteration als Teil des Lernens.
-- **Spassfaktor:** hoch — Spannung bis zur letzten Mine.
-- **Aufwand:** mittel (Mine = Schwarz-Erkennung unter dem Roboter, gibt es
-  schon; Checkpoints neu).
-
 ### B-Reihe: Lernen
 
 #### B1 - Zahlentreffer (Präzisions-Parcours)
@@ -296,132 +302,63 @@ vorgeben — dadurch bleibt `Edu_V2.cpp` ueberschaubar:
   - darueber: daneben
 - **Duell:** Beide Roboter bekommen dieselbe Zahl, wer naeher dran ist,
   gewinnt die Runde; Zeit ist Tiebreak.
+- **Stufen:** Je 3 erfolgreiche Runden steigt die Stufe (max. 5, `ZAHL:STAGE`);
+  der Roboter rollt pro Stufe 20 mm/s schneller (100-180 mm/s). Ziel und
+  Wertung (< 1 cm perfekt, < 3 cm gut) bleiben immer gleich.
 - **Lernen:** Schätzen und Präzision — Abstand zwischen „ungefähr" und
   „exakt" wird am eigenen Ergebnis sichtbar.
 - **Aufwand:** klein (nutzt die Praezisions-Pruefroutine aus 2.2).
 
-#### B2 - Winkel-Fischer
+#### B8 - Geheim-Strecke (Schaetzen + Kalibrieren)
 
 - **Spieler:** 1 Roboter, oder 2 im Duell
-- **Ablauf:** Der Roboter bekommt einen Zielwinkel (z. B. 135 Grad), angezeigt
-  als pulsierendes Muster am LED-Ring plus Zahl in der UI. Das Kind dreht ihn
-  mit zwei Knoepfen (plus 15 / minus 15 Grad) in Stellung. Nach „Pruefen"
-  rechnet der Roboter seine absolute Drehung aus der Summe aller
-  Dreh-Schritte und meldet die Abweichung.
-- **Stufen:** 45 Grad Toleranz (leicht), 15 Grad (mittel), 5 Grad (schwer).
-- **Duell:** gleicher Zielwinkel fuer beide, naeher dran gewinnt.
-- **Lernen:** Winkel-Gefuehl ohne Geodreieck — die Drehung wird gemessen,
-  nicht geschaetzt.
-- **Aufwand:** mittel (LED-Puls als Winkelanzeige ist neu; Drehung selbst
-  gibt es ueber `gameTurnLeftSteps`).
+- **Ablauf:** Der Roboter wuerfelt eine geheime Strecke (Stufe 1: 20-50 cm).
+  Das Kind waehlt eine Schaetzung (10-100 cm), der Roboter faehrt die
+  Geheim-Strecke ab und meldet die Abweichung mit Richtung: „x cm zu kurz
+  geraten" oder „zu weit geraten". Knackt das Kind die Strecke (Stufe 1:
+  <= 2 cm), gibt es eine neue.
+- **Stufen:** Je geknackter Strecke waechst der Bereich (20-50, 10-80,
+  10-100 cm) und die Toleranz wird enger (perfekt 2/1,5/1 cm, gut 5/4/3 cm),
+  max. Stufe 3 (`GEHEIM:STAGE`).
+- **Protokoll:** `GEHEIM:START` (neue Strecke), `GEHEIM:START:<cm>` (Ratesrunde,
+  10-100 cm in 1-cm-Schritten (Slider), `GEHEIM:STOP`; zurueck kommen `GEHEIM:READY`,
+  `GEHEIM:GO`, `GEHEIM:RESULT:<mmAbw>,<0-2>` (+ = weiter als geraten),
+  `GEHEIM:STOPPED`, `GEHEIM:BUSY`.
+- **Duell:** Beide Roboter wuerfeln eigene Strecken, naeher dran gibt mehr
+  Punkte (gleiche Punkteskala wie A5/B1, hoeher gewinnt).
+- **Lernen:** Schaetzen, Kalibrieren, Zahlensinn — die dritte Faehigkeit
+  neben Reaktion (A5) und Bremsen (B1).
+- **Aufwand:** klein (Positionsfahrt + Odometrie gibt es; Schaetz-UI wie B1).
 
-#### B3 - Schatzsuche (Der blinde Programmierer)
+#### B9 - Einparken (Distanz-Bremsung)
 
-- **Spieler:** 1 Roboter (Selbstversuch), 2 im Duell
-- **Aufbau:** Ein „Schatz" (gelbes Plaettchen) liegt irgendwo im Raum. Der
-  Roboter startet 2-3 m davon entfernt.
-- **Ablauf:** Das Kind baut mit den vorhandenen Programmier-Bloecken einen
-  Blind-Pfad („3 Kacheln vor, drehe links, 5 vor") und drueckt Start — ohne
-  hinzusehen. Der Roboter faehrt das Programm exakt ab.
-- **Treffer:** Endet der Roboter auf dem gelben Plaettchen, gewinnt er
-  (Farberkennung am Programmende). Sonst zeigt der LED-Ring die Richtung zum
-  Schatz und die Blink-Geschwindigkeit die Entfernung — das Kind korrigiert
-  sein Programm und startet erneut.
-- **Hilfe:** Ab Versuch 3 wird ein Hinweis freigeschaltet (die UI zeigt die
-  Soll-Route des Lehrers).
-- **Lernen:** **das paedagogische Flaggschiff des Plans.** Odometrie,
-  Drift-Erfahrung („der Roboter macht genau was ich sage, und landet doch
-  daneben"), Programm-Korrigieren als Lernschleife.
-- **Aufwand:** mittel (blosse Programm-Ausfuehrung gibt es; Farberkennung am
-  Programmende plus Richtungs-Hinweis neu).
+- **Spieler:** 1 Roboter, oder 2 im Duell
+- **Aufbau:** Freie Flaeche mit einem Hindernis (Kiste, Wand) in Fahrtrichtung.
+- **Ablauf:** Der Roboter rollt langsam aufs Hindernis zu (60 mm/s). Das Kind
+  bremst mit HALT so nah wie moeglich - ohne anzustossen. Der Distanzsensor
+  misst den Restabstand: einziger Modus, der den ToF-Sensor als Spielgeraet
+  nutzt. Anstossen stoppt von selbst (`PARK:TOUCH`), ohne Hindernis in
+  Reichweite meldet er `PARK:EMPTY`.
+- **Stufen:** Je 2 erfolgreiche Runden steigt die Stufe (max. 3,
+  `PARK:STAGE`); die Baender werden enger (perfekt 10/8/6 cm, gut 20/15/12 cm).
+- **Duell:** Beide parken vor eigenem Hindernis, naeher dran gibt mehr Punkte.
+- **Lernen:** Abstands-Gefuehl, Bremsverhalten einschaetzen.
+- **Aufwand:** klein (Fahrt + HALT + ToF gibt es).
 
-#### B4 - Formen-Zauberer
+#### B10 - Zeitfahren (Tempo gegen die Uhr)
 
-- **Spieler:** 1 Roboter
-- **Ablauf:** Auf Knopfdruck faehrt der Roboter geometrische Formen: Quadrat,
-  Dreieck, Fünfeck, Acht, Spirale. An jeder Ecke blinkt der LED-Ring und die
-  UI zeigt den Winkel der Ecke. Das Kind rät der Reihe nach: „wie viele
-  Ecken hat die naechste Form?"
-- **Ausbau:** Erweiterung „eigene Form" — nimmt das aktuelle Block-Programm
-  und faehrt es als Form ab (Bruecke zu C1).
-- **Lernen:** Geometrie aus der Vogelperspektive, Winkel wiedererkennen.
-- **Aufwand:** klein (Sequenz aus Fahren + Drehen, gibt es als Primitive).
-
-#### B5 - Sonnenblume
-
-- **Spieler:** 1 Roboter
-- **Ablauf:** Der Roboter dreht sich in 30-Grad-Schritten und misst jedes Mal
-  die gemessene Helligkeit (Gesamthelligkeit des Farbsensors). Danach dreht
-  er zur hellsten Richtung und faehrt ein Stueck darauf zu. Am „Licht"
-  (Fenster, Lampe, Taschenlampen-Kind) kommt er zur Ruhe und jubelt.
-- **Erweiterung „Tag und Nacht":** Zwei Lichtquellen (Lampe hell, Kerze
-  dunkel). „Sonne"-Modus: Roboter faehrt zur helleren. „Mondblume"-Modus: zur
-  dunkleren.
-- **Lernen:**   Optimierung durch Suchen, Sensorik verständlich machen — und
-  das echte Vorbild: die Sonnenblume richtet sich nach dem Licht aus
-  (Heliotropismus).
-- **Aufwand:** klein (Helligkeits-Sampling als Schleife, Lichtquelle reicht).
-
-#### B6 - Futter-Suche
-
-- **Spieler:** 1-2 Roboter
-- **Aufbau:** 6-8 Farbkarten liegen offen im Feld: 3 gruene Blaetter (+1),
-  2 rote Giftpilze (-1, 3 s Strafzeit), 1 gelber Stern (+5).
-- **Ablauf:** 45 Sekunden Sammelzeit. Der Roboter faehrt autonom mit
-  „Fahre bis Farbe", erkennt die Karte unter sich und nimmt sie (virtuell).
-  Duell: zwei Roboter im selben Feld — Karten sind begrenzt, es entsteht ein
-  Wettrennen um die besten Karten.
-- **Sieg:** meiste Punkte; Bonus-Stern fuer die schnellste korrekte Fahrt.
-- **Lernen:** autonome Entscheidung unter Zeitdruck, Risiko (Gift kostet).
-- **Aufwand:** mittel („Fahre bis Farbe" gibt es; Sammel-Logik und
-  Strafzeiten neu).
-
-#### B7 - Blinder Pilot
-
-- **Spieler:** 2 Kinderpaare mit je 1 Roboter
-- **Aufbau:** Der Roboter steht hinter einem Sichtschutz (Aktendeckel, Karton)
-  oder in einem Nebenraum. Ein farbiges Zielfeld liegt irgendwo im Feld.
-- **Ablauf:** Der Partner programmiert mit Bloecken „fahre zum Ziel" oder
-  steuert per Freifahren. Damit es ein Spiel bleibt, gibt es ein
-  **Mess-Budget**: nur 5 Messungen (`DIST?`) darf der Partner waehrend der
-  Fahrt anfordern. Jede weitere Messung kostet einen Punkt. Faehrt der
-  Roboter auf ein Hindernis, bleibt er stehen — der Partner muss mit seinem
-  Wissen weiterplanen.
-- **Sieg:** steht der Roboter am Programmende auf dem Zielfeld und hat das
-  groesste Mess-Budget uebrig, gewinnt das Team.
-- **Lernen:** Kommunikation, Programmieren mit beschraenkter Information —
-    „Was muss ich wissen, um entscheiden zu koennen?"
-- **Aufwand:** klein (bestehende Bloecke + `DIST?` + Zaehler; kein neues
-    Bewegungsverhalten).
+- **Spieler:** 1 Roboter, oder 2 im Duell
+- **Aufbau:** Eine Zielfarbe (Rot/Gelb/Gruen/Blau) als Klebeband am Boden.
+- **Ablauf:** Der Roboter faehrt los bis zur Zielfarbe (2 Treffer in Folge
+  zaehlen, Timeout ohne Farbe bricht ab). Die Zeit wird gemessen - Bestzeit
+  knacken ist das Spiel. Neue Bestzeit gibt 2 Punkte, Ankommen 1 Punkt.
+- **Steigerung:** ueber Bestzeit-Jagd (keine Stufen): Die UI zeigt die Uhr
+  live und die Bestzeit an. STOP loescht die Bestzeit (fairer Neustart).
+- **Duell:** Beide fahren auf eigene Zielfarben, Punkte fuer Bestzeiten.
+- **Lernen:** Zeit-Gefuehl, Optimieren (kuerzere Wege, weniger Schlenker).
+- **Aufwand:** klein (Fahren-bis-Farbe gibt es; Uhr laeuft in der UI).
 
 ### C-Reihe: Kreativ und Entdecken
-
-#### C1 - Licht-Malerei
-
-- **Spieler:** 1-4 Roboter (auch gemeinsam als Klasse)
-- **Ablauf:** In einem abgedunkelten Raum faehrt der Roboter mit
-  eingeschaltetem LED-Ring ein vorgefertigtes Bild: Herz, Stern, Buchstabe,
-  Spirale. Mit der Langzeitbelichtung eines Handys wird das Bild
-  „gemalt" — ein Foto fuer die Klasse oder den Elternabend. Kinder koennen
-  eigene Pfade mit Bloecken bauen und dann als Licht-Spur abfahren. Bei
-  mehreren Robotern fahren verschiedene Farben gleichzeitig.
-- **Lernen:** ausgefeilte Praezisions-Wege, Gestaltung mit Technik (STEAM).
-- **Aufwand:** klein (Form-Abfahrt gibt es aus B4; LED-Ring sowieso).
-
-#### C2 - Erkundungs-Modus (Kartograf)
-
-- **Spieler:** 1-2 Roboter
-- **Ablauf:** Der Roboter erkundet autonom: vorwaerts bis ein Hindernis unter
-  30 cm auftaucht, Stopp, kurzes „Nachdenken" am LED-Ring, 90 Grad drehen,
-  weiter. Beim zweiten blockierten Versuch in Folge weicht er zurueck aus
-  (20 cm zurueck, 180 Grad drehen). Der Kanten-Waechter haelt ihn auf dem
-  Tisch. Ereignisse (Stopp, Drehung, Position) gehen an die UI.
-- **Schul-Variante:** Die Kinder zeichnen waehrenddessen das Zimmer auf
-  Papier — danach Vergleich mit der „Karte" des Roboters (Pose-Punkte).
-- **Lernen:** autonome Systeme, Kartenlesen, Zusammenführen von Beobachtung
-  und Modell.
-- **Aufwand:** mittel (Zustandsmaschine mit Ecken-Ausweichen; Karten-
-  Anzeige in der UI optional).
 
 #### C3 - Spiegel-Tanz
 
@@ -433,8 +370,6 @@ vorgeben — dadurch bleibt `Edu_V2.cpp` ueberschaubar:
   gegenueber, tanzen sie synchron wie ein Spiegelbild.
 - **Lern-Setting:** Kind 1 faehrt heimlich eine Form, Kind 2 muss sie vom
   Spiegelbild ablesen und benennen — Geometrie aus zwei Perspektiven.
-- **Erweiterung:** A faehrt mit eingeschaltetem LED-Ring (C1), B spiegelt
-  mit Langzeitbelichtung — „Doppel-Lichtmalerei".
 - **Lernen:** Symmetrie, Koordinaten-Denken, Perspektivwechsel.
 - **Aufwand:** klein (1 Byte Tastenzustand pro Paket; Freifahren gibt es).
 
@@ -448,28 +383,18 @@ vier Spalten; „MP" heisst Multiplayer-fähig.
 
 | Modus | Lernen | Spass | Wiederspiel | Aufwand (5 = leicht) | Ø | MP |
 |---|---|---|---|---|---|---|
-| A1 König des Berges | 3 | 5 | 4 | 5 | 4,3 | ja |
-| A2 Sumo | 2 | 5 | 3 | 3 | 3,3 | ja |
 | A3 Heiss-Kalt | 4 | 4 | 4 | 3 | 3,8 | ja |
 | A4 Verfolgungsjagd | 2 | 4 | 4 | 3 | 3,3 | ja |
 | A5 Grünes Licht | 3 | 5 | 4 | 5 | 4,3 | ja |
-| A6 Hand-Faenger | 4 | 5 | 4 | 5 | 4,5 | nein |
 | A7 Staffel-Rennen | 3 | 4 | 3 | 3 | 3,3 | ja |
 | A8 Robo-Fußball | 2 | 5 | 4 | 2 | 3,3 | ja |
-| A9 Minenfeld | 3 | 4 | 4 | 3 | 3,5 | ja |
 | B1 Zahlentreffer | 4 | 3 | 3 | 5 | 3,8 | ja |
-| B2 Winkel-Fischer | 4 | 3 | 4 | 4 | 3,8 | ja |
-| B3 Schatzsuche | 5 | 4 | 5 | 4 | 4,5 | ja |
-| B4 Formen-Zauberer | 4 | 3 | 3 | 4 | 3,5 | nein |
-| B5 Sonnenblume | 5 | 3 | 3 | 5 | 4,0 | nein |
-| B6 Futter-Suche | 3 | 4 | 4 | 3 | 3,5 | ja |
-| B7 Blinder Pilot | 5 | 4 | 4 | 5 | 4,5 | nein |
-| C1 Licht-Malerei | 3 | 4 | 3 | 5 | 3,8 | nein |
-| C2 Erkundung | 4 | 3 | 3 | 3 | 3,3 | nein |
+| B8 Geheim-Strecke | 4 | 4 | 4 | 5 | 4,3 | ja |
+| B9 Einparken | 4 | 5 | 4 | 5 | 4,5 | ja |
+| B10 Zeitfahren | 3 | 4 | 4 | 4 | 3,8 | ja |
 | C3 Spiegel-Tanz | 4 | 5 | 3 | 5 | 4,3 | ja |
 
-**Top nach Punkten:** A6 / B3 / B7 (je 4,5) - A1 / A5 / C3 (je 4,3) -
-B5 (4,0) - A3 / B1 / B2 / C1 (je 3,8).
+**Top nach Punkten:** B9 (4,5) - A5 / C3 / B8 (je 4,3) - A3 / B1 / B10 (je 3,8).
 
 ---
 
@@ -481,33 +406,41 @@ jede Welle fuer sich und laesst sich einzeln ausliefern.
 
 | Welle | Modi | Enthaltene Mechanik | Fokus | Aufwand (Firmware + UI) |
 |---|---|---|---|---|
-| 1 | **B7 Blinder Pilot, A6 Hand-Faenger, A5 Grünes Licht** | Praezisions-Pruefroutine (2.2) | Schnelle Erfolge, kein Multiplayer-Risiko, zwei paedagogische Spitzenreiter | ca. 3-4 Tage |
-| 2 | **B3 Schatzsuche, A1 König des Berges, C3 Spiegel-Tanz** | Kanten-Check als Spiel-Logik (A1), 1-Byte-Bewegungspaket (C3) | Das paedagogische Flaggschiff; erste Arena; erster Multiplayer-Tanz | ca. 5-6 Tage |
-| 3 | **A3 Heiss-Kalt, A4 Fangen, A2 Sumo, B2 Winkel-Fischer, B1 Zahlentreffer** | Pose-Broadcast (2.1) | Volle Multiplayer-Infrastruktur wird ausgelastet | ca. 7-9 Tage |
-| 4 | **B5, B4, C1, A9, B6, A7, C2, A8** | alles weitere | Autonomie, Kunst, Fussball-Flaggschiff | ca. 12-16 Tage |
+| 0 | **Fundament + A5 Einzel als Referenz-Schnitt** | HALT (weicher Spiel-Stopp), Praezisions-Pruefroutine (2.2), ModeBase, UI-Grundgeruest | Ein Schnitt durch alle Schichten — danach Copy-Paste-Tempo | ca. 2 Tage |
+| 1 | **B1 Zahlentreffer, B8 Geheim-Strecke, B9 Einparken, B10 Zeitfahren** (+ Duell A5/B1/B8/B9/B10) | Praezisions-Pruefroutine, HALT, Duell-Punkte, ToF, Farbe-bis | Schnelle Erfolge, kleiner Multiplayer-Aufbau | ca. 4-5 Tage |
+| 2 | **C3 Spiegel-Tanz** | 1-Byte-Bewegungspaket (C3) | Erster Multiplayer-Tanz | ca. 3-4 Tage |
+| 3 | **A3 Heiss-Kalt, A4 Fangen** | Pose-Broadcast (2.1) | Volle Multiplayer-Infrastruktur wird ausgelastet | ca. 6-8 Tage |
+| 4 | **A7, A8** | Team-/Etappen-Kennung (A7) | Staffel-Teamplay, Fussball-Flaggschiff | ca. 6-10 Tage |
 
 **Warum diese Reihenfolge:**
-1. Welle 1 laeuft vollstaendig auf dem, was heute existiert (Distanzsensor,
-   Bloecke, Odometrie-Zaehler). Kein ESP-NOW, kein neues Protokoll.
-2. Welle 2 bringt mit C3 den einfachsten Multiplayer-Fall (Tastenzustand-
-   Forwarding) und mit A1 den Kanten-Check — die Vorarbeit fuer A2 und A4.
-3. Welle 3 ist die grosse Pose-Welle. Nur hier entsteht das Risiko eines
-   neuen Protokolls; es steht an 3. Stelle, damit die Mechanik aus 2.1 in
-   Welle 2 nicht gebraucht wird.
-4. Fussball (A8) steht bewusst zuletzt: hoechstes Hardware-Risiko, groesster
-   Tuning-Aufwand.
+1. Welle 0 baut die Querschnitts-Mechanismen (HALT, Praezision) und das
+   UI-Grundgeruest an EINEM Modus (A5) komplett durch — erst danach werden
+   die weiteren Modi nach demselben Muster kopiert.
+2. Welle 1 laeuft ohne neues Funk-Protokoll (Odometrie-Zaehler, HALT,
+   Praezisions-Pruefroutine); das Duell kam als Stretch dazu und nutzt das
+   vorhandene Race-Pairing.
+3. Welle 2 bringt mit C3 den einfachsten Multiplayer-Fall
+   (Tastenzustand-Forwarding).
+4. Welle 3 ist die grosse Pose-Welle. Nur hier entsteht das Risiko eines
+   neuen Protokolls.
+5. Fussball (A8) steht bewusst zuletzt: hoechstes Hardware-Risiko, groesster
+   Tuning-Aufwand — und nur ohne Roboter-zu-Roboter-Kontakt (siehe
+   Nutzerentscheidung oben).
 
 **Risiken:**
-- **A8 Fussball:** Ball groesse/Lippe/Boden muessen am echten Roboter
-  getunt werden. Fallback „Scheiben-Fussball" ist eingeplant.
-- **Pose-Drift:** fuer Bänder (heiss/kalt) und Fangen-Richtung reicht die
+- **A8 Fussball:** Ballgroesse/Lippe/Boden muessen am echten Roboter
+  getunt werden. Fallback „Scheiben-Fussball" ist eingeplant. Zusaetzlich:
+  kein Roboter-Kontakt — falls sich das ohne Kontakt nicht gut spielen
+  laesst, entfaellt der Modus.
+- **Pose-Drift:** fuer Baender (heiss/kalt) und Fangen-Richtung reicht die
   Odometrie; kein Modus verlaesst sich auf exakte Pose-Positionen.
 - **UI-Wachstum:** `Edu_V2.html` hat bereits rund 10.000 Zeilen. Jeder Modus
   bekommt ein eigenes Modul, die UI nutzt ein gemeinsames Modus-Grundgeruest
-  (Startpanel, Statuszeile, Ergebnis-Overlay) statt 14 Einzelviews.
-- **Speicher:** aktuell rund 42 % Flash, rund 21 % RAM belegt. Jedes
-  Modul ist klein (< 5 KB), aber 19 Module plus UI-Tiles summieren sich —
-  nach Welle 2 und 3 den Verbrauch pruefen.
+  (Startpanel, Statuszeile, Ergebnis-Overlay) statt Einzelviews. Hinweis:
+  Die UI laeuft als Datei im Browser und kostet KEINEN Roboter-Flash — das
+  Risiko ist reine Pflege, kein Speicher.
+- **Speicher (Firmware):** aktuell rund 43 % Flash, rund 21 % RAM belegt.
+  Jedes Modul ist klein (< 5 KB); nach jeder Welle den Verbrauch pruefen.
 
 ---
 
@@ -533,6 +466,7 @@ jede Welle fuer sich und laesst sich einzeln ausliefern.
 
 | Idee | Warum nicht |
 |---|---|
+| Roboter-Kollisionsspiele (schubsen, Sumo-Ringen) | Nutzerentscheidung 2026-10-10: keine Kollisionen am Fahrzeug. A1/A2 gestrichen; A8 nur ohne Kontakt. |
 | RSSI-Spiele („heiss/kalt" ueber Funkstaerke) | ESP-IDF 4.4 liefert keine RSSI im Empfangspfad; Core-Upgrade waere ein Risiko fuer TMC/BLE/WiFi. Pose-Broadcast leistet dasselbe. |
 | Ton/Musik-Spiele | Kein Lautsprecher am Roboter. |
 | Greifer-Spiele (aufsammeln, stapeln) | Kein Servo/Greifer verbaut. |
@@ -544,10 +478,10 @@ jede Welle fuer sich und laesst sich einzeln ausliefern.
 
 ## 8. Naechste Schritte
 
-1. **Welle 1 umsetzen** (B7, A6, A5 + Praezisions-Pruefroutine): Start frei-
-   geben, dann Modul fuer Modul.
-2. Nach Welle 1: kurzer Test am Geraet (2 halbe Tage), danach Entscheid
-   ueber Welle 2.
+1. **Geraetetests** der 5 umgesetzten Modi (A5, B1, B8, B9, B10) (Testkarten in
+   `GAME_MODES_W0_W1.md`, Abschnitt 4; Testergebnisse hier eintragen).
+2. Danach Entscheid: Welle 2 (C3 Spiegel-Tanz) oder Welle 3 (Pose-Broadcast
+   fuer A3/A4 + Duelle).
 3. Dieses Dokument bei jedem umgesetzten Modus fortschreiben („Status:
    umgesetzt" je Absatz), damit der Plan die Landkarte des Projekts bleibt.
 
