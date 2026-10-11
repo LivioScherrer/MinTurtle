@@ -3,8 +3,36 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" href="data:,">
   <title>EduBot V2</title>
   <style>
+    /* Selbst gehostete Schriften (SIL OFL): identisch auf allen Geraeten,
+       auch offline. Caveat variabel (400-700), Patrick Hand regular.
+       Umlaute ueber latin-ext. Dateien in fonts/ neben dieser Seite. */
+    @font-face {
+      font-family: 'Caveat'; font-style: normal; font-weight: 400 700;
+      font-display: swap;
+      src: url('fonts/caveat-var-latin-ext.woff2') format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+    }
+    @font-face {
+      font-family: 'Caveat'; font-style: normal; font-weight: 400 700;
+      font-display: swap;
+      src: url('fonts/caveat-var-latin.woff2') format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Patrick Hand'; font-style: normal; font-weight: 400;
+      font-display: swap;
+      src: url('fonts/patrickhand-400-latin-ext.woff2') format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+    }
+    @font-face {
+      font-family: 'Patrick Hand'; font-style: normal; font-weight: 400;
+      font-display: swap;
+      src: url('fonts/patrickhand-400-latin.woff2') format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
     /* =========================================================
        TOKENS - hand-drawn / sketch style
        ========================================================= */
@@ -3440,12 +3468,12 @@
       <div class="help-modal-body" id="calWizardBody" style="gap:14px;padding:20px;"></div>
     </div>
   </div>
-  <div class="app-shell">
+  <div class="app-shell" role="main">
     <div id="batBanner" style="display:none;margin:8px 16px 0;padding:10px 14px;border:3px solid #d63a3a;border-radius:12px;background:#fdecec;font-weight:800;text-align:center;">Akku schwach! Bitte laden.</div>
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view active">
       <div class="header">
-        <div class="header-l"><span class="header-l-text"><span>Edu</span>Bot</span></div>
+        <div class="header-l"><h1 class="header-l-text"><span>Edu</span>Bot</h1></div>
         <div class="header-r">
           <div class="conn-badge" id="irBadge" title="VL53L0X Distanz (mm), Hindernis < 100mm" style="background:rgba(255,255,255,.05);display:none;">
             <span style="font-size:11px;opacity:.75;">DIST</span>
@@ -3958,9 +3986,9 @@
             <b>BREMSEN!</b></div>
           <div style="display:flex;justify-content:center;margin:16px auto;">
             <div style="display:flex;flex-direction:column;gap:10px;padding:14px 18px;background:#3b3b3b;border:5px solid var(--ink);border-radius:24px;box-shadow:0 6px 0 var(--ink);">
-              <div id="ampelLampRed" aria-label="Rote Lampe" style="width:54px;height:54px;border-radius:50%;background:#5a2f2f;border:4px solid var(--ink);transition:background .12s,box-shadow .12s;"></div>
-              <div id="ampelLampYellow" aria-label="Gelbe Lampe" style="width:54px;height:54px;border-radius:50%;background:#5a4a2f;border:4px solid var(--ink);transition:background .12s,box-shadow .12s;"></div>
-              <div id="ampelLampGreen" aria-label="Grüne Lampe" style="width:54px;height:54px;border-radius:50%;background:#2f5a35;border:4px solid var(--ink);transition:background .12s,box-shadow .12s;"></div>
+              <div id="ampelLampRed" role="img" aria-label="Rote Lampe" style="width:54px;height:54px;border-radius:50%;background:#5a2f2f;border:4px solid var(--ink);transition:background .12s,box-shadow .12s;"></div>
+              <div id="ampelLampYellow" role="img" aria-label="Gelbe Lampe" style="width:54px;height:54px;border-radius:50%;background:#5a4a2f;border:4px solid var(--ink);transition:background .12s,box-shadow .12s;"></div>
+              <div id="ampelLampGreen" role="img" aria-label="Grüne Lampe" style="width:54px;height:54px;border-radius:50%;background:#2f5a35;border:4px solid var(--ink);transition:background .12s,box-shadow .12s;"></div>
             </div>
           </div>
           <div id="ampelStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit?</div>
@@ -3989,7 +4017,7 @@
           <div class="game-desc">Wähle eine Zahl in cm. Der Roboter fährt los – bremse genau
             auf der Markierung.</div>
           <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0 6px;">
-            <label style="font-weight:700;">Zahl (cm):</label>
+            <label for="zahlSelect" style="font-weight:700;">Zahl (cm):</label>
             <select id="zahlSelect" style="font-size:18px;padding:8px 12px;border:3px solid var(--ink);border-radius:12px;font-weight:700;background:#fff;">
               <option>10</option><option>20</option><option>30</option><option selected>40</option><option>50</option>
               <option>60</option><option>70</option><option>80</option><option>90</option><option>100</option>
@@ -4075,7 +4103,7 @@
           <div class="game-desc">Der Roboter fährt zur Zielfarbe. Wie schnell schafft er es?
             Knacke deine Bestzeit!</div>
           <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0 6px;">
-            <label style="font-weight:700;">Zielfarbe:</label>
+            <label for="zeitSelect" style="font-weight:700;">Zielfarbe:</label>
             <select id="zeitSelect" style="font-size:18px;padding:8px 12px;border:3px solid var(--ink);border-radius:12px;font-weight:700;background:#fff;">
               <option value="0">Rot</option><option value="1">Gelb</option><option value="2">Grün</option><option value="3">Blau</option>
             </select>
@@ -5153,6 +5181,7 @@ function updateConnectionUI(isConn, text) {
       let memSeq = [];
       let memTimer = null;    // Restzeit bis zur Eingabe
       let memWaitLeft = 0;
+      let memAutoRestart = null;   // WIN-Auto-Restart (muss bei STOP abbrechbar sein)
       // Vorschlags-Längen (die Firmware erlaubt 3..16)
       function memLenForStage() {
         const st = profile().stage;
@@ -5237,9 +5266,15 @@ function updateConnectionUI(isConn, text) {
         memShowStep = -1;
         memShowing = false;
         memSeq = [];
+        if (memAutoRestart) { clearTimeout(memAutoRestart); memAutoRestart = null; }
         memStopCountdown();
         memEnableInput(false);
         document.getElementById('memStatus').textContent = 'Bereit? Klicke auf Start.';
+        // Start-Knopf gehoert zum Reset: sonst bleibt nach STOP (ohne
+        // Antwort der Firmware) oder beim View-Wechsel ein toter Zustand
+        // ohne Startmoeglichkeit zurueck.
+        const sb = document.getElementById('btnMemStart');
+        if (sb) { sb.style.display = 'inline-flex'; sb.textContent = 'Start'; }
         memUpdateProgress();
         memRenderSeq();
       }
@@ -5291,7 +5326,9 @@ function updateConnectionUI(isConn, text) {
           document.getElementById('btnMemStart').textContent = 'Nochmal';
           setStep('memory', 3);
           // Auto-Restart mit +1 Schritt nach kurzer Pause
-          setTimeout(() => {
+          if (memAutoRestart) clearTimeout(memAutoRestart);
+          memAutoRestart = setTimeout(() => {
+            memAutoRestart = null;
             if (document.getElementById('view-memory').classList.contains('active')) {
               memLen = Math.min(16, n + 1);
               memSeq = []; memCurrent = 0; memShowing = true; memShowStep = -1;
@@ -5312,11 +5349,8 @@ function updateConnectionUI(isConn, text) {
           if (wrongBtn) { wrongBtn.classList.add('wrong'); setTimeout(() => wrongBtn.classList.remove('wrong'), 600); }
           showFeedback('memFeedback', 'error', 'Falsch! Drücke Start für eine neue Runde.');
           document.getElementById('btnMemStart').style.display = 'inline-flex';
-        } else if (msg === 'MEMORY:ABORT' || msg === 'MEMORY:TIMEOUT') {
-          memStopCountdown();
+        } else if (msg === 'MEMORY:ABORT' || msg === 'MEMORY:TIMEOUT' || msg === 'MEMORY:STOPPED') {
           memReset();
-          document.getElementById('btnMemStart').style.display = 'inline-flex';
-          document.getElementById('btnMemStart').textContent = 'Start';
           if (msg === 'MEMORY:TIMEOUT') showFeedback('memFeedback', 'error', 'Zeit abgelaufen! Versuch es nochmal.');
         }
       }
@@ -5811,7 +5845,11 @@ function updateConnectionUI(isConn, text) {
             '<div data-duel="score" style="display:none;font-size:24px;font-weight:800;margin:6px 0;">Du 0 : 0 Gegner</div>' +
             '<div data-duel="banner" style="display:none;font-weight:800;margin:4px 0;"></div>' +
             '</div>';
-          host.querySelector('.duel-toggle').addEventListener('click', () => duelSetOpen(!duel.open));
+          host.querySelector('.duel-toggle').addEventListener('click', () => {
+            // Waehrend einer laufenden Runde kein stilles Umschalten im
+            // Hintergrund (das wuerde nach Rundenende ueberraschend aufklappen).
+            if (!duel.playing) duelSetOpen(!duel.open);
+          });
         });
         document.querySelectorAll('.duel-scan').forEach(b => b.addEventListener('click', () => {
           duel.peers = [];
@@ -5828,6 +5866,13 @@ function updateConnectionUI(isConn, text) {
       function duelRenderAll() {
         document.querySelectorAll('[data-duel="body"]').forEach(el => {
           el.style.display = (duel.open && !duel.playing) ? 'block' : 'none';
+        });
+        // Wahrend der Runde ist der Toggle bewusst wirkungslos (Guard im
+        // Click-Handler) - das wird auch gezeigt, statt still zu bleiben.
+        document.querySelectorAll('.duel-toggle').forEach(b => {
+          b.style.opacity = duel.playing ? '.55' : '1';
+          b.setAttribute('aria-disabled', duel.playing ? 'true' : 'false');
+          b.setAttribute('aria-expanded', (duel.open && !duel.playing) ? 'true' : 'false');
         });
         document.querySelectorAll('[data-duel="arrow"]').forEach(el => {
           el.innerHTML = (duel.open && !duel.playing) ? '&#9662;' : '&#9656;';
@@ -5934,7 +5979,7 @@ function updateConnectionUI(isConn, text) {
       });
       document.getElementById('btnMemStop').addEventListener('click', () => {
         sendCommand('MEMORY:STOP');
-        memStopCountdown();
+        memReset();   // sofort lokal zuruecksetzen, nicht erst auf ABORT warten
       });
       // Freifahren: Bildschirmtasten und der STOP-Knopf anbinden.
       bindKeyButtons();
@@ -6013,8 +6058,10 @@ function updateConnectionUI(isConn, text) {
       function resetAllLocalGameState() {
         if (progRunning) { progRunning = false; progRender(); }
         lineRunning = false;
-        memInputEnabled = false;
-        memStopCountdown();
+        // Memory komplett zuruecksetzen (inkl. WIN-Auto-Restart-Timer):
+        // sonst feuert ein WIN waehrend Disconnect nach 3,5 s ein Phantom-
+        // START, das beim Reconnect geflusht wuerde.
+        memReset();
         if (motorTestTimer) { clearTimeout(motorTestTimer); motorTestTimer = null; }
         if (cqTask) { clearInterval(cqTask); cqTask = null; }
         cqAnswers = [];
@@ -6392,6 +6439,16 @@ function updateConnectionUI(isConn, text) {
         }
       }
       document.querySelectorAll('.tile[data-view]').forEach(t => t.addEventListener('click', () => nav(t.dataset.view)));
+      // Kacheln per Tastatur bedienbar machen (divs statt buttons aus
+      // Markup-Gruenden): Rolle + Fokus + Enter/Space loest denselben Klick aus.
+      // Gilt auch fuer die onclick-Kachel ohne data-view (Kalibrieren).
+      document.querySelectorAll('.tile[data-view], .tile[onclick]').forEach(t => {
+        t.setAttribute('role', 'button');
+        t.setAttribute('tabindex', '0');
+        t.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t.click(); }
+        });
+      });
       document.querySelectorAll('[data-view]').forEach(b => {
         if (b.classList.contains('back-btn')) b.addEventListener('click', () => nav(b.dataset.view));
       });
@@ -10302,7 +10359,11 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
       // Kalibrierung nicht sichtbar ist - die Meldung ging also ins Leere.
       let calMsgTimer = null;
       function calMsg(type, text) {
-        const el = document.getElementById('calWizardMsg');
+        // Scoped query statt getElementById: der Wizard rendert je nach Schritt
+        // unterschiedliche Bloecke, die ID waere sonst mehrfach vorhanden.
+        // Marker als data-Attribut (keine Klasse): className wird unten
+        // ueberschrieben und wuerde einen Klassen-Marker loeschen.
+        const el = document.querySelector('#calWizardBody [data-calmsg]');
         if (!el) return;
         if (calMsgTimer) { clearTimeout(calMsgTimer); calMsgTimer = null; }
         el.className = 'feedback-msg show feedback-' + type;
@@ -10310,7 +10371,7 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
         calMsgTimer = setTimeout(() => { el.className = 'feedback-msg'; }, 4000);
       }
       function calMsgClear() {
-        const el = document.getElementById('calWizardMsg');
+        const el = document.querySelector('#calWizardBody [data-calmsg]');
         if (el) el.className = 'feedback-msg';
         if (calMsgTimer) { clearTimeout(calMsgTimer); calMsgTimer = null; }
       }
@@ -10462,7 +10523,8 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
             'Neu kalibrieren geht nur über den Serial-Monitor (USB).</div>' +
             '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">' +
             '<button class="btn btn-sm btn-grey" id="calBtnState">Stand abfragen</button>' +
-            '<button class="btn btn-grey" id="calBtnCancelWait">Schließen</button></div>';
+            '<button class="btn btn-grey" id="calBtnCancelWait">Schließen</button></div>' +
+            '<div class="feedback-msg" data-calmsg="1"></div>';
           const bq = document.getElementById('calBtnState');
           if (bq) bq.addEventListener('click', () => sendCommand('CAL:?'));
           const bc = document.getElementById('calBtnCancelWait');
@@ -10480,6 +10542,9 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
       function renderCalWizard() {
         const body = document.getElementById('calWizardBody');
         if (!body) return;
+        // Neu-Render loescht sichtbare Alt-Meldungen: nach innerHTML-Ersatz
+        // wuerde ein noch laufender calMsgTimer sonst auf geloestem DOM feuern.
+        calMsgClear();
         // Der Schritt-Knopf wird per addEventListener gebunden, NICHT per
         // onclick="...${JSON.stringify(expect)}...". JSON.stringify erzeugt
         // doppelte Anfuehrungszeichen und damit wurde das onclick-Attribut
@@ -10502,11 +10567,11 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
               <div style="margin-bottom:8px;"><svg class="ic ic-lg" aria-hidden="true"><use href="#ic-hourglass"></use></svg></div>
               <div style="font-weight:700;margin-bottom:8px;">Einen Moment ...</div>
               <p style="color:var(--ink-mute);">Warte auf den Roboter (${calWaitingFor}).</p>
-              <button class="btn btn-grey" id="calBtnCancelWait">Abbrechen</button>
+              <button class="btn btn-grey" id="calBtnCancelWait2">Abbrechen</button>
             </div>
-            <div id="calWizardMsg" class="feedback-msg"></div>
+            <div class="feedback-msg" data-calmsg="1"></div>
           `;
-          const cw = document.getElementById('calBtnCancelWait');
+          const cw = document.getElementById('calBtnCancelWait2');
           if (cw) cw.addEventListener('click', () => {
             if (calWaitTimer) { clearTimeout(calWaitTimer); calWaitTimer = null; }
             calWaitingFor = null;
@@ -10523,7 +10588,7 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
             <p style="color:var(--ink-mute);margin-bottom:16px;">Alle Werte wurden im NVS des Roboters gespeichert.</p>
             <button class="btn btn-primary" id="calBtnDone">Fertig</button>
           </div>
-          <div id="calWizardMsg" class="feedback-msg"></div>
+          <div class="feedback-msg" data-calmsg="1"></div>
         `;
           const dn = document.getElementById('calBtnDone');
           if (dn) dn.addEventListener('click', closeCalWizard);
@@ -10537,8 +10602,8 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
           <button class="btn btn-primary" id="calBtnStep" data-cmd="${s.cmd}" data-expect="${s.expect}">${s.btnText}</button>
           ${calStep > 0 ? '<button class="btn btn-grey" id="calBtnBack">Zurück</button>' : ''}
         </div>
-        <div id="calWizardMsg" class="feedback-msg"></div>
-        <div style="font-size:12px;color:var(--ink-mute);margin-top:6px;text-align:right;">Schritt ${calStep + 1} von ${calStepsData.length}</div>
+          <div class="feedback-msg" data-calmsg="1"></div>
+          <div style="font-size:12px;color:var(--ink-mute);margin-top:6px;text-align:right;">Schritt ${calStep + 1} von ${calStepsData.length}</div>
       `;
         const st = document.getElementById('calBtnStep');
         if (st) st.addEventListener('click', () => {
