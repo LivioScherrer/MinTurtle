@@ -159,6 +159,10 @@ void distRefSpadService();
 // Letzter gueltiger Messwert (Cache aus distTick), -1 = kein Wert
 int16_t distLastMM();
 
+// Alter des letzten gueltigen Messwerts in ms (fuer Regler, die frische Werte
+// brauchen - z. B. B9 Einparken). 0xFFFFFFFF = noch nie ein Wert.
+uint32_t distLastAgeMs();
+
 // In loop() aufrufen: meldet alle DIST_NOTIFY_MS "DIST:<mm>" per sendStatus (nur bei BLE).
 // Braucht Funktionspointer-ähnlichen Callback nicht: nutzt sendStatus aus BLEManager.
 void distTick();

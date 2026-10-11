@@ -1,5 +1,6 @@
 // EduBot V2 - Spiel-Bewegungs-Engine (blockierend)
-// Gemeinsam genutzt von Quiz, Rennen, Memory, Linienfolger und Programmierung.
+// Gemeinsam genutzt von Quiz, Rennen, Memory, Linienfolger, Programmierung
+// und den Spiel-Modi (A5/B1/B8/B9/B10).
 #pragma once
 
 #include <Arduino.h>
@@ -14,7 +15,16 @@ enum GameMode : uint8_t {
   GAME_MEMORY,
   GAME_LINEFOLLOWER,
   GAME_PROG,
-  GAME_SLALOM
+  GAME_SLALOM,
+  // Uebrige Spiel-Modi (Ampel, Zahlentreffer). Die frueheren Eintraege
+  // GAME_WINKEL (B2), GAME_HAND (A6), GAME_FORM (B4/C1), GAME_SUN (B5),
+  // GAME_MINE (A9), GAME_FOOD (B6) und GAME_EXPLORE (C2) sind gestrichen;
+  // die Werte von GAME_AMPEL/GAME_ZAHL bleiben dadurch unveraendert.
+  GAME_AMPEL,   // A5 "Ampel" (Gruenes Licht, rotes Licht)
+  GAME_ZAHL,    // B1 "Zahlentreffer" (Praezisions-Parcours)
+  GAME_GEHEIM,  // B8 "Geheim-Strecke" (Schaetzen + Kalibrieren)
+  GAME_PARK,    // B9 "Einparken" (Distanz-Bremsung)
+  GAME_ZEIT,    // B10 "Zeitfahren" (Tempo gegen die Uhr)
 };
 extern GameMode currentGame;
 

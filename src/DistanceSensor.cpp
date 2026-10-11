@@ -918,6 +918,11 @@ void distClearOffset() {
 
 int16_t distLastMM() { return s_last; }
 
+uint32_t distLastAgeMs() {
+  if (s_last < 0 || s_lastMs == 0) return 0xFFFFFFFFu;
+  return (uint32_t)(millis() - s_lastMs);
+}
+
 bool distBlocked() {
   if (!s_ok) return false;
   int16_t mm = s_last;

@@ -716,7 +716,7 @@
       .game-header .help-btn-lb {
         display: none
       }
-      .game-header .back-btn { min-height: 38px; padding: 0 10px }
+      .game-header .back-btn { min-height: 44px; padding: 0 10px }
     }
     /* Sehr schmale Geraete: der Klassen-Knopf gibt nur noch die Zahl preis. */
     @media (max-width:400px) {
@@ -3464,7 +3464,7 @@
           <button class="btn btn-sm btn-grey" onclick="filterDashboard('control', this)">Fahren</button>
           <button class="btn btn-sm btn-grey" onclick="filterDashboard('prog', this)">Bauen</button>
           <button class="btn btn-sm btn-grey" onclick="filterDashboard('games', this)">Spielen</button>
-          <button class="btn btn-sm btn-grey" onclick="filterDashboard('setup', this)">Einrichten</button>
+          <button class="btn btn-sm btn-grey" onclick="filterDashboard('setup', this)">Einstellungen</button>
         </div>
         <div class="tile-grid" id="tileGrid">
           <div class="cat-header" data-cat="control"><span>Fahren</span></div>
@@ -3550,6 +3550,66 @@
               <div class="tile-desc">Bewegungen merken</div>
             </div>
           </div>
+          <div class="tile" data-view="ampel" data-cat="games">
+            <div class="tile-ic" style="background:#fdecec;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#d63a3a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="7" y="3" width="10" height="18" rx="3" />
+                <circle cx="12" cy="8" r="1.6" />
+                <circle cx="12" cy="12" r="1.6" />
+                <circle cx="12" cy="16" r="1.6" />
+              </svg></div>
+            <div>
+              <div class="tile-ttl">Ampel</div>
+              <div class="tile-desc">Bei Rot sofort stoppen</div>
+            </div>
+          </div>
+          <div class="tile" data-view="zahl" data-cat="games">
+            <div class="tile-ic" style="background:#e6f0fb;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#2a6db5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="8" width="18" height="8" rx="2" />
+                <path d="M7 8v3M11 8v3M15 8v3M19 8v3" />
+              </svg></div>
+            <div>
+              <div class="tile-ttl">Zahlentreffer</div>
+              <div class="tile-desc">Genau auf der Markierung stoppen</div>
+            </div>
+          </div>
+          <div class="tile" data-view="geheim" data-cat="games">
+            <div class="tile-ic" style="background:#f3e8ff;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#7b2fc2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M9.6 9.6a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.1.9-1.1 1.9" />
+                <circle cx="12" cy="17" r="0.6" fill="#7b2fc2" />
+              </svg></div>
+            <div>
+              <div class="tile-ttl">Geheim-Strecke</div>
+              <div class="tile-desc">Errate die geheime Strecke</div>
+            </div>
+          </div>
+          <div class="tile" data-view="park" data-cat="games">
+            <div class="tile-ic" style="background:#fff3e2;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#c26a1b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="10" width="12" height="6" rx="2" />
+                <circle cx="8" cy="17.5" r="1.4" />
+                <circle cx="14" cy="17.5" r="1.4" />
+                <path d="M19 6v12" />
+              </svg></div>
+            <div>
+              <div class="tile-ttl">Einparken</div>
+              <div class="tile-desc">So nah wie möglich ran</div>
+            </div>
+          </div>
+          <div class="tile" data-view="zeit" data-cat="games">
+            <div class="tile-ic" style="background:#eef1f4;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#3a4652" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="13" r="8" />
+                <path d="M12 9v4l3 2M9 2h6" />
+              </svg></div>
+            <div>
+              <div class="tile-ttl">Zeitfahren</div>
+              <div class="tile-desc">Schnell zur Zielfarbe</div>
+            </div>
+          </div>
           <!-- Alles Technische: ausgeklappt nur, wenn man es wirklich braucht -->
           <div class="cat-header cat-header-toggle" data-cat="setup">
             <button type="button" class="cat-toggle" id="setupToggle" aria-expanded="false" aria-controls="setupGroup">
@@ -3597,8 +3657,8 @@
                   <path d="M7 5v14M17 5v14" />
                 </svg></div>
               <div>
-                <div class="tile-ttl">Distanz-Sensor</div>
-                <div class="tile-desc">Stopp- und Freigabe-Abstand</div>
+              <div class="tile-ttl">Distanz-Sensor</div>
+              <div class="tile-desc">Wann soll ich stoppen?</div>
               </div>
             </div>
           </div>
@@ -3859,9 +3919,10 @@
         <div class="gv-title">Memory</div>
         <div class="conn-dot" id="memConnDot"></div>
       </div>
-      <div class="game-body">
+          <div class="game-body">
         <div class="arena">
-          <div class="game-title">Memory</div>
+          <div class="game-desc">Schau zu, wie der Roboter fährt. Tippe danach die Pfeile
+            in gleicher Reihenfolge nach.</div>
           <div class="mem-meta">Schritt <span id="memProgress">0</span> / <span id="memTotal">3</span></div>
           <div id="memStatus" class="mem-status">Bereit?</div>
           <div id="memSeqDisplay" class="mem-seq"></div>
@@ -3877,9 +3938,156 @@
           </div>
           <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0;">
             <button class="btn btn-lg btn-primary" id="btnMemStart">Start</button>
-            <button class="btn btn-lg btn-danger" id="btnMemStop">STOP</button>
+            <button class="btn btn-grey" id="btnMemStop">✕ Beenden</button>
           </div>
           <div class="feedback-msg" id="memFeedback"></div>
+        </div>
+      </div>
+    </div>
+    <!-- AMPEL (A5) -->
+    <div id="view-ampel" class="view game-view">
+      <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
+        <div class="gv-title">Ampel</div>
+        <div class="conn-dot" id="ampelConnDot"></div>
+      </div>
+      <div class="game-body">
+        <div class="arena">
+          <div class="game-title">Grünes Licht, rotes Licht</div>
+          <div class="game-desc">Der Roboter rollt langsam. Wird die Ampel <b>ROT</b>: sofort
+            <b>BREMSEN!</b></div>
+          <div style="display:flex;justify-content:center;margin:16px auto;">
+            <div style="display:flex;flex-direction:column;gap:10px;padding:14px 18px;background:#3b3b3b;border:5px solid var(--ink);border-radius:24px;box-shadow:0 6px 0 var(--ink);">
+              <div id="ampelLampRed" aria-label="Rote Lampe" style="width:54px;height:54px;border-radius:50%;background:#5a2f2f;border:4px solid var(--ink);transition:background .12s,box-shadow .12s;"></div>
+              <div id="ampelLampYellow" aria-label="Gelbe Lampe" style="width:54px;height:54px;border-radius:50%;background:#5a4a2f;border:4px solid var(--ink);transition:background .12s,box-shadow .12s;"></div>
+              <div id="ampelLampGreen" aria-label="Grüne Lampe" style="width:54px;height:54px;border-radius:50%;background:#2f5a35;border:4px solid var(--ink);transition:background .12s,box-shadow .12s;"></div>
+            </div>
+          </div>
+          <div id="ampelStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit?</div>
+          <div class="mem-meta">Runde <span id="ampelRound">0</span> · Punkte <span id="ampelPts">0</span> · Stufe <span id="ampelStage">1</span></div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0;">
+            <button class="btn btn-lg btn-primary" id="btnAmpelStart">Start</button>
+            <button class="btn btn-lg btn-success" id="btnAmpelHalt" style="font-size:20px;padding:14px 26px;">BREMSEN!</button>
+            <button class="btn btn-grey" id="btnAmpelStop">✕ Beenden</button>
+          </div>
+          <div id="ampelCheatArea" style="display:none;text-align:center;margin:10px 0;">
+            <button class="btn btn-lg" id="btnAmpelCheat" style="background:#ff8a65;">Schummler!</button>
+          </div>
+          <div class="feedback-msg" id="ampelFeedback"></div>
+          <div id="duelHost-ampel"></div>
+        </div>
+      </div>
+    </div>
+    <!-- ZAHLENTREFFER (B1) -->
+    <div id="view-zahl" class="view game-view">
+      <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
+        <div class="gv-title">Zahlentreffer</div>
+        <div class="conn-dot" id="zahlConnDot"></div>
+      </div>
+      <div class="game-body">
+        <div class="arena">
+          <div class="game-desc">Wähle eine Zahl in cm. Der Roboter fährt los – bremse genau
+            auf der Markierung.</div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0 6px;">
+            <label style="font-weight:700;">Zahl (cm):</label>
+            <select id="zahlSelect" style="font-size:18px;padding:8px 12px;border:3px solid var(--ink);border-radius:12px;font-weight:700;background:#fff;">
+              <option>10</option><option>20</option><option>30</option><option selected>40</option><option>50</option>
+              <option>60</option><option>70</option><option>80</option><option>90</option><option>100</option>
+            </select>
+          </div>
+          <div style="max-width:440px;margin:6px auto 0;padding-top:22px;">
+            <div style="position:relative;height:54px;border:4px solid var(--ink);border-radius:14px;background:#fff;box-shadow:0 4px 0 var(--ink);">
+              <div style="position:absolute;left:0;right:0;top:0;bottom:0;border-radius:10px;background:repeating-linear-gradient(90deg,transparent 0 calc(10% - 2px),#d8d8d8 calc(10% - 2px) 10%);"></div>
+              <div id="zahlTargetMark" style="position:absolute;top:-12px;bottom:-12px;left:40%;width:6px;margin-left:-3px;background:#2a6db5;border-radius:3px;"></div>
+              <div id="zahlStopMark" style="display:none;position:absolute;top:-22px;left:40%;width:0;height:0;margin-left:-10px;border-left:10px solid transparent;border-right:10px solid transparent;border-top:14px solid #d63a3a;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--ink-mute);font-weight:700;margin-top:6px;"><span>0</span><span>50 cm</span><span>100 cm</span></div>
+          </div>
+          <div id="zahlStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit?</div>
+          <div class="mem-meta">Runde <span id="zahlRound">0</span> · Punkte <span id="zahlPts">0</span> · Stufe <span id="zahlStage">1</span></div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0;">
+            <button class="btn btn-lg btn-primary" id="btnZahlStart">Start</button>
+            <button class="btn btn-lg btn-success" id="btnZahlHalt" style="font-size:20px;padding:14px 26px;">BREMSEN!</button>
+            <button class="btn btn-grey" id="btnZahlStop">✕ Beenden</button>
+          </div>
+          <div class="feedback-msg" id="zahlFeedback"></div>
+          <div id="duelHost-zahl"></div>
+        </div>
+      </div>
+    </div>
+    <!-- GEHEIM-STRECKE (B8) -->
+    <div id="view-geheim" class="view game-view">
+      <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
+        <div class="gv-title">Geheim-Strecke</div>
+        <div class="conn-dot" id="geheimConnDot"></div>
+      </div>
+      <div class="game-body">
+        <div class="arena">
+          <div class="game-desc">Der Roboter hat eine <b>geheime Strecke</b>. Wie viele cm
+            waren es? Rate mit der Zahl, dann Start.</div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0 6px;">
+            <label for="geheimRange" style="font-weight:700;">Schätzung:</label>
+            <input type="range" id="geheimRange" min="10" max="100" step="1" value="40"
+                   style="width:min(320px,80vw);accent-color:#7b2fc2;" aria-label="Schätzung in Zentimetern">
+            <span style="font-weight:800;font-size:20px;"><b id="geheimVal">40</b> cm</span>
+          </div>
+          <div id="geheimStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit?</div>
+          <div class="mem-meta">Runde <span id="geheimRound">0</span> · Punkte <span id="geheimPts">0</span> · Stufe <span id="geheimStage">1</span></div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0;">
+            <button class="btn btn-lg btn-primary" id="btnGeheimStart">Start</button>
+            <button class="btn btn-grey" id="btnGeheimStop">✕ Beenden</button>
+          </div>
+          <div class="feedback-msg" id="geheimFeedback"></div>
+          <div id="duelHost-geheim"></div>
+        </div>
+      </div>
+    </div>
+    <!-- EINPARKEN (B9) -->
+    <div id="view-park" class="view game-view">
+      <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
+        <div class="gv-title">Einparken</div>
+        <div class="conn-dot" id="parkConnDot"></div>
+      </div>
+      <div class="game-body">
+        <div class="arena">
+          <div class="game-desc">Der Roboter rollt aufs Hindernis zu. Bremse so nah wie
+            möglich – ohne anzustoßen!</div>
+          <div id="parkStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit?</div>
+          <div class="mem-meta">Runde <span id="parkRound">0</span> · Punkte <span id="parkPts">0</span> · Stufe <span id="parkStage">1</span></div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0;">
+            <button class="btn btn-lg btn-primary" id="btnParkStart">Start</button>
+            <button class="btn btn-lg btn-success" id="btnParkHalt" style="font-size:20px;padding:14px 26px;">BREMSEN!</button>
+            <button class="btn btn-grey" id="btnParkStop">✕ Beenden</button>
+          </div>
+          <div class="feedback-msg" id="parkFeedback"></div>
+          <div id="duelHost-park"></div>
+        </div>
+      </div>
+    </div>
+    <!-- ZEITFAHREN (B10) -->
+    <div id="view-zeit" class="view game-view">
+      <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
+        <div class="gv-title">Zeitfahren</div>
+        <div class="conn-dot" id="zeitConnDot"></div>
+      </div>
+      <div class="game-body">
+        <div class="arena">
+          <div class="game-desc">Der Roboter fährt zur Zielfarbe. Wie schnell schafft er es?
+            Knacke deine Bestzeit!</div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0 6px;">
+            <label style="font-weight:700;">Zielfarbe:</label>
+            <select id="zeitSelect" style="font-size:18px;padding:8px 12px;border:3px solid var(--ink);border-radius:12px;font-weight:700;background:#fff;">
+              <option value="0">Rot</option><option value="1">Gelb</option><option value="2">Grün</option><option value="3">Blau</option>
+            </select>
+          </div>
+          <div id="zeitClock" style="text-align:center;font-size:44px;font-weight:800;margin:4px 0;">0.0 s</div>
+          <div id="zeitStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit?</div>
+          <div class="mem-meta">Runde <span id="zeitRound">0</span> · Punkte <span id="zeitPts">0</span> · Bestzeit <span id="zeitBest">–</span></div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0;">
+            <button class="btn btn-lg btn-primary" id="btnZeitStart">Start</button>
+            <button class="btn btn-grey" id="btnZeitStop">✕ Beenden</button>
+          </div>
+          <div class="feedback-msg" id="zeitFeedback"></div>
+          <div id="duelHost-zeit"></div>
         </div>
       </div>
     </div>
@@ -4134,9 +4342,8 @@
             <div class="mesh-section">
               <div class="mesh-section-title">Kanten-Schutz</div>
               <div class="game-desc">Der Roboter merkt die Tischkante und hält an, damit er nicht
-              runterfällt. Sollte <b>immer an</b> sein.</div>
+              runterfällt. <b>Immer an</b> — lässt sich nicht ausschalten.</div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
-                <button class="btn btn-primary" id="edgeGuardToggle" onclick="edgeGuardToggleUi()">Angeschaltet</button>
                 <button class="btn btn-grey" onclick="sendCommand('EDGE:RESET')">Freigeben</button>
               </div>
               <div class="game-desc" id="edgeGuardState" style="margin-top:8px;">&nbsp;</div>
@@ -4312,8 +4519,9 @@ function updateConnectionUI(isConn, text) {
         if (!k) return;
         if (!down && !keys[k]) return;          // nichts zueg tun
         keys[k] = down ? 1 : 0;
-        const btn = document.querySelector('.key-btn[data-key="' + k + '"]');
-        if (btn) btn.classList.toggle('active', !!down);
+        // ALLE Tastenfelder markieren (Freifahren) -
+        // vorher traf der Selektor nur den ersten Knopf (Freifahren).
+        document.querySelectorAll('.key-btn[data-key="' + k + '"]').forEach(btn => btn.classList.toggle('active', !!down));
         sendKeys(true);
       }
       function clearAllDriveKeys() {
@@ -4321,10 +4529,14 @@ function updateConnectionUI(isConn, text) {
         resetKeys();
         if (had) sendKeys(true);
       }
-      // Tastatur: nur in der Fahr-Ansicht, damit andere Ansichten
-      // (Quiz, Memory, Rennen) ihre eigenen Tasten behalten.
+      // Tastatur: in jeder Ansicht mit Tastenfeld (Freifahren),
+      // damit andere Ansichten ihre eigenen Tasten behalten.
+      function keyPadViewActive() {
+        const a = document.querySelector('.view.active');
+        return !!(a && a.querySelector('.key-btn'));
+      }
       document.addEventListener('keydown', e => {
-        if (!driveViewActive()) return;
+        if (!keyPadViewActive()) return;
         if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
         const k = KEY_BY_CODE[e.code];
         if (!k) return;
@@ -4452,6 +4664,18 @@ function updateConnectionUI(isConn, text) {
           handleLineMessage(msg);
         } else if (msg.startsWith('SLALOM:')) {
           handleSlalomMessage(msg);
+        } else if (msg.startsWith('AMPEL:')) {
+          handleAmpelMessage(msg);
+        } else if (msg.startsWith('ZAHL:')) {
+          handleZahlMessage(msg);
+        } else if (msg.startsWith('GEHEIM:')) {
+          handleGeheimMessage(msg);
+        } else if (msg.startsWith('PARK:')) {
+          handleParkMessage(msg);
+        } else if (msg.startsWith('ZEIT:')) {
+          handleZeitMessage(msg);
+        } else if (msg.startsWith('DUEL:')) {
+          handleDuelMessage(msg);
         } else if (msg.startsWith('DIST:DIAG:')) {
           // MUSS vor dem generischen 'DIST:'-Zweig stehen: 'DIST:DIAG:...'
           // erfuellt 'startsWith("DIST:")' ebenfalls und wuerde dort
@@ -5093,6 +5317,594 @@ function updateConnectionUI(isConn, text) {
           if (msg === 'MEMORY:TIMEOUT') showFeedback('memFeedback', 'error', 'Zeit abgelaufen! Versuch es nochmal.');
         }
       }
+      // ==========================================
+      // WELLE 0/1: Ampel, Zahlentreffer
+      // ==========================================
+      function clearFeedback(id) {
+        const el = document.getElementById(id);
+        if (el) el.className = 'feedback-msg';
+      }
+      // ---- A5 Ampel ----
+      // Drei-Lampen-Ampel: genau eine Lampe leuchtet (mit Leucht-Glow).
+      function ampelSetLight(state) {
+        const r = document.getElementById('ampelLampRed');
+        const y = document.getElementById('ampelLampYellow');
+        const g = document.getElementById('ampelLampGreen');
+        if (!r || !y || !g) return;
+        r.style.background = (state === 'red')    ? '#ff5252' : '#5a2f2f';
+        y.style.background = (state === 'yellow') ? '#ffd740' : '#5a4a2f';
+        g.style.background = (state === 'green')  ? '#69f0ae' : '#2f5a35';
+        r.style.boxShadow = (state === 'red')    ? '0 0 22px #ff5252' : 'none';
+        y.style.boxShadow = (state === 'yellow') ? '0 0 22px #ffd740' : 'none';
+        g.style.boxShadow = (state === 'green')  ? '0 0 22px #69f0ae' : 'none';
+      }
+      function ampelSetStartLabel(text, disabled) {
+        const b = document.getElementById('btnAmpelStart');
+        if (b) { b.textContent = text; b.disabled = !!disabled; }
+      }
+      // BREMSEN! (weiches Bremsen) ist nur waehrend einer laufenden Runde aktiv -
+      // ein Knopf, der nichts tut, verwirrt Kinder (QA-Befund).
+      function ampelSetHaltEnabled(on) {
+        const b = document.getElementById('btnAmpelHalt');
+        if (b) b.disabled = !on;
+      }
+      // Runden-Punktestand (UI-lokal, kein Protokoll): RESULT 0/1/2 Punkte,
+      // entdeckter Schummler 1 Punkt. Nochmal zaehlt weiter, STOP setzt zurueck.
+      let ampelRound = 0, ampelPts = 0, ampelStageN = 1;
+      function ampelScore() {
+        document.getElementById('ampelRound').textContent = ampelRound;
+        document.getElementById('ampelPts').textContent = ampelPts;
+        document.getElementById('ampelStage').textContent = ampelStageN;
+      }
+      function ampelResetLocal() {
+        ampelRound = 0; ampelPts = 0; ampelStageN = 1; ampelScore();
+        ampelSetLight('off');
+        const st = document.getElementById('ampelStatus');
+        if (st) st.textContent = 'Bereit?';
+        const cheat = document.getElementById('ampelCheatArea');
+        if (cheat) cheat.style.display = 'none';
+        ampelSetStartLabel('Start', false);
+        ampelSetHaltEnabled(false);
+        duelSetPlaying(false);   // Runde vorbei -> Duell-Aufbau wieder zeigen
+      }
+      function handleAmpelMessage(msg) {
+        const st = document.getElementById('ampelStatus');
+        if (!st) return;
+        if (msg === 'AMPEL:ARMED') {
+          ampelSetLight('green');
+          st.textContent = 'Los! Warte auf Rot...';
+          ampelRound++; ampelScore();
+          duelSetPlaying(true);   // Runde laeuft -> Duell-Aufbau verstecken
+          ampelSetStartLabel('Start', true);
+          ampelSetHaltEnabled(true);
+          clearFeedback('ampelFeedback');
+        } else if (msg === 'AMPEL:RED') {
+          ampelSetLight('red');
+          st.textContent = 'ROT! Jetzt BREMSEN!';
+          fx.go();
+        } else if (msg.startsWith('AMPEL:RESULT:')) {
+          const d = msg.substring(13).split(',');
+          const mm = parseInt(d[0], 10) || 0;
+          const score = parseInt(d[1], 10) || 0;
+          ampelPts += score; ampelScore();
+          duelSetPlaying(false);   // Runde vorbei -> Duell-Aufbau wieder zeigen
+          ampelSetLight('off');
+          st.textContent = 'Nachrollweg: ' + mm + ' mm';
+          if (score === 2) { fx.win(); showFeedback('ampelFeedback', 'success', 'Perfekt! Unter 5 cm - volle Punktzahl!'); }
+          else if (score === 1) { showFeedback('ampelFeedback', 'success', 'Gut! Unter 15 cm.'); }
+          else { fx.wrong(); showFeedback('ampelFeedback', 'error', 'Erwischt! Zu spät gebremst.'); }
+          ampelSetStartLabel('Nochmal', false);
+          ampelSetHaltEnabled(false);
+        } else if (msg === 'AMPEL:EARLY') {
+          ampelSetLight('off');
+          st.textContent = 'Zu früh!';
+          fx.wrong();
+          duelSetPlaying(false);
+          showFeedback('ampelFeedback', 'error', 'Zu früh gebremst - die Ampel war noch grün!');
+          ampelSetStartLabel('Nochmal', false);
+          ampelSetHaltEnabled(false);
+        } else if (msg === 'AMPEL:MISSED') {
+          ampelSetLight('off');
+          st.textContent = 'Vorbei!';
+          fx.wrong();
+          duelSetPlaying(false);
+          showFeedback('ampelFeedback', 'error', 'Niemand hat gebremst - zu weit gerollt!');
+          ampelSetStartLabel('Nochmal', false);
+          ampelSetHaltEnabled(false);
+        } else if (msg === 'AMPEL:CHEAT') {
+          ampelSetLight('yellow');
+          st.textContent = 'Halt! Der Roboter stoppt von selbst...';
+          document.getElementById('ampelCheatArea').style.display = 'block';
+        } else if (msg === 'AMPEL:CHEATWIN') {
+          ampelSetLight('off');
+          document.getElementById('ampelCheatArea').style.display = 'none';
+          st.textContent = 'Schummler entdeckt!';
+          fx.win();
+          ampelPts += 1; ampelScore();
+          duelSetPlaying(false);
+          showFeedback('ampelFeedback', 'success', 'Super! Du hast den Schummler entdeckt.');
+          ampelSetStartLabel('Nochmal', false);
+          ampelSetHaltEnabled(false);
+        } else if (msg === 'AMPEL:CHEATLATE') {
+          ampelSetLight('off');
+          document.getElementById('ampelCheatArea').style.display = 'none';
+          st.textContent = 'Schummler verpasst.';
+          duelSetPlaying(false);
+          showFeedback('ampelFeedback', 'error', 'Zu spät - der Roboter hat geschummelt.');
+          ampelSetStartLabel('Nochmal', false);
+          ampelSetHaltEnabled(false);
+        } else if (msg.startsWith('AMPEL:STAGE:')) {
+          const n = parseInt(msg.substring(12), 10) || 1;
+          if (n > ampelStageN) showFeedback('ampelFeedback', 'success', 'Stufe ' + n + ': Rot kommt schneller!');
+          ampelStageN = n; ampelScore();
+        } else if (msg === 'AMPEL:STOPPED') {
+          ampelResetLocal();
+        } else if (msg === 'AMPEL:BUSY') {
+          showFeedback('ampelFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
+        }
+      }
+      document.getElementById('btnAmpelStart').addEventListener('click', () => {
+        const b = document.getElementById('btnAmpelStart');
+        sendCommand(b.textContent === 'Nochmal' ? 'AMPEL:NEXT' : 'AMPEL:START');
+        b.disabled = true;
+        clearFeedback('ampelFeedback');
+      });
+      document.getElementById('btnAmpelHalt').addEventListener('click', () => sendCommand('HALT'));
+      document.getElementById('btnAmpelStop').addEventListener('click', () => sendCommand('AMPEL:STOP'));
+      document.getElementById('btnAmpelCheat').addEventListener('click', () => sendCommand('AMPEL:CHEATPRESS'));
+
+      // ---- B1 Zahlentreffer ----
+      let zahlTargetCm = 40;
+      // Runden-Punktestand (UI-lokal): RESULT-Punkte aufsummieren, STOP setzt zurueck.
+      let zahlRound = 0, zahlPts = 0, zahlStageN = 1;
+      function zahlScore() {
+        document.getElementById('zahlRound').textContent = zahlRound;
+        document.getElementById('zahlPts').textContent = zahlPts;
+        document.getElementById('zahlStage').textContent = zahlStageN;
+      }
+      function zahlSetTargetMark(cm) {
+        const m = document.getElementById('zahlTargetMark');
+        if (m) m.style.left = cm + '%';
+      }
+      function zahlSetStopMark(cm) {
+        const m = document.getElementById('zahlStopMark');
+        if (!m) return;
+        if (cm === null) { m.style.display = 'none'; return; }
+        m.style.left = Math.max(1, Math.min(99, cm)) + '%';
+        m.style.display = 'block';
+      }
+      function zahlResetLocal() {
+        zahlRound = 0; zahlPts = 0; zahlStageN = 1; zahlScore();
+        const st = document.getElementById('zahlStatus');
+        if (st) st.textContent = 'Bereit?';
+        const b = document.getElementById('btnZahlStart');
+        if (b) { b.textContent = 'Start'; b.disabled = false; }
+        const h = document.getElementById('btnZahlHalt');
+        if (h) h.disabled = true;   // BREMSEN! erst waehrend der Fahrt
+        zahlSetStopMark(null);
+        duelSetPlaying(false);   // Runde vorbei -> Duell-Aufbau wieder zeigen
+      }
+      function handleZahlMessage(msg) {
+        const st = document.getElementById('zahlStatus');
+        if (!st) return;
+        if (msg.startsWith('ZAHL:GO:')) {
+          zahlTargetCm = parseInt(msg.substring(8), 10) || 40;
+          zahlRound++; zahlScore();
+          duelSetPlaying(true);   // Fahrt laeuft -> Duell-Aufbau verstecken
+          zahlSetTargetMark(zahlTargetCm);
+          zahlSetStopMark(null);
+          st.textContent = 'Fährt los... bremse genau bei ' + zahlTargetCm + ' cm!';
+          document.getElementById('btnZahlStart').disabled = true;
+          const h = document.getElementById('btnZahlHalt');
+          if (h) h.disabled = false;
+          clearFeedback('zahlFeedback');
+        } else if (msg.startsWith('ZAHL:RESULT:')) {
+          const d = msg.substring(12).split(',');
+          const delta = parseInt(d[0], 10) || 0;    // + = zu weit, - = zu kurz
+          const score = parseInt(d[1], 10) || 0;
+          zahlPts += score; zahlScore();
+          duelSetPlaying(false);   // Runde vorbei -> Duell-Aufbau wieder zeigen
+          const abwCm = Math.abs(delta) / 10;
+          const stopCm = zahlTargetCm + delta / 10; // 1 cm = 1 % auf der Skala
+          zahlSetStopMark(stopCm);
+          if (Math.abs(delta) < 10) {
+            st.textContent = 'Volltreffer!';
+            fx.win(); showFeedback('zahlFeedback', 'success', 'Perfekt! Unter 1 cm Abweichung.');
+          } else {
+            st.textContent = abwCm.toFixed(1) + ' cm ' + (delta > 0 ? 'zu weit' : 'zu kurz');
+            if (score === 1) { showFeedback('zahlFeedback', 'success', 'Gut! Unter 3 cm Abweichung.'); }
+            else { fx.wrong(); showFeedback('zahlFeedback', 'error', (delta > 0 ? 'Zu weit gefahren!' : 'Zu früh gestoppt!') + ' Nochmal!'); }
+          }
+          const b = document.getElementById('btnZahlStart');
+          b.disabled = false; b.textContent = 'Nochmal';
+          const h2 = document.getElementById('btnZahlHalt');
+          if (h2) h2.disabled = true;
+        } else if (msg === 'ZAHL:OVERRUN') {
+          st.textContent = 'Vorbeigefahren!';
+          fx.wrong();
+          duelSetPlaying(false);
+          showFeedback('zahlFeedback', 'error', 'Zu weit gefahren - bremse früher!');
+          zahlSetStopMark(null);
+          const b = document.getElementById('btnZahlStart');
+          b.disabled = false; b.textContent = 'Nochmal';
+          const h3 = document.getElementById('btnZahlHalt');
+          if (h3) h3.disabled = true;
+        } else if (msg.startsWith('ZAHL:STAGE:')) {
+          const n = parseInt(msg.substring(11), 10) || 1;
+          if (n > zahlStageN) showFeedback('zahlFeedback', 'success', 'Stufe ' + n + ': schneller unterwegs!');
+          zahlStageN = n; zahlScore();
+        } else if (msg === 'ZAHL:STOPPED') {
+          zahlResetLocal();
+        } else if (msg === 'ZAHL:BUSY') {
+          showFeedback('zahlFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
+        }
+      }
+      document.getElementById('btnZahlStart').addEventListener('click', () => {
+        const sel = document.getElementById('zahlSelect');
+        sendCommand('ZAHL:START:' + sel.value);
+        document.getElementById('btnZahlStart').disabled = true;
+        clearFeedback('zahlFeedback');
+      });
+      document.getElementById('btnZahlHalt').addEventListener('click', () => sendCommand('HALT'));
+      document.getElementById('btnZahlStop').addEventListener('click', () => sendCommand('ZAHL:STOP'));
+
+      // ---- B8 Geheim-Strecke ----
+      let geheimRound = 0, geheimPts = 0, geheimStageN = 1;
+      function geheimGuess() {
+        return parseInt(document.getElementById('geheimRange').value, 10) || 40;
+      }
+      function geheimScore() {
+        document.getElementById('geheimRound').textContent = geheimRound;
+        document.getElementById('geheimPts').textContent = geheimPts;
+        document.getElementById('geheimStage').textContent = geheimStageN;
+      }
+      function geheimResetLocal() {
+        geheimRound = 0; geheimPts = 0; geheimStageN = 1; geheimScore();
+        const st = document.getElementById('geheimStatus');
+        if (st) st.textContent = 'Bereit?';
+        const b = document.getElementById('btnGeheimStart');
+        if (b) { b.textContent = 'Start'; b.disabled = false; }
+        duelSetPlaying(false);   // Runde vorbei -> Duell-Aufbau wieder zeigen
+      }
+      function handleGeheimMessage(msg) {
+        const st = document.getElementById('geheimStatus');
+        if (!st) return;
+        if (msg === 'GEHEIM:READY') {
+          st.textContent = 'Geheim-Strecke bereit – wähle deine Schätzung!';
+          clearFeedback('geheimFeedback');
+        } else if (msg.startsWith('GEHEIM:STAGE:')) {
+          const n = parseInt(msg.substring(13), 10) || 1;
+          if (n > geheimStageN) showFeedback('geheimFeedback', 'success', 'Stufe ' + n + ': grösserer Bereich, strengere Wertung!');
+          geheimStageN = n; geheimScore();
+        } else if (msg === 'GEHEIM:GO') {
+          geheimRound++; geheimScore();
+          st.textContent = 'Fährt die Geheim-Strecke...';
+          document.getElementById('btnGeheimStart').disabled = true;
+          duelSetPlaying(true);   // Fahrt laeuft -> Duell-Aufbau verstecken
+          clearFeedback('geheimFeedback');
+        } else if (msg.startsWith('GEHEIM:RESULT:')) {
+          const d = msg.substring(14).split(',');
+          const delta = parseInt(d[0], 10) || 0;    // + = weiter als geraten
+          const score = parseInt(d[1], 10) || 0;
+          geheimPts += score; geheimScore();
+          duelSetPlaying(false);   // Runde vorbei -> Duell-Aufbau wieder zeigen
+          const abwCm = (Math.abs(delta) / 10).toFixed(1);
+          const dir = (delta > 0) ? 'zu kurz geraten' : 'zu weit geraten';
+          const b = document.getElementById('btnGeheimStart');
+          if (score === 2) {
+            st.textContent = 'Geknackt!';
+            fx.win(); showFeedback('geheimFeedback', 'success', 'Geknackt! Nur ' + abwCm + ' cm daneben. Neue Strecke?');
+            b.disabled = false; b.textContent = 'Neue Strecke';
+          } else if (score === 1) {
+            st.textContent = abwCm + ' cm ' + dir;
+            showFeedback('geheimFeedback', 'success', 'Nah dran! Nochmal raten.');
+            b.disabled = false; b.textContent = 'Nochmal raten';
+          } else {
+            st.textContent = abwCm + ' cm ' + dir;
+            fx.wrong(); showFeedback('geheimFeedback', 'error', 'Daneben! Nochmal raten.');
+            b.disabled = false; b.textContent = 'Nochmal raten';
+          }
+        } else if (msg === 'GEHEIM:STOPPED') {
+          geheimResetLocal();
+        } else if (msg === 'GEHEIM:BUSY') {
+          showFeedback('geheimFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
+        }
+      }
+      document.getElementById('btnGeheimStart').addEventListener('click', () => {
+        const b = document.getElementById('btnGeheimStart');
+        sendCommand(b.textContent === 'Neue Strecke' ? 'GEHEIM:START' : 'GEHEIM:START:' + geheimGuess());
+        document.getElementById('btnGeheimStart').disabled = true;
+        clearFeedback('geheimFeedback');
+      });
+      document.getElementById('btnGeheimStop').addEventListener('click', () => sendCommand('GEHEIM:STOP'));
+      document.getElementById('geheimRange').addEventListener('input', (e) => {
+        document.getElementById('geheimVal').textContent = e.target.value;
+      });
+
+      // ---- B9 Einparken ----
+      let parkRound = 0, parkPts = 0, parkStageN = 1;
+      function parkScore() {
+        document.getElementById('parkRound').textContent = parkRound;
+        document.getElementById('parkPts').textContent = parkPts;
+        document.getElementById('parkStage').textContent = parkStageN;
+      }
+      function parkResetLocal() {
+        parkRound = 0; parkPts = 0; parkStageN = 1; parkScore();
+        const st = document.getElementById('parkStatus');
+        if (st) st.textContent = 'Bereit?';
+        const b = document.getElementById('btnParkStart');
+        if (b) { b.textContent = 'Start'; b.disabled = false; }
+        const h = document.getElementById('btnParkHalt');
+        if (h) h.disabled = true;
+        duelSetPlaying(false);   // Runde vorbei -> Duell-Aufbau wieder zeigen
+      }
+      function parkSetHaltEnabled(on) {
+        const b = document.getElementById('btnParkHalt');
+        if (b) b.disabled = !on;
+      }
+      function handleParkMessage(msg) {
+        const st = document.getElementById('parkStatus');
+        if (!st) return;
+        if (msg === 'PARK:GO') {
+          parkRound++; parkScore();
+          st.textContent = 'Rollt los... bremse kurz davor!';
+          document.getElementById('btnParkStart').disabled = true;
+          parkSetHaltEnabled(true);
+          duelSetPlaying(true);   // Fahrt laeuft -> Duell-Aufbau verstecken
+          clearFeedback('parkFeedback');
+        } else if (msg.startsWith('PARK:STAGE:')) {
+          const n = parseInt(msg.substring(11), 10) || 1;
+          if (n > parkStageN) showFeedback('parkFeedback', 'success', 'Stufe ' + n + ': enger dran!');
+          parkStageN = n; parkScore();
+        } else if (msg.startsWith('PARK:RESULT:')) {
+          const d = msg.substring(12).split(',');
+          const mm = parseInt(d[0], 10);
+          const score = parseInt(d[1], 10) || 0;
+          parkPts += score; parkScore();
+          duelSetPlaying(false);
+          parkSetHaltEnabled(false);
+          st.textContent = 'Noch ' + (mm / 10).toFixed(1) + ' cm!';
+          if (score === 2) { fx.win(); showFeedback('parkFeedback', 'success', 'Perfekt eingeparkt!'); }
+          else if (score === 1) { showFeedback('parkFeedback', 'success', 'Gut! Noch näher ran?'); }
+          else { fx.wrong(); showFeedback('parkFeedback', 'error', 'Zu weit weg. Nochmal!'); }
+          const b = document.getElementById('btnParkStart');
+          b.disabled = false; b.textContent = 'Nochmal';
+        } else if (msg === 'PARK:TOUCH') {
+          st.textContent = 'Angestoßen!';
+          fx.wrong();
+          duelSetPlaying(false);
+          parkSetHaltEnabled(false);
+          showFeedback('parkFeedback', 'error', 'Angestoßen! Nächstes Mal früher bremsen.');
+          const b = document.getElementById('btnParkStart');
+          b.disabled = false; b.textContent = 'Nochmal';
+        } else if (msg === 'PARK:EMPTY') {
+          st.textContent = 'Nichts gefunden.';
+          duelSetPlaying(false);
+          parkSetHaltEnabled(false);
+          showFeedback('parkFeedback', 'warning', 'Kein Hindernis in Reichweite. Stell etwas davor.');
+          const b = document.getElementById('btnParkStart');
+          b.disabled = false; b.textContent = 'Nochmal';
+        } else if (msg === 'PARK:STOPPED') {
+          parkResetLocal();
+        } else if (msg === 'PARK:BUSY') {
+          showFeedback('parkFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
+        }
+      }
+      document.getElementById('btnParkStart').addEventListener('click', () => {
+        sendCommand('PARK:START');
+        document.getElementById('btnParkStart').disabled = true;
+        clearFeedback('parkFeedback');
+      });
+      document.getElementById('btnParkHalt').addEventListener('click', () => sendCommand('HALT'));
+      document.getElementById('btnParkStop').addEventListener('click', () => sendCommand('PARK:STOP'));
+
+      // ---- B10 Zeitfahren ----
+      let zeitRound = 0, zeitPts = 0, zeitTimer = null, zeitT0 = 0;
+      function zeitClockShow(ms) {
+        document.getElementById('zeitClock').textContent = (ms / 1000).toFixed(1) + ' s';
+      }
+      function zeitClockStart() {
+        zeitClockStop();
+        zeitT0 = Date.now();
+        zeitTimer = setInterval(() => zeitClockShow(Date.now() - zeitT0), 100);
+      }
+      function zeitClockStop() {
+        if (zeitTimer) { clearInterval(zeitTimer); zeitTimer = null; }
+      }
+      function zeitScore() {
+        document.getElementById('zeitRound').textContent = zeitRound;
+        document.getElementById('zeitPts').textContent = zeitPts;
+      }
+      function zeitResetLocal() {
+        zeitRound = 0; zeitPts = 0; zeitScore();
+        zeitClockStop(); zeitClockShow(0);
+        document.getElementById('zeitBest').textContent = '–';
+        const st = document.getElementById('zeitStatus');
+        if (st) st.textContent = 'Bereit?';
+        const b = document.getElementById('btnZeitStart');
+        if (b) { b.textContent = 'Start'; b.disabled = false; }
+        duelSetPlaying(false);
+      }
+      function handleZeitMessage(msg) {
+        const st = document.getElementById('zeitStatus');
+        if (!st) return;
+        if (msg === 'ZEIT:GO') {
+          zeitRound++; zeitScore();
+          st.textContent = 'Fährt zur Zielfarbe...';
+          document.getElementById('btnZeitStart').disabled = true;
+          zeitClockStart();
+          duelSetPlaying(true);   // Fahrt laeuft -> Duell-Aufbau verstecken
+          clearFeedback('zeitFeedback');
+        } else if (msg.startsWith('ZEIT:RESULT:')) {
+          const d = msg.substring(12).split(',');
+          const ms = parseInt(d[0], 10) || 0;
+          const score = parseInt(d[1], 10) || 0;
+          zeitPts += score; zeitScore();
+          zeitClockStop(); zeitClockShow(ms);
+          duelSetPlaying(false);
+          st.textContent = (ms / 1000).toFixed(1) + ' s!';
+          if (score === 2) {
+            document.getElementById('zeitBest').textContent = (ms / 1000).toFixed(1) + ' s';
+            fx.win(); showFeedback('zeitFeedback', 'success', 'Neue Bestzeit!');
+          } else {
+            showFeedback('zeitFeedback', 'success', 'Im Ziel! Nochmal?');
+          }
+          const b = document.getElementById('btnZeitStart');
+          b.disabled = false; b.textContent = 'Nochmal';
+        } else if (msg === 'ZEIT:NOTFOUND') {
+          st.textContent = 'Nichts gefunden.';
+          zeitClockStop();
+          duelSetPlaying(false);
+          showFeedback('zeitFeedback', 'warning', 'Keine Zielfarbe erreicht. Leg eine in den Weg.');
+          const b = document.getElementById('btnZeitStart');
+          b.disabled = false; b.textContent = 'Nochmal';
+        } else if (msg === 'ZEIT:STOPPED') {
+          zeitResetLocal();
+        } else if (msg === 'ZEIT:BUSY') {
+          showFeedback('zeitFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
+        }
+      }
+      document.getElementById('btnZeitStart').addEventListener('click', () => {
+        const sel = document.getElementById('zeitSelect');
+        sendCommand('ZEIT:START:' + sel.value);
+        document.getElementById('btnZeitStart').disabled = true;
+        clearFeedback('zeitFeedback');
+      });
+      document.getElementById('btnZeitStop').addEventListener('click', () => sendCommand('ZEIT:STOP'));
+
+      // ==========================================
+      // DUELL (Multiplayer fuer A5, B1, B8, B9, B10)
+      // 1:1 ueber ESP-NOW: beide Roboter spielen ihren Modus, die Punkte
+      // werden verglichen - wer zuerst 10 hat, gewinnt. Ohne aktives Duell
+      // laeuft alles unveraendert als Einzelspieler. Kein Kontakt zwischen
+      // den Robotern: nur der Punktestand wird per Funk geteilt.
+      // ==========================================
+      const duel = { peers: [], paired: null, active: false, my: 0, opp: 0, won: false, lost: false,
+                     open: false, playing: false };
+      const DUEL_VIEWS = ['ampel', 'zahl', 'geheim', 'park', 'zeit'];
+      // Phasen-Logik: der Aufbau-Bereich (Suchen/Verbinden/Starten) ist
+      // einklappbar und versteckt sich von selbst, sobald eine Runde laeuft.
+      // Sichtbar bleibt dann nur der Punktestand (wenn ein Duell laeuft)
+      // plus Banner. Gesteuert ueber duelSetOpen()/duelSetPlaying().
+      function duelBuildPanels() {
+        DUEL_VIEWS.forEach(v => {
+          const host = document.getElementById('duelHost-' + v);
+          if (!host) return;
+          host.innerHTML =
+            '<div style="margin-top:14px;padding:12px 16px;border:3px dashed var(--ink);border-radius:14px;background:#f6fbff;">' +
+            '<button class="duel-toggle" style="all:unset;display:flex;width:100%;justify-content:space-between;align-items:center;cursor:pointer;font-weight:800;box-sizing:border-box;">' +
+            '<span>Duell gegen einen zweiten Roboter</span>' +
+            '<span><span data-duel="headstate" style="font-size:13px;font-weight:700;color:var(--ink-mute);margin-right:8px;">Aus</span>' +
+            '<span data-duel="arrow" aria-hidden="true">&#9656;</span></span></button>' +
+            '<div data-duel="body">' +
+            '<div data-duel="status" style="font-weight:700;color:var(--ink-mute);margin-top:6px;">Nicht verbunden</div>' +
+            '<div data-duel="peers" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:8px 0;"></div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px;">' +
+            '<button class="btn duel-scan">Gegner suchen</button>' +
+            '<button class="btn btn-grey duel-unpair" style="display:none;">Trennen</button>' +
+            '<button class="btn btn-primary duel-start" style="display:none;">Duell starten</button>' +
+            '<button class="btn btn-danger duel-stop" style="display:none;">Duell beenden</button>' +
+            '</div></div>' +
+            '<div data-duel="score" style="display:none;font-size:24px;font-weight:800;margin:6px 0;">Du 0 : 0 Gegner</div>' +
+            '<div data-duel="banner" style="display:none;font-weight:800;margin:4px 0;"></div>' +
+            '</div>';
+          host.querySelector('.duel-toggle').addEventListener('click', () => duelSetOpen(!duel.open));
+        });
+        document.querySelectorAll('.duel-scan').forEach(b => b.addEventListener('click', () => {
+          duel.peers = [];
+          duelRenderAll();
+          sendCommand('RACE:SCAN');
+        }));
+        document.querySelectorAll('.duel-unpair').forEach(b => b.addEventListener('click', () => sendCommand('RACE:UNPAIR')));
+        document.querySelectorAll('.duel-start').forEach(b => b.addEventListener('click', () => sendCommand('DUEL:START')));
+        document.querySelectorAll('.duel-stop').forEach(b => b.addEventListener('click', () => sendCommand('DUEL:STOP')));
+        duelRenderAll();
+      }
+      function duelSetOpen(o) { duel.open = !!o; duelRenderAll(); }
+      function duelSetPlaying(p) { duel.playing = !!p; duelRenderAll(); }
+      function duelRenderAll() {
+        document.querySelectorAll('[data-duel="body"]').forEach(el => {
+          el.style.display = (duel.open && !duel.playing) ? 'block' : 'none';
+        });
+        document.querySelectorAll('[data-duel="arrow"]').forEach(el => {
+          el.innerHTML = (duel.open && !duel.playing) ? '&#9662;' : '&#9656;';
+        });
+        document.querySelectorAll('[data-duel="headstate"]').forEach(el => {
+          el.textContent = duel.active ? ('Du ' + duel.my + ' : ' + duel.opp)
+            : (duel.paired ? 'Verbunden – tippen' : (duel.open ? 'An' : 'Aus'));
+        });
+        document.querySelectorAll('[data-duel="status"]').forEach(el => {
+          el.textContent = duel.paired ? ('Verbunden mit Gegner ' + duel.paired) : 'Nicht verbunden';
+        });
+        document.querySelectorAll('[data-duel="score"]').forEach(el => {
+          el.style.display = duel.active ? 'block' : 'none';
+          el.textContent = 'Du ' + duel.my + ' : ' + duel.opp + ' Gegner';
+        });
+        document.querySelectorAll('[data-duel="peers"]').forEach(el => {
+          el.innerHTML = '';
+          duel.peers.forEach(mac => {
+            const b = document.createElement('button');
+            b.className = 'btn btn-sm';
+            b.textContent = 'Verbinden mit ' + mac.substring(12);
+            b.addEventListener('click', () => sendCommand('RACE:PAIR:' + mac));
+            el.appendChild(b);
+          });
+        });
+        document.querySelectorAll('.duel-scan').forEach(b => { b.style.display = duel.paired ? 'none' : 'inline-flex'; });
+        document.querySelectorAll('.duel-unpair').forEach(b => { b.style.display = duel.paired ? 'inline-flex' : 'none'; });
+        document.querySelectorAll('.duel-start').forEach(b => { b.style.display = (duel.paired && !duel.active) ? 'inline-flex' : 'none'; });
+        document.querySelectorAll('.duel-stop').forEach(b => { b.style.display = duel.active ? 'inline-flex' : 'none'; });
+      }
+      function duelBanner(text, color) {
+        document.querySelectorAll('[data-duel="banner"]').forEach(el => {
+          if (text) { el.style.display = 'block'; el.textContent = text; el.style.color = color || 'var(--ink)'; }
+          else { el.style.display = 'none'; }
+        });
+      }
+      function duelResetLocal() {
+        duel.paired = null; duel.active = false; duel.my = 0; duel.opp = 0;
+        duel.won = false; duel.lost = false; duel.playing = false;
+        duelBanner('');
+        duelRenderAll();
+      }
+      function handleDuelMessage(msg) {
+        if (msg.startsWith('DUEL:STARTED')) {
+          duel.active = true; duel.my = 0; duel.opp = 0; duel.won = false; duel.lost = false;
+          duelBanner('');
+          duelRenderAll();
+        } else if (msg.startsWith('DUEL:ME:')) {
+          duel.my = parseInt(msg.substring(8), 10) || 0;
+          duelRenderAll();
+        } else if (msg.startsWith('DUEL:OPP:')) {
+          duel.opp = parseInt(msg.substring(9), 10) || 0;
+          duelRenderAll();
+        } else if (msg === 'DUEL:WON') {
+          duel.won = true;
+          duelBanner('Du hast das Duell gewonnen!', '#1ea36b');
+          fx.win();
+        } else if (msg === 'DUEL:LOST') {
+          duel.lost = true;
+          duelBanner('Der Gegner hat gewonnen.', '#d63a3a');
+          fx.wrong();
+        } else if (msg === 'DUEL:NOPAIR') {
+          duelBanner('Erst einen Gegner verbinden!', '#d63a3a');
+        } else if (msg === 'DUEL:TIMEOUT') {
+          duelBanner('Der Gegner meldet sich nicht mehr.', '#d63a3a');
+        } else if (msg === 'DUEL:STOPPED') {
+          duel.active = false;
+          duelBanner('');
+          duelRenderAll();
+        }
+      }
+      duelBuildPanels();
+      // Startzustand erst hier: die Resets rufen duelSetPlaying() und brauchen
+      // dafuer die initialisierte Duell-Sektion weiter oben.
+      ampelResetLocal();   // BREMSEN! deaktiviert
+      zahlResetLocal();    // BREMSEN! deaktiviert
+      geheimResetLocal();
+      parkResetLocal();    // BREMSEN! deaktiviert
+      zeitResetLocal();
+
       // Sichtbarer Countdown fuer die Eingabe (Firmware gibt 8 s vor)
       function memStartCountdown(sec) {
         memStopCountdown();
@@ -5217,6 +6029,13 @@ function updateConnectionUI(isConn, text) {
         slalomState.racing = false;
         slalomState.invitePending = false;
         slalomState.pairedMac = null;
+        // Welle-0/1-Modi (Ampel, Zahl, Geheim-Strecke, Einparken, Zeitfahren): lokale Anzeigen zuruecksetzen
+        ampelResetLocal();
+        zahlResetLocal();
+        geheimResetLocal();
+        parkResetLocal();
+        zeitResetLocal();
+        duelResetLocal();
       }
       async function onDisconnected() {
         connected = false;
@@ -5388,23 +6207,10 @@ function updateConnectionUI(isConn, text) {
       // Einlernen: Strecke (mm) und Drehung (Grad) setzen. Beide Befehle
       // fahren den Roboter sofort zur Pruefung - deshalb bewusst als eigene
       // Aktion und nicht im Spielbetrieb.
-      // Tischkanten-Waechter: EIN Knopf zum Ein-/Ausschalten (NVS-persistent).
-      // Der Firmware-Stand ist massgeblich - die Antwort EDGE=1/0 bzw.
-      // EDGE:ON/OFF bestaetigt den neuen Zustand, erst dann wird angezeigt.
-      let edgeGuardOn = true;
-      function edgeGuardToggleUi() {
-        const st = document.getElementById('edgeGuardState');
-        if (st) st.textContent = 'Sende EDGE:' + (edgeGuardOn ? 'OFF' : 'ON') + ' …';
-        sendCommand('EDGE:' + (edgeGuardOn ? 'OFF' : 'ON'));
-      }
+      // Tischkanten-Waechter: immer an (kein Schalter mehr). Der
+      // Firmware-Stand ist massgeblich - erst die Antwort EDGE=1 zeigt
+      // den Zustand an.
       function edgeGuardUiShow(active, clear, emergency) {
-        edgeGuardOn = !!active;
-        const tg = document.getElementById('edgeGuardToggle');
-        if (tg) {
-          tg.textContent = active ? 'Angeschaltet' : 'Ausgeschaltet';
-          tg.classList.toggle('btn-primary', !!active);
-          tg.classList.toggle('btn-danger', !active);
-        }
         const st = document.getElementById('edgeGuardState');
         if (st) {
           let txt = active
@@ -7241,8 +8047,16 @@ function updateConnectionUI(isConn, text) {
             slalomState.scanPeers.push(mac);
             renderSlalomPeers();
           }
+          // Duell-Panels (A5/B1/B8/B9/B10): gefundene Gegner auch dort anbieten.
+          if (document.querySelector('.view.active [data-duel="peers"]') && duel.peers.indexOf(mac) === -1) {
+            duel.peers.push(mac);
+            duelRenderAll();
+          }
         } else if (msg.startsWith('RACE:PAIRED:')) {
           racePairedMac = msg.substring(12);
+          // Duell-Panels mitziehen (gleiche Pairing-Infrastruktur).
+          duel.paired = racePairedMac;
+          duelRenderAll();
           setRaceStatus('Verbunden mit Gegner ' + racePairedMac, 'var(--green-600)');
           document.getElementById('btnRaceScan').style.display = 'none';
           document.getElementById('btnRaceUnpair').style.display = 'inline-flex';
@@ -7257,8 +8071,10 @@ function updateConnectionUI(isConn, text) {
           updateSlalomReadyState();
         } else if (msg === 'RACE:PAIR_FAIL') {
           showFeedback('raceFeedback', 'error', 'Paaring fehlgeschlagen!');
+          duelBanner('Verbinden fehlgeschlagen.', '#d63a3a');
         } else if (msg === 'RACE:UNPAIRED') {
           racePairedMac = null;
+          duelResetLocal();
           document.getElementById('btnRaceUnpair').style.display = 'none';
           document.getElementById('btnRaceScan').style.display = 'inline-flex';
           HELP.views.mathrace.schritte[3].chips = [];
@@ -9473,7 +10289,8 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
         if (!el) return;
         el.className = 'feedback-msg show feedback-' + type;
         el.textContent = text;
-        setTimeout(() => el.classList.remove('show'), 3000);
+        // 6 s statt 3 s: Lob und Fehler muessen in Ruhe lesbar bleiben.
+        setTimeout(() => el.classList.remove('show'), 6000);
       }
 
 

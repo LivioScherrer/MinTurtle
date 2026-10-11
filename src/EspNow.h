@@ -48,6 +48,9 @@ constexpr uint8_t SLALOM_CMD_ABORT   = 6;  // Spiel abgebrochen -> beide zurueck
 constexpr uint8_t SLALOM_CMD_INVITE      = 10; // Einladung (Initiator -> Gegner)
 constexpr uint8_t SLALOM_CMD_INVITE_ACK  = 11; // Einladung angenommen (Gegner -> Initiator)
 constexpr uint8_t SLALOM_CMD_SLALOM_UNPAIR = 12; // Slalom-spezifisches Unpair (nur dieses Spiel)
+// Duell-Kanal (Duel.cpp): Punkte-Austausch fuer die Spiel-Modi (A5/B1/B8/B9/B10).
+// Nutzlast in slalomData: "<punkte>;<S|W>" (S = Stand, W = Sieg).
+constexpr uint8_t SLALOM_CMD_DUEL        = 21;
 struct PeerEntry {
   uint8_t mac[6];
   uint32_t lastSeen;

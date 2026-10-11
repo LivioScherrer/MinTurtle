@@ -1,6 +1,7 @@
 // EduBot V1.3 - Programmieren-Spiel Implementierung
 // Block-Programm (Scratch-artig, mit Parametern) parsen + blockierend ausfuehren.
 #include "ProgGame.h"
+#include "GameCommon.h"   // gameEdgeGuardSuspended() (Kanten-Suspend, Welle 0)
 #include "GameEngine.h"
 #include "Config.h"
 #include "BLEManager.h"
@@ -144,21 +145,25 @@ constexpr uint16_t EDGE_RAW_C_RELEASE = 400; // darueber = wieder frei (Tischmin
 constexpr uint8_t  EDGE_CONFIRM_N   = 2;     // 2 Messungen in Folge (~300 ms)
 
 static volatile uint8_t s_edgeCount = 0;    // aufeinanderfolgende Treffer
-static volatile bool    s_edgeGuardOn = false;   // Schalter aus der NVS
+static volatile bool    s_edgeGuardOn = false;   // Startwert: der erste edgeGuardSet(true) heilt damit auch ein altes NVS-"aus"
 static volatile bool    s_edgeBlocked = false;   // Hysterese: gesperrt bis zum Boden
 
-bool edgeGuardActive()   { return s_edgeGuardOn; }
+bool edgeGuardActive()   { return true; }
+bool edgeGuardBlocked()  { return s_edgeBlocked; }
 void edgeGuardReset()    { s_edgeCount = 0; s_edgeBlocked = false; }
+// Der Parameter bleibt wegen der Aufrufer (Boot, EDGE:ON/OFF) bestehen, wird
+// aber ignoriert: der Waechter ist immer an und wird hier zwangsweise
+// eingeschaltet (heilt auch ein altes NVS mit gespeichertem "aus").
 void edgeGuardSet(bool on) {
-  const bool changed = (s_edgeGuardOn != on);
-  s_edgeGuardOn = on;
-  config.edgeGuard = on;
+  (void)on;
+  const bool changed = !s_edgeGuardOn;
+  s_edgeGuardOn = true;
+  config.edgeGuard = true;
   // Nur bei Aenderung in die NVS: spart Schreibzyklen (Boot schreibt sonst
   // bei jedem Start denselben Wert erneut).
-  if (changed) configSaveBool("edgeGuard", on);
+  if (changed) configSaveBool("edgeGuard", true);
   edgeGuardReset();
-  if (on) Serial.println("[KANTE] Waechter aktiv - stoppt an der Tischkante (alle Modi)");
-  else    Serial.println("[KANTE] Waechter aus");
+  Serial.println("[KANTE] Waechter aktiv - stoppt an der Tischkante (alle Modi)");
 }
 
 // ---- Boden-adaptive Schwellen ----
@@ -260,7 +265,11 @@ void edgeGuardTick(uint16_t rawClear) {
   // Rückfrage aus dem Bisect: Der Stillstand lag NICHT am Wächter (er war zu
   // dem Zeitpunkt bereits neutralisiert), sondern an IRUN = 15. Deshalb darf
   // der Wächter zurückkommen - aber in Stufen, je mit Fahrprobe.
-  if (!s_edgeGuardOn) { s_edgeCount = 0; s_edgeBlocked = false; return; }
+  //
+  // Welle 0: Modi, die schwarze Flaechen als Spiel-Element lesen, setzen den
+  // Waechter sessionweise aus (gameSuspendEdgeGuard) - derzeit nutzt das kein
+  // aktiver Modus. KEIN NVS-Feld, endet mit dem Modus. Danach scharf wie zuvor.
+  if (gameEdgeGuardSuspended()) { s_edgeCount = 0; s_edgeBlocked = false; return; }
 
   // SCHRITT 2: Latch + Hysterese. Einmal ausgeloest, bleibt der Roboter
   // gesperrt, bis die Helligkeit wieder ueber EDGE_RAW_C_RELEASE liegt - erst

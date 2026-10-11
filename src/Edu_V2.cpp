@@ -24,6 +24,16 @@
 #include "LedStrip.h"
 #include "DistanceSensor.h"
 #include "Slalom.h"
+// Welle 0/1 der neuen Spiel-Modi: Fundament (HALT/Manual/Kanten-Suspend/
+// Tempo-Override) in GameCommon, ein Modul je Modus.
+#include "GameCommon.h"
+#include "AmpelGame.h"
+#include "ZahlGame.h"
+#include "GeheimGame.h"   // B8 "Geheim-Strecke" (Schaetzen + Kalibrieren)
+#include "ParkGame.h"     // B9 "Einparken" (Distanz-Bremsung)
+#include "ZeitGame.h"     // B10 "Zeitfahren" (Tempo gegen die Uhr)
+// Duell-Kanal (Multiplayer fuer die Spiel-Modi, 1:1 ueber ESP-NOW):
+#include "Duel.h"
 
 // =====================================================
 // GLOBALE KONSTANTEN
@@ -54,7 +64,9 @@ static bool claimGameSlot(const char* busyMsg, const char* what);
 // Deshalb ist hier KEIN volatile noetig; Motor.cpp sichert seinen eigenen
 // Zustand separat per Mutex (siehe Motor.h).
 GameMode currentGame = GAME_NONE;
-bool driveLockedByGame() { return currentGame != GAME_NONE; }
+// Welle-0-Erweiterung: manche Modi geben die App-Steuerung bewusst frei
+// (gameSetManualDrive(), z.B. C3 Spiegel-Tanz in Welle 2).
+bool driveLockedByGame() { return currentGame != GAME_NONE && !gameAllowsManual(); }
 
 // =====================================================
 // SPIEL-BEWEGUNGS-ENGINE (blockierend)
@@ -467,6 +479,12 @@ void onBleDisconnected() {
   memoryStop();
   lineFollowerStop();
   progStop();
+  ampelStop();
+  zahlStop();
+  geheimStop();
+  parkStop();
+  zeitStop();
+  duelStop();
   Serial.println("[BLE] Getrennt - Werbung gestartet");
   BLEDevice::startAdvertising();
   espNowEnsureChannel();
@@ -499,11 +517,31 @@ void hardStop() {
   memoryStop();
   lineFollowerStop();
   progStop();
+  ampelStop();
+  zahlStop();
+  geheimStop();
+  parkStop();
+  zeitStop();
+  duelStop();
   slalomResetRuntime();
   slalomTargetColor[0] = '\0';
   slalomSetPhase(SLALOM_IDLE);
   ledStripShowAlert();
   sendStatus("STOP");
+}
+
+// ---- HALT: weicher Spiel-Stopp (NICHT der Not-Aus) ----
+// Motoren sofort aus, aber: kein tmcDisable, kein Alarm, das laufende Spiel
+// bleibt aktiv. Der Modus konsumiert das Latch (gameHaltRequested()) und
+// wertet aus (A5: Nachrollweg, B1: Zielabweichung). Ohne aktives Spiel ist
+// HALT ein reiner Stopp.
+static void cmdHalt() {
+  driveClearKeys();
+  speedL = 0.0f; speedR = 0.0f;
+  stopMotors();
+  gameHaltSet();
+  if (currentGame == GAME_NONE) gameHaltClear();   // niemand konsumiert ihn
+  sendStatus("HALT:OK");
 }
 
 // Erkennt die Spiel-STOP-Befehle. Wird ZENTRAL in handleCommand() benutzt:
@@ -516,7 +554,9 @@ void hardStop() {
 // sofort wieder derselbe Aerger.
 static bool cmdIsGameStop(const String& cmd) {
   return cmd == "LINE:STOP"  || cmd == "MEMORY:STOP" || cmd == "QUIZ:STOP"
-      || cmd == "RACE:STOP"  || cmd == "PROG:STOP"  || cmd == "SLALOM:STOP";
+      || cmd == "RACE:STOP"  || cmd == "PROG:STOP"  || cmd == "SLALOM:STOP"
+      || cmd == "AMPEL:STOP" || cmd == "ZAHL:STOP" || cmd == "GEHEIM:STOP"
+      || cmd == "PARK:STOP"  || cmd == "ZEIT:STOP";
 }
 
 // ---- Tastatur-Status (KEYS:<W><A><S><D>) ----
@@ -551,8 +591,7 @@ static bool cmdDist(const String& cmd) {
 
   // Tischkanten-Waechter. Der Sensor sitzt nach unten; ueber der Kante faellt
   // die Gesamthelligkeit auf fast 0, zwei Messungen in Folge -> sofortiger Halt.
-  // Per EDGE:ON / EDGE:OFF aus den Einstellungen, dauerhaft im NVS
-  // (config.edgeGuard). Eingeschaltet gilt er in ALLEN Modi: der Sensor-Task
+  // Immer aktiv (Schalter entfernt): gilt in ALLEN Modi, der Sensor-Task
   // laeuft unabhaengig (freies Fahren, Position, Blockprogramm, Linie, Spiele).
   // Der Boden (Farbe + Helligkeit) wird bei jedem Verbinden automatisch
   // gelernt: Kante = deutlich dunkler als Boden, Bodenfarbe = BODEN
@@ -563,9 +602,12 @@ static bool cmdDist(const String& cmd) {
     return true;
   }
   if (cmd == "EDGE:OFF") {
-    edgeGuardSet(false);
-    sendStatus("EDGE:OFF");
-    Serial.println("[KANTE] Waechter ausgeschaltet (NVS) - gilt in keinem Modus");
+    // Schalter entfernt: Abschalten ist nicht mehr moeglich. Alte
+    // Web-Seiten (Browser-Cache) schicken es noch - Antwort wie bei ON,
+    // damit sie "aktiv" anzeigen statt zu verwirren.
+    edgeGuardSet(true);
+    sendStatus("EDGE:ON");
+    Serial.println("[KANTE] EDGE:OFF ignoriert - Waechter ist immer aktiv");
     return true;
   }
   if (cmd == "EDGE:RESET") {
@@ -1741,6 +1783,7 @@ void handleCommand(const char* cmdStr) {
 
   Serial.printf("[CMD] %s\n", cmd.c_str());
   if (cmd == "STOP") { hardStop(); return; }
+  if (cmd == "HALT") { cmdHalt(); return; }   // weich: Spiel bleibt aktiv
 
   // Spiel-STOP: Tasten + Geschwindigkeits-Buchfuehrung mitraeumen, damit die
   // Main-Loop nicht sofort wieder anzieht. (Siehe cmdIsGameStop.)
@@ -1767,6 +1810,12 @@ void handleCommand(const char* cmdStr) {
   if (cmdLine(cmd))  return;   // LINE:START / LINE:STOP
   if (cmdMemory(cmd))return;   // MEMORY:START / STOP / INPUT:
   if (cmdProg(cmd))  return;   // PROG:SET / RUN / STOP
+  if (ampelCmd(cmd)) return;   // AMPEL:START / NEXT / CHEATPRESS / STOP
+  if (zahlCmd(cmd))  return;   // ZAHL:START:<cm> / STOP
+  if (geheimCmd(cmd)) return;  // GEHEIM:START / START:<cm> / STOP
+  if (parkCmd(cmd))  return;   // PARK:START / STOP
+  if (zeitCmd(cmd))  return;   // ZEIT:START:<0-3> / STOP
+  if (duelCmd(cmd))  return;   // DUEL:START / STOP / ?
   sendStatus((String("UNKNOWN:") + cmd).c_str());
 }
 
@@ -1785,12 +1834,12 @@ void setup() {
 
 configLoad();
 
-// Tischkanten-Waechter aus dem NVS (EDGE:ON/OFF, Standard an). Muss VOR dem
+// Tischkanten-Waechter: immer aktiv (Schalter entfernt). Muss VOR dem
   // Start des Farbsensor-Tasks passieren: edgeGuardTick() wird von dort
   // aufgerufen und wuerde sonst die ersten Messungen ignorieren - beim
   // Anfahren direkt nach dem Einschalten waere die Kante genau dann
   // ungeschuetzt, wenn es gefaehrlich wird.
-edgeGuardSet(config.edgeGuard);
+edgeGuardSet(true);
 
 initSteppers();
   Serial.println("[MOTOR] Motor-Task auf Core 0 gestartet (feste Geschwindigkeit, sanftes Anfahren)");
@@ -1830,6 +1879,7 @@ initSteppers();
 // LED-STATUSANZEIGE
 // =====================================================
 // Waehlt genau EIN Muster nach Prioritaet (oben gewinnt):
+//   0. Kanten-Waechter ausgeloest - Ring komplett rot blinkend bis zur Freigabe
 //   1. Slalom-Countdown  - Startampel: rot fuellt sich, gruen = GO
 //   2. Slalom-Ergebnis   - Regenbogen (gewonnen) / rotes Atmen (verloren)
 //   3. Slalom-Bauphase   - Zielfarbe pulsiert
@@ -1840,6 +1890,13 @@ initSteppers();
 //   8. Ruhezustand       - blau atmen (App verbunden) / orange atmen (wartet)
 // Alarm (Not-Aus) und Ergebnisblitze uebersteuern die Kette intern in LedStrip.
 static void ledPatternUpdate() {
+  // Kanten-Waechter ausgeloest und gesperrt: Ring komplett rot blinkend, bis
+  // der Boden wieder da ist oder EDGE:RESET kommt. Hoechste Ketten-Prioritaet -
+  // Alarm/Ergebnisblitze der Engine uebersteuern weiterhin waehrend ihrer Haltezeit.
+  if (edgeGuardBlocked()) {
+    ledStripShowBlink(LED_C_RED, 500);
+    return;
+  }
   if (slalomPhase == SLALOM_COUNTDOWN) {
     const uint32_t now = millis();
     const uint32_t left = (slalomGoTimer > now) ? (slalomGoTimer - now) : 0;
@@ -1863,6 +1920,32 @@ static void ledPatternUpdate() {
     // Show-Phase: Roboter zeigt die Sequenz. Eingabe: wie weit ist das Kind?
     if (memoryAwaitInput) ledStripShowProgress(memoryInputIdx, memoryLen, LED_C_GREEN);
     else                  ledStripShowMemoryShow();
+    return;
+  }
+  // ---- Welle-0/1-Modi (eigene, nicht-blockierende Ticks) ----
+  if (ampelActive()) {
+    // A5: gruenes Atmen beim Rollen, rotes Atmen bei ROT, gelb beim Schummler.
+    ledStripShowBreathe(ampelRed() ? LED_C_RED : (ampelCheat() ? LED_C_YELLOW : LED_C_GREEN), 1600);
+    return;
+  }
+  if (zahlActive()) {
+    // B1: blaues Atmen waehrend der Messfahrt.
+    ledStripShowBreathe(LED_C_BLUE, 1600);
+    return;
+  }
+  if (geheimActive()) {
+    // B8: tuerkises Atmen waehrend Ratespiel laeuft/faehrt.
+    ledStripShowBreathe(LED_C_CYAN, 1600);
+    return;
+  }
+  if (parkActive()) {
+    // B9: oranges Atmen beim Heranrollen ans Hindernis.
+    ledStripShowBreathe(LED_C_ORANGE, 1600);
+    return;
+  }
+  if (zeitActive()) {
+    // B10: weisses Atmen waehrend der Zeitfahrt.
+    ledStripShowBreathe(LED_C_WHITE, 1600);
     return;
   }
   if (currentGame == GAME_LINEFOLLOWER) {
@@ -1893,6 +1976,12 @@ void loop() {
   bleProcessEvents();
   espNowProcessEvents();
   memoryTick();
+  ampelTick();   // nicht-blockierende Modus-Ticks
+  zahlTick();
+  geheimTick();
+  parkTick();
+  zeitTick();
+  duelTick();    // Duell: Gegner-Timeout bemerken
   if (currentGame == GAME_LINEFOLLOWER) {
     bool wasActive = lineFollowerActive;
     lineFollowerTick();

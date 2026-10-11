@@ -275,8 +275,9 @@ struct Config {
   ColorRef calGelb;
   ColorRef calGruen;
   ColorRef calBlau;
-  // Tischkanten-Waechter: dauerhaft gespeichert (NVS "edgeGuard", per
-  // EDGE:ON / EDGE:OFF aus den Einstellungen). true = gilt in allen Modi.
+  // Tischkanten-Waechter: immer aktiv (Schalter entfernt). Das NVS-Feld
+  // bleibt bestehen, wird aber ignoriert - edgeGuardSet(true) heilt beim
+  // Boot auch alte gespeicherte "aus"-Werte.
   bool edgeGuard = true;
   // Boden-Referenz: wird bei jedem BLE-Verbinden automatisch aus dem
   // Farbsensor unter dem Roboter gelernt (Farbe + Helligkeit). Gilt als

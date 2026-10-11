@@ -110,8 +110,9 @@ void progStop();
 // deshalb: eine schwarze Linie auf dem Tisch sieht genauso dunkel aus wie der
 // Abgrund, ist aber nur kurz. Dauer statt Einzelwert trennt die beiden Faelle.
 void edgeGuardTick(uint16_t rawClear);   // aus dem Sensor-Task
-void edgeGuardSet(bool on);               // Web-UI-Schalter (NVS-persistent)
+void edgeGuardSet(bool on);               // Parameter wird ignoriert: immer an (heilt altes NVS)
 bool edgeGuardActive();
+bool edgeGuardBlocked();                    // true von der Ausloesung bis zur Freigabe (Boden oder EDGE:RESET)
 void edgeGuardReset();                    // Zaehler und Merker loeschen
 // ---- Boden-Referenz (Auto-Lernen bei jedem BLE-Verbinden) ----
 // floorLearn: speichert kalibrierte RGB (0..255) + Roh-Clear als "Boden".

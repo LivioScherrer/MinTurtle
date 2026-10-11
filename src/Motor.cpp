@@ -256,6 +256,14 @@ bool s_enabled = false;
 // (setMotorSpeed/prepPositionMove), Tick liest -> volatile reicht.
 volatile unsigned long s_lastMotionMs = 0;
   bool s_msConfirmed = false;
+  // Drossel fuer die Konfigurations-Selbstheilung in motorWakeDrivers():
+  // hoechstens ein Nachhol-Versuch pro Sekunde.
+  uint32_t s_lastCfgRetryMs = 0;
+  // Beruhigungszeit nach EN=LOW, bevor der TMC2209 konfiguriert wird.
+  // Der Treiber nimmt Register-Schreibzugriffe erst an, wenn er nach dem
+  // EN-Wechsel bereit ist - direkt nach dem Wechsel ging die Konfiguration
+  // gelegentlich ins Leere (Symptom: "erst TMC:MS senden, dann faehrt er").
+  constexpr uint32_t TMC_EN_SETTLE_MS = 10;
 
   // Erlaubt sind alle Zweierpotenzen 1..256. Feine Werte brauchen mehr
   // Schritte/s pro mm - das Tempo wird in Edu_V2.cpp (SPEED:/TMC:MS:)
@@ -1527,14 +1535,32 @@ void tmcEnable() {
   const bool wasOff = !s_enabled;
   digitalWrite(PIN_EN, LOW);
   s_enabled = true;
-  if (wasOff) tmcEnsureConfigured();
+  if (wasOff) {
+    // Kurz warten, bis der Treiber nach dem EN-Wechsel bereit ist - sonst
+    // kann die folgende Konfiguration ins Leere laufen (siehe
+    // TMC_EN_SETTLE_MS). Beim Boot gilt dasselbe: initSteppers() ruft
+    // tmcEnable() direkt vor seinen configureOne()-Aufrufen auf.
+    delay(TMC_EN_SETTLE_MS);
+    tmcEnsureConfigured();
+  }
 }
 
 // Treiber vor dem Mutex-Halt aufwecken - aber NUR wenn wirklich gefahren werden
 // soll. Reihenfolge, Timing und Sicherheitsregeln siehe Motor.h.
 void motorWakeDrivers() {
   if (!motorReady) return;   // siehe motorReady
-  if (!s_enabled) tmcEnable();
+  if (!s_enabled) { tmcEnable(); return; }
+  // Selbstheilung: Ist der Registersatz NICHT bestaetigt (Boot ohne
+  // Motorspannung, EN-Reset durch Auto-Standby, gestoerte UART-Transaktion),
+  // wird er beim naechsten Fahrbefehl nachgeholt. Vorher blieb der Roboter
+  // in genau dieser Lage stehen, bis jemand TMC:MS oder TMC:INIT sendete.
+  // Gedrosselt, damit ein wirklich fehlender Treiber die Fahrbefehle nicht
+  // ausbremst (ein Versuch pro Sekunde reicht).
+  if (!s_msConfirmed && (uint32_t)(millis() - s_lastCfgRetryMs) >= 1000u) {
+    s_lastCfgRetryMs = millis();
+    Serial.println("[TMC] Registersatz unvollstaendig - Konfiguration wird beim Fahren nachgeholt");
+    tmcEnsureConfigured();
+  }
 }
 
 // Auskommentiert gehalten: der Wetter-koennte-es-besser-wissen-Helfer wird

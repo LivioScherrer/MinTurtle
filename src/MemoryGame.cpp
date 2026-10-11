@@ -60,10 +60,12 @@ void memoryStart(uint8_t startLen) {
   if (memoryActive) return;
   if (startLen > MEMORY_MAX_LEN) startLen = MEMORY_MAX_LEN;
   // Simon-Says: Wenn die neue Laenge groesser als die bisherige ist (und es
-  // schon eine Sequenz gibt), nur EINEN neuen Schritt anhaengen. Die
-  // vorherigen N-1 Bewegungen bleiben unveraendert.
+  // schon eine Sequenz gibt), die Luecke VOLLSTAENDIG mit Zufall fuellen.
+  // Nur EINEN Schritt anzuhaengen liesse bei Spruengen > 1 (z.B. Stufe 4 -> 6)
+  // alte Nullen/Altbewegungen in der Sequenz uebrig - das Kind saehe
+  // nicht-zufaellige Wiederholungen.
   if (startLen > memoryLen && memoryLen > 0) {
-    memorySeq[memoryLen] = random(0, 4);
+    for (uint8_t i = memoryLen; i < startLen; i++) memorySeq[i] = random(0, 4);
     memoryLen = startLen;
   } else {
     memoryLen = startLen;

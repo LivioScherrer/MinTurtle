@@ -20,6 +20,7 @@ QueueHandle_t espNowEventQueue = nullptr;
 // Forward-Declaration: Race-Logik und Slalom-Logik in main
 extern void onRacePacket(const RacePacket* pkt);
 extern void onSlalomPacket(const RacePacket* pkt);
+extern void duelOnPacket(const RacePacket* pkt);
 extern void espNowAddSpecificPeer(const uint8_t mac[6]);
 
 void peerListAdd(const uint8_t mac[6]) {
@@ -107,7 +108,11 @@ void espNowProcessEvents() {
         espNowAddSpecificPeer(e.mac);
         break;
        case EspNowEvent::RACE_PKT:
-        if (e.pkt.slalomCmd != SLALOM_CMD_NONE) {
+        if (e.pkt.slalomCmd == SLALOM_CMD_DUEL) {
+          // Duell-Kanal: Punkte-Austausch der Spiel-Modi. Die Senderpruefung
+          // gegen das gepaarte Geraet macht duelOnPacket() selbst.
+          duelOnPacket(&e.pkt);
+        } else if (e.pkt.slalomCmd != SLALOM_CMD_NONE) {
           // Slalom hat eigenes Pairing; die Absender-Pruefung findet
           // in onSlalomPacket() statt.
           onSlalomPacket(&e.pkt);
