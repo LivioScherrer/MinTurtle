@@ -146,28 +146,11 @@ void gameStop(uint32_t ms) {
 
 static void waitForStepsDone(bool bAbortOnNoGame);   // Definition weiter unten
 
-// ===================== Schrittverlust in Spiel-/Quiz-Fahrten =====================
+// ===================== Positionsfahrten in Spiel-/Quiz-Fahrten =====================
 // Ein Helper fuer ALLE positionsbasierten Fahrten ausserhalb der Code-Bausteine
-// (Quiz, Memory, Rennen, Test-Helper). Reihenfolge wie im Code-Baustein-Pfad
-// (progMove): Treiber wecken, MSCNT-Basis lesen, fahren, warten, heilen.
-//
-// WICHTIG - drei Regeln, die hier schon einmal falsch waren und den Roboter
-// lahmgelegt haben:
-//  1. Nur bei echter Fahrt wecken und nur dann eine Basis lesen. Ein
-//     0-Schritt-Befehl darf keine Treiberrekonfiguration ausloesen.
-//  2. Nicht heilen, wenn das Spiel beendet wurde oder der Not-Halt steht -
-//     dort gehoert der Halt jemand anderem, und eine Nachholfahrt wuerde
-//     gegen den Abbruch hin faehren.
-//  3. Ein Fehlschlag wird GEMELDET, nicht zum Stopp-Signal: als Abbruch
-//     missverstanden beendete es Spiele mitten in der Strecke.
-static void gameMoveStepsVerified(int32_t physL, int32_t physR,
-                                  bool bAbortOnNoGame, int32_t budgetMs) {
-  uint16_t msL = 0, msR = 0;
-  bool msOk = false;
-  if (physL != 0 || physR != 0) {
-    motorWakeDrivers();   // Treiber vor dem Mutex wecken (UART braucht ihn nicht)
-    msOk = motorMscntSnapshot(msL, msR);
-  }
+// (Quiz, Memory, Rennen, Test-Helfer): fahren, dann warten.
+static void gameMoveSteps(int32_t physL, int32_t physR,
+                          bool bAbortOnNoGame, int32_t budgetMs) {
   prepPositionMoves(physL, physR);
   if (budgetMs > 0) {
     // Eigene Wartevariante mit Zeitbudget (Test-Helper, 5 s wie vorher).
@@ -180,13 +163,6 @@ static void gameMoveStepsVerified(int32_t physL, int32_t physR,
     if (motorStillRunning()) stopMotors();
   } else {
     waitForStepsDone(bAbortOnNoGame);
-  }
-  // Nur heilen, wenn die Fahrt regulaer endete: bei Spielabbruch, Not-Halt oder
-  // Kantenwaechter-Sperre gehoert das Anhalten jemand anderem, nicht der Heilung.
-  if (msOk && !motorEmergencyActive() && currentGame != GAME_NONE) {
-    if (!motorHealMove(physL, physR, msL, msR)) {
-      Serial.println("[SPIEL] Schrittverlust nicht heilbar");
-    }
   }
 }
 
@@ -227,7 +203,7 @@ static void waitForStepsDone(bool bAbortOnNoGame) {
 // Beruecksichtigt config.leftSign/rightSign fuer die Verkabelung.
 void gameDriveForwardSteps(int32_t steps) {
   gameMoveBusy = true;
-  gameMoveStepsVerified(steps * static_cast<long>(config.leftSign),
+  gameMoveSteps(steps * static_cast<long>(config.leftSign),
                         steps * static_cast<long>(config.rightSign), true, 0);
   gameMoveBusy = false;
 }
@@ -238,7 +214,7 @@ void gameDriveForwardSteps(int32_t steps) {
 void gameDriveBackwardSteps(int32_t steps) {
   if (steps < 0) steps = -steps;
   gameMoveBusy = true;
-  gameMoveStepsVerified(-(long)steps * (long)config.leftSign,
+  gameMoveSteps(-(long)steps * (long)config.leftSign,
                         -(long)steps * (long)config.rightSign, true, 0);
   gameMoveBusy = false;
 }
@@ -246,7 +222,7 @@ void gameDriveBackwardSteps(int32_t steps) {
 // Test-Helper: fahre n Schritte ohne currentGame-Abhaengigkeit, mit Timeout.
 // Wird vom STEPS:-Befehl genutzt, um den richtigen Wert fuer 3cm zu finden.
 void testDriveSteps(int32_t steps) {
-  gameMoveStepsVerified(steps * static_cast<long>(config.leftSign),
+  gameMoveSteps(steps * static_cast<long>(config.leftSign),
                         steps * static_cast<long>(config.rightSign), false, 5000);
 }
 
@@ -262,7 +238,7 @@ static void gameTurnSteps(int32_t steps, bool bLeft) {
   gameMoveBusy = true;
   const long l = bLeft ? -steps : steps;
   const long r = bLeft ? steps : -steps;
-  gameMoveStepsVerified(l * static_cast<long>(config.leftSign),
+  gameMoveSteps(l * static_cast<long>(config.leftSign),
                         r * static_cast<long>(config.rightSign), true, 0);
   gameMoveBusy = false;
 }
@@ -272,7 +248,7 @@ void gameTurnRightSteps(int32_t steps) { gameTurnSteps(steps, false); }
 
 // Test-Helper: drehe auf der Stelle (rechts) um 'steps' Schritte pro Rad.
 void testTurnSteps(int32_t steps) {
-  gameMoveStepsVerified( steps * static_cast<long>(config.leftSign),
+  gameMoveSteps( steps * static_cast<long>(config.leftSign),
                         -steps * static_cast<long>(config.rightSign), false, 5000);
 }
 

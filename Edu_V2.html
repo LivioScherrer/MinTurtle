@@ -9435,12 +9435,6 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
           showFeedback('progFeedback', 'error', 'Kein Programm gesetzt!');
         } else if (msg.startsWith('PROG:MAXITER')) {
           showFeedback('progFeedback', 'error', 'Schleifen-Limit erreicht – weiter geht\'s!');
-        } else if (msg === 'PROG:STEPLOSS') {
-          progUnlock();
-          showFeedback('progFeedback', 'error', 'Schrittfehler – angehalten, bitte prüfen!');
-          setStep('prog', 0);
-        } else if (msg === 'PROG:STEPFIX') {
-          showFeedback('progFeedback', 'success', 'Kleine Abweichung nachgeholt.');
         }
       }
 

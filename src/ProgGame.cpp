@@ -384,22 +384,11 @@ static int32_t degToSteps(int16_t deg) {
 // =====================================================
 static bool progMove(int32_t sL, int32_t sR, int8_t colorCheck) {
   // EIN Aufruf fuer beide Seiten: der Blockprogramm-Befehl ist die Stelle, an
-// der ein Zeitversatz zwischen den Raedern am auffaelligsten waere - die
-// Schrittzahlen beider Seiten stimmen zwar, aber bei unterschiedlichem Start
-// wirkt das Drehmoment kurzzeitig nur einseitig und der Roboter steht
-// schief. Genau das war vorher moeglich, weil zwischen den beiden Aufrufen der
-// 50-us-Puls-Task den Mutex bekommen konnte.
-  // Treiber wach + MSCNT-Basis VOR den ersten Pulsen - aber nur wenn dieser
-  // Baustein ueberhaupt fahren soll. prepPositionMoves() weckt die Treiber
-  // zwar selbst, das geschieht dort aber erst im Mutex-Halt; vorher gelesen
-  // werden muss die Basis schon vorher, sonst saehe die Pruefung Pulse, die
-  // es noch nicht gab. Bei steps == 0 gibt es nichts zu pruefen.
-  uint16_t msL = 0, msR = 0;
-  bool msOk = false;
-  if (sL != 0 || sR != 0) {
-    motorWakeDrivers();
-    msOk = motorMscntSnapshot(msL, msR);
-  }
+  // der ein Zeitversatz zwischen den Raedern am auffaelligsten waere - die
+  // Schrittzahlen beider Seiten stimmen zwar, aber bei unterschiedlichem Start
+  // wirkt das Drehmoment kurzzeitig nur einseitig und der Roboter steht
+  // schief. Genau das war vorher moeglich, weil zwischen den beiden Aufrufen der
+  // 50-us-Puls-Task den Mutex bekommen konnte.
   const int32_t physL = sL * (long)config.leftSign;
   const int32_t physR = sR * (long)config.rightSign;
   prepPositionMoves(physL, physR);
@@ -439,17 +428,6 @@ static bool progMove(int32_t sL, int32_t sR, int8_t colorCheck) {
     bleProcessEvents();
     espNowProcessEvents();
     vTaskDelay(pdMS_TO_TICKS(5));
-  }
-  // Nachholen: nur bei normal beendeter Fahrt (kein Farb-Hit, kein Abbruch,
-  // kein Not-Halt - ein Kanten-Stopp gehoert dem Waechter, nicht der Heilung;
-  // dort wuerde Nachfahren in die Kante fahren).
-  // Ein nicht heilbarer Fall MELDET nur, er bricht das Programm NICHT ab:
-  // eine Nachholfahrt, die selbst fehlschlaegt, wurde als Stopp-Signal
-  // missverstanden und hat Programme mitten in der Strecke beendet.
-  if (!colorHit && gameAllowsMotorRun() && !motorEmergencyActive() && msOk) {
-    if (!motorHealMove(physL, physR, msL, msR)) {
-      Serial.println("[PROG] Schrittverlust nicht heilbar - gemeldet, Programm laeuft weiter");
-    }
   }
   return colorHit;
 }
