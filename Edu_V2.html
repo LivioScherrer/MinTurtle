@@ -3441,6 +3441,7 @@
     </div>
   </div>
   <div class="app-shell">
+    <div id="batBanner" style="display:none;margin:8px 16px 0;padding:10px 14px;border:3px solid #d63a3a;border-radius:12px;background:#fdecec;font-weight:800;text-align:center;">Akku schwach! Bitte laden.</div>
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view active">
       <div class="header">
@@ -4674,6 +4675,8 @@ function updateConnectionUI(isConn, text) {
           handleParkMessage(msg);
         } else if (msg.startsWith('ZEIT:')) {
           handleZeitMessage(msg);
+        } else if (msg === 'BAT:LOW') {
+          document.getElementById('batBanner').style.display = 'block';
         } else if (msg.startsWith('DUEL:')) {
           handleDuelMessage(msg);
         } else if (msg.startsWith('DIST:DIAG:')) {

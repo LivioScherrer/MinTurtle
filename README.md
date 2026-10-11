@@ -597,6 +597,16 @@ Roboter von Hand wieder auf den Tisch stellt, schickt deshalb
 | `MOT:SYNC` | beide Motoren auf denselben Mikroschritt bringen (läuft bei jedem Moduswechsel automatisch) |
 | `MOT:SPD?` | Momentaufnahme `VACTUAL` + `MSCNT` mitten in der Fahrt (siehe eigener Abschnitt) |
 
+#### Akku-Wächter (ohne Hardware-Änderung)
+
+Direkte Spannungsmessung gibt es nicht (kein Teiler, kein freier ADC-Pin
+an VM). Stattdessen zählt `tmcBatteryGuardTick()` GSTAT-`uv_cp`-Sichtungen
+(Ladepumpen-Unterspannung = VM bricht ein, Treiber schaltet laut Datenblatt
+ab): nach 3× bestätigt sendet die Firmware **`BAT:LOW`** (Latch pro Boot,
+Re-Send alle 30 s), der LED-Ring blinkt rot (zweite Priorität nach der
+Kanten-Sperre). Grob (kein Füllstand, nur „kritisch"), keine Fahrsperre —
+fahren bleibt erlaubt. UI zeigt ein Banner („Akku schwach! Bitte laden.").
+
 #### Motorstrom: fest 200 mA, nicht mehr einstellbar
 
 **`TMC:CURRENT:` und `TMC:HOLD:` sind entfernt.** Es gibt keinen Befehl,

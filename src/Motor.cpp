@@ -1563,6 +1563,50 @@ void motorWakeDrivers() {
   }
 }
 
+// ---- Akku-Waechter (TMC-Proxy, keine Hardware-Aenderung) ----
+// Direkte Spannungsmessung gibt es nicht (kein Teiler, kein freier ADC-Pin
+// an VM). Stattdessen zaehlt der Waechter GSTAT-uv_cp-Sichtungen (Bit 2 =
+// Ladepumpen-Unterspannung): Faellt VM ein, setzt der Treiber das Bit und
+// schaltet laut Datenblatt ab. Grob (kein Fuellstand, nur "kritisch"), aber
+// besser als stilles Stehenbleiben mit falscher Odometrie.
+// Muster wie motorDiagTick: EIN Read pro Aufruf, abwechselnd L/R. Nur wenn
+// die Treiber wach sind - im Standby ist nichts pruefbar und nichts noetig.
+static uint32_t s_batLastMs = 0;
+static uint8_t  s_batSide = 0;
+static uint8_t  s_batHits = 0;      // aufeinanderfolgende uv_cp-Sichtungen
+static uint32_t s_batReportMs = 0;  // letztes BAT:LOW (zyklischer Re-Send)
+static bool     s_batLow = false;   // Latch pro Boot
+bool tmcBatteryLow() { return s_batLow; }
+
+void tmcBatteryGuardTick() {
+  const uint32_t now = millis();
+  // Re-Send im Latch: Seite neu laden oder neu verbinden bekommt die
+  // Warnung trotzdem (spaetestens alle 30 s).
+  if (s_batLow) {
+    if (now - s_batReportMs >= 30000u) {
+      s_batReportMs = now;
+      sendStatus("BAT:LOW");
+    }
+    return;
+  }
+  if (!motorReady || !s_enabled) return;
+  if (now - s_batLastMs < 2000u) return;   // alle 2 s genau EIN Read
+  s_batLastMs = now;
+  TMC2209Diag& d = (s_batSide == 0) ? tmcL : tmcR;
+  s_batSide ^= 1;
+  const uint8_t g = (uint8_t)(d.read(TMC_REG_GSTAT) & 0x07);
+  if (g & 0x04) {
+    if (++s_batHits >= 3) {
+      s_batLow = true;
+      s_batReportMs = now;
+      Serial.println("[BAT] Unterspannung (GSTAT uv_cp, 3x bestaetigt) - Akku schwach, bitte laden");
+      sendStatus("BAT:LOW");
+    }
+  } else {
+    s_batHits = 0;
+  }
+}
+
 // Auskommentiert gehalten: der Wetter-koennte-es-besser-wissen-Helfer wird
 // nicht gebraucht, weil die Wrapper die Null-Pruefung selbst machen (siehe
 // Kommentar dort).

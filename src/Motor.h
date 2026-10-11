@@ -398,6 +398,13 @@ bool tmcIsEnabled();
 // In loop() aufrufen: schaltet die Treiber nach TMC_STANDBY_MS Stillstand
 // automatisch aus (EN). Naechste Fahrt schaltet wieder ein.
 void tmcAutoStandbyTick();
+// In loop() aufrufen: Akku-Waechter ohne Hardware-Aenderung. Zaehlt
+// GSTAT-uv_cp-Sichtungen (Ladepumpen-Unterspannung = VM bricht ein) und
+// meldet nach 3x bestaetigt einmalig "BAT:LOW" (Latch pro Boot, Re-Send
+// alle 30 s). tmcBatteryLow() ist true, solange die Warnung steht -
+// ledPatternUpdate() blinkt dann rot.
+void tmcBatteryGuardTick();
+bool tmcBatteryLow();
 // Konfiguration (Strom/Hold/Microsteps/Modus) erneut an BEIDE Treiber
 // senden - z.B. nachträglich, wenn beim Booten noch kein VM anlag.
 void tmcReinit();

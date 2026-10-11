@@ -1897,6 +1897,13 @@ static void ledPatternUpdate() {
     ledStripShowBlink(LED_C_RED, 500);
     return;
   }
+  if (tmcBatteryLow()) {
+    // Akku-Waechter: rotes Blinken als Warnung (kein Halt - der Treiber
+    // schaltet sich bei Unterspannung selbst ab, fahren bleibt erlaubt).
+    // Zweite Prioritaet: Kanten-Sperre ist Sicherheit und gewinnt.
+    ledStripShowBlink(LED_C_RED, 500);
+    return;
+  }
   if (slalomPhase == SLALOM_COUNTDOWN) {
     const uint32_t now = millis();
     const uint32_t left = (slalomGoTimer > now) ? (slalomGoTimer - now) : 0;
@@ -2040,6 +2047,8 @@ void loop() {
   // Durchlauf. Muss hier stehen bleiben - die Messung braucht viele
   // Durchlaeufe, und ein blockierender Aufruf wuerde die Fahrt stoeren.
   motorDiagTick();
+  // Akku-Waechter (TMC-Proxy): EIN GSTAT-Read pro Durchlauf, siehe Motor.h.
+  tmcBatteryGuardTick();
   // Rennen: hat der Gegner zu lange geschwiegen, sauber beenden. Sonst bleibt
   // der Roboter bis zum naechsten STOP im Renn-Modus und die Steuerung gesperrt.
   if (racePeerTimedOut()) {
