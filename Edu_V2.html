@@ -8,7 +8,10 @@
   <style>
     /* Selbst gehostete Schrift (SIL OFL): identisch auf allen Geraeten,
        auch offline. Nunito variabel (200-1000, abgerundet + gut lesbar).
-       Umlaute ueber latin-ext. Dateien in fonts/ neben dieser Seite. */
+       'latin' deckt Deutsch inkl. Umlauten und Eszett ab (U+0000-00FF),
+       'latin-ext' nur die weiteren lateinischen Zeichen - mitgeliefert, weil
+       der Schnitt sonst je nach Geraet unterschiedlich zerfaellt.
+       Dateien in fonts/ neben dieser Seite: beim Verteilen MITKOPFIEREN. */
     @font-face {
       font-family: 'Nunito'; font-style: normal; font-weight: 200 1000;
       font-display: swap;
@@ -3465,7 +3468,7 @@
         <div class="header-r">
           <div class="conn-badge" id="irBadge" title="VL53L0X Distanz (mm), Hindernis < 100mm" style="background:rgba(255,255,255,.05);display:none;">
             <span style="font-size:11px;opacity:.75;">DIST</span>
-            <span id="irStatus" style="font-family:'Nunito',monospace;min-width:14px;display:inline-block;">–</span>
+            <span id="irStatus" style="font-family:monospace;min-width:14px;display:inline-block;">–</span>
           </div>
           <div class="conn-badge">
             <div class="conn-dot" id="statusDot"></div><span id="statusText">Nicht verbunden</span>
@@ -4617,6 +4620,16 @@ function updateConnectionUI(isConn, text) {
         // erfolgen, sonst haette der Assistent die "Warten"-Anzeige nie
         // verlassen. Gibt true zurueck, wenn die Meldung verbraucht ist.
         if (calWaitingFor && msg.startsWith('CAL:') && calHandleResponse(msg)) return;
+        // "Stand abfragen" (CAL:?) laeuft ohne calWaitingFor - die Antwort
+        // muss trotzdem irgendwo landen. Sonst faellt sie durch die ganze
+        // Kette: handleDiagMessage kennt kein CAL:-Praefix, und der Assistent
+        // selbst hat keinen schrittweisen Aufbau mehr (Kalibrierung ist
+        // gesperrt). Der Knopf bliebe ohne sichtbare Reaktion.
+        if (msg.startsWith('CAL:')) {
+          if (msg === 'CAL:LOCKED') return true;   // eigener BUSY-Zweig weiter unten
+          calMsg('success', msg);
+          return true;
+        }
         // ---- BUSY-Meldungen: MUSS ganz vorn stehen ----
         // Die Firmware lehnt Befehle ab, wenn schon etwas laeuft (Schutz
         // gegen handleCommand-Re-Entranz) bzw. wenn die Farb-Sperre nicht frei
@@ -4647,6 +4660,10 @@ function updateConnectionUI(isConn, text) {
             fb.className = 'feedback-msg show feedback-warning';
             fb.textContent = BUSY_TEXT[msg] || msg;
           }
+          // Memory-Start wurde abgelehnt: die View zeigte danach "Der Roboter
+          // zeigt die Folge..." ohne dass eine Folge laeuft, und der Start-
+          // Knopf blieb versteckt - ein toter Zustand bis zum Neuladen.
+          if (msg === 'MEMORY:BUSY') memReset();
           return;
         }
         if (msg.startsWith('COLOR:')) {
@@ -5362,6 +5379,11 @@ function updateConnectionUI(isConn, text) {
         r.style.boxShadow = (state === 'red')    ? '0 0 22px #ff5252' : 'none';
         y.style.boxShadow = (state === 'yellow') ? '0 0 22px #ffd740' : 'none';
         g.style.boxShadow = (state === 'green')  ? '0 0 22px #69f0ae' : 'none';
+        // Zustand mitansagen: die Farbe allein ist fuer Screenreader unsichtbar,
+        // sonst werden alle drei Lampen gleich und ohne Signal gelesen.
+        r.setAttribute('aria-label', 'Rote Lampe – ' + (state === 'red' ? 'an' : 'aus'));
+        y.setAttribute('aria-label', 'Gelbe Lampe – ' + (state === 'yellow' ? 'an' : 'aus'));
+        g.setAttribute('aria-label', 'Grüne Lampe – ' + (state === 'green' ? 'an' : 'aus'));
       }
       function ampelSetStartLabel(text, disabled) {
         const b = document.getElementById('btnAmpelStart');
@@ -6201,8 +6223,10 @@ function updateConnectionUI(isConn, text) {
         // 3. Lokalen Spielzustand zuruecksetzen (Firmware ist ab hier GAME_NONE).
         if (progRunning) { progRunning = false; progRender(); }
         lineRunning = false;
-        memInputEnabled = false;
-        memStopCountdown();
+        // Memory wie beim Disconnect voll zuruecksetzen (inkl. WIN-Auto-Restart):
+        // sonst startet ein Not-Aus mitten nach einem WIN das Spiel nach 3,5 s
+        // neu - genau das, was der Not-Aus verhindern soll.
+        memReset();
         if (motorTestTimer) { clearTimeout(motorTestTimer); motorTestTimer = null; }
         if (cqTask) { clearInterval(cqTask); cqTask = null; }
         cqAnswers = [];
@@ -6434,6 +6458,10 @@ function updateConnectionUI(isConn, text) {
         t.setAttribute('role', 'button');
         t.setAttribute('tabindex', '0');
         t.addEventListener('keydown', (e) => {
+          // e.repeat abweisen: eine gehaltene Taste wuerde sonst im 30-ms-Takt
+          // nav() ausloesen und die Command-Queue mit redundanten
+          // TMC?/SPEED?/RAMP?-Abfragen fluten (die Queue verwirft nichts).
+          if (e.repeat) return;
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t.click(); }
         });
       });
@@ -10348,7 +10376,9 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
       let calMsgTimer = null;
       function calMsg(type, text) {
         // Scoped query statt getElementById: der Wizard rendert je nach Schritt
-        // unterschiedliche Bloecke, die ID waere sonst mehrfach vorhanden.
+        // unterschiedliche Bloecke per innerHTML. Heute ist die ID zwar nie
+        // doppelt (jeder Render ersetzt das ganze Element), aber sie ist ein
+        // stueckweitergereichter Name fuer einen Baustein ohne eigene Identitaet.
         // Marker als data-Attribut (keine Klasse): className wird unten
         // ueberschrieben und wuerde einen Klassen-Marker loeschen.
         const el = document.querySelector('#calWizardBody [data-calmsg]');
@@ -10514,7 +10544,10 @@ let progPaletteSVal = 0;     // persistente LED-Farbe des S-Blocks in der Palett
             '<button class="btn btn-grey" id="calBtnCancelWait">Schließen</button></div>' +
             '<div class="feedback-msg" data-calmsg="1"></div>';
           const bq = document.getElementById('calBtnState');
-          if (bq) bq.addEventListener('click', () => sendCommand('CAL:?'));
+          if (bq) bq.addEventListener('click', () => {
+            sendCommand('CAL:?');
+            calMsg('info', 'Stand wird abgefragt ...');
+          });
           const bc = document.getElementById('calBtnCancelWait');
           if (bc) bc.addEventListener('click', () => closeCalWizard());
         }

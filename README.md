@@ -25,6 +25,12 @@ Zwei Web-Seiten, beide Single File, kein Build-Schritt. Sie sprechen denselben
 BLE-Dienst an und werden direkt aus dem Browser geöffnet (Chromium-Browser
 nötig, Web Bluetooth).
 
+> **Achtung beim Verteilen:** `Edu_V2.html` ist keine Einzeldatei mehr. Die
+> Schrift **Nunito** liegt selbst gehostet im Ordner `fonts/` daneben
+> (2 × `.woff2` + `OFL-Nunito.txt`), damit alle Geräte — auch offline — genau
+> gleich aussehen. Wird nur die `.html` kopiert, fällt die Seite still auf
+> Comic Sans & Co. zurück. **Immer den ganzen Ordner kopieren.**
+
 | Datei | Für wen | Inhalt |
 |---|---|---|
 | **`Edu_V2.html`** | **Schüler** | Alle Spiele, Freifahren, Code-Bausteine, Lernkarte. **Keine Diagnose**, keine Fehlermeldungen über unbekannte Befehle. |
