@@ -6,31 +6,19 @@
   <link rel="icon" href="data:,">
   <title>EduBot V2</title>
   <style>
-    /* Selbst gehostete Schriften (SIL OFL): identisch auf allen Geraeten,
-       auch offline. Caveat variabel (400-700), Patrick Hand regular.
+    /* Selbst gehostete Schrift (SIL OFL): identisch auf allen Geraeten,
+       auch offline. Nunito variabel (200-1000, abgerundet + gut lesbar).
        Umlaute ueber latin-ext. Dateien in fonts/ neben dieser Seite. */
     @font-face {
-      font-family: 'Caveat'; font-style: normal; font-weight: 400 700;
+      font-family: 'Nunito'; font-style: normal; font-weight: 200 1000;
       font-display: swap;
-      src: url('fonts/caveat-var-latin-ext.woff2') format('woff2');
+      src: url('fonts/nunito-var-latin-ext.woff2') format('woff2');
       unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
     }
     @font-face {
-      font-family: 'Caveat'; font-style: normal; font-weight: 400 700;
+      font-family: 'Nunito'; font-style: normal; font-weight: 200 1000;
       font-display: swap;
-      src: url('fonts/caveat-var-latin.woff2') format('woff2');
-      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-    }
-    @font-face {
-      font-family: 'Patrick Hand'; font-style: normal; font-weight: 400;
-      font-display: swap;
-      src: url('fonts/patrickhand-400-latin-ext.woff2') format('woff2');
-      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
-    }
-    @font-face {
-      font-family: 'Patrick Hand'; font-style: normal; font-weight: 400;
-      font-display: swap;
-      src: url('fonts/patrickhand-400-latin.woff2') format('woff2');
+      src: url('fonts/nunito-var-latin.woff2') format('woff2');
       unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
     }
     /* =========================================================
@@ -127,7 +115,7 @@
       height: 100%
     }
     body {
-      font-family: 'Caveat', 'Patrick Hand', 'Comic Sans MS', 'Marker Felt', 'Segoe Print', cursive, system-ui, sans-serif;
+      font-family: 'Nunito', 'Comic Sans MS', 'Marker Felt', 'Segoe Print', cursive, system-ui, sans-serif;
       color: var(--ink);
       min-height: 100vh;
       overflow-x: hidden;
@@ -142,7 +130,7 @@
     }
     /* Hand-drawn heading style */
     .hand {
-      font-family: 'Caveat', 'Patrick Hand', cursive;
+      font-family: 'Nunito', cursive;
       font-weight: 700;
       letter-spacing: .2px
     }
@@ -664,7 +652,7 @@
       gap: 8px
     }
     .header-l-text {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 34px;
       font-weight: 700;
       color: #fff8e0;
@@ -934,7 +922,7 @@
       border: 2px dashed var(--ink-soft);
       border-radius: 12px;
       background: rgba(255, 253, 244, .7);
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 24px;
       font-weight: 700;
       color: var(--ink-soft);
@@ -982,7 +970,7 @@
       gap: 10px;
       padding: 18px 0 4px;
       margin-top: 8px;
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 24px;
       font-weight: 700;
       color: var(--ink-soft);
@@ -1089,7 +1077,7 @@
 
 
     .tile-ttl {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 24px;
       font-weight: 700;
       color: var(--ink);
@@ -1113,7 +1101,7 @@
       content: '→';
       flex-shrink: 0;
       align-self: center;
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 28px;
       line-height: 1;
       color: var(--ink);
@@ -1176,7 +1164,7 @@
 
 
     .back-btn .back-lb {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 21px;
       line-height: 1
     }
@@ -1203,7 +1191,7 @@
 
 
     .gv-title {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 28px;
       font-weight: 700;
       color: var(--ink);
@@ -1245,7 +1233,7 @@
 
 
     .game-title {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 38px;
       font-weight: 700;
       color: var(--ink);
@@ -1266,7 +1254,7 @@
 
 
     .quiz-display {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 56px;
       font-weight: 700;
       margin: 18px 0;
@@ -1276,7 +1264,7 @@
 
 
     .quiz-input {
-      font-family: 'Caveat', 'Patrick Hand', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 28px;
       padding: 10px 18px;
       text-align: center;
@@ -1310,7 +1298,7 @@
       position: relative;
       border: var(--ink-line) solid var(--ink);
       box-shadow: var(--shadow-sketch-sm);
-      font-family: 'Patrick Hand', 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       letter-spacing: .3px;
     }
 
@@ -1434,7 +1422,7 @@
 
 
     #driveColorName {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 24px;
       font-weight: 700;
       color: var(--ink);
@@ -1454,7 +1442,7 @@
     .key-btn {
       height: 72px;
       border-radius: 12px;
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 36px;
       font-weight: 700;
       background: #fffdf4;
@@ -1525,7 +1513,7 @@
       padding: 2px 10px;
       border-radius: 6px;
       font-weight: 700;
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 20px;
       margin-left: 4px;
       border: 2px solid var(--ink)
@@ -1595,7 +1583,7 @@
 
 
     #raceSetup>div:first-child {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 24px;
       font-weight: 700;
       color: var(--ink);
@@ -1629,7 +1617,7 @@
 
     #raceCountdownArea {
       display: none;
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 120px;
       font-weight: 700;
       color: var(--teal-mark);
@@ -1659,7 +1647,7 @@
 
 
     .race-board-label {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 18px;
       color: var(--ink);
       font-weight: 700;
@@ -1669,7 +1657,7 @@
 
 
     .race-score {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 30px;
       font-weight: 700;
       margin-bottom: 8px;
@@ -1729,7 +1717,7 @@
 
 
     #raceWinnerMsg {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 36px;
       font-weight: 700;
       margin-top: 18px;
@@ -1753,7 +1741,7 @@
 
 
     #racePeers span {
-      font-family: 'Patrick Hand', monospace;
+      font-family: monospace;
       font-size: 14px;
       color: var(--ink-soft);
       font-weight: 700
@@ -1774,7 +1762,7 @@
       border: var(--ink-line) solid var(--ink);
       background: var(--amber-200);
       color: var(--ink);
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 22px;
       font-weight: 700;
       line-height: 1;
@@ -1866,7 +1854,7 @@
       border-bottom: 2px dashed var(--ink-soft);
     }
     .help-modal-title {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 30px;
       font-weight: 700;
       color: var(--ink);
@@ -1923,7 +1911,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 17px;
       font-weight: 700;
       color: var(--ink);
@@ -1978,7 +1966,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 15px;
       font-weight: 700;
       color: var(--ink);
@@ -2030,7 +2018,7 @@
       filter: drop-shadow(2px 2px 0 var(--ink));
     }
     .result-title {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 38px;
       font-weight: 700;
       color: var(--ink);
@@ -2044,7 +2032,7 @@
       color: var(--bad, #c93838)
     }
     .result-score {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 72px;
       font-weight: 700;
       color: var(--ink);
@@ -2099,7 +2087,7 @@
        KORRIGIEREN
        ========================================================= */
     .cq-meta {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 20px;
       font-weight: 700;
       color: var(--ink-mute);
@@ -2123,7 +2111,7 @@
       padding: 22px 14px;
       border-radius: 12px;
       color: #fff;
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 30px;
       font-weight: 700;
       cursor: pointer;
@@ -2172,7 +2160,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 20px;
       color: #fff;
       font-weight: 700;
@@ -2192,7 +2180,7 @@
       box-shadow: var(--shadow-sketch-sm)
     }
     .mesh-section-title {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 22px;
       font-weight: 700;
       margin-bottom: 8px;
@@ -2202,7 +2190,7 @@
        PROGRAMMIEREN (Code-Bausteine, Drag & Drop)
        ========================================================= */
     .prog-section-label {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 22px;
       font-weight: 700;
       color: var(--ink-soft);
@@ -2496,7 +2484,7 @@
     }
     .prog-embed-ic .prog-ic { width: 16px; height: 16px }
     .prog-embed-name {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 18px;
       font-weight: 700
     }
@@ -2536,7 +2524,7 @@
       border: 2.5px solid var(--ink);
       border-radius: 10px;
       background: #fff;
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 20px;
       font-weight: 700;
       color: var(--ink);
@@ -2563,7 +2551,7 @@
       border: 2.5px solid var(--ink);
       border-radius: 10px;
       background: #fff;
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 19px;
       font-weight: 700
     }
@@ -2668,7 +2656,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 24px;
       font-weight: 700;
       color: var(--ink-mute);
@@ -2707,7 +2695,7 @@
       text-align: center;
     }
     .prog-empty-arrow {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 48px;
       line-height: 1;
       color: var(--teal-500);
@@ -2715,7 +2703,7 @@
       text-shadow: 2px 2px 0 var(--ink);
     }
     .prog-empty-title {
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 26px;
       font-weight: 700;
       color: var(--ink-soft);
@@ -2935,14 +2923,14 @@
        MEMORY
        ========================================================= */
     .mem-meta {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 20px;
       font-weight: 700;
       color: var(--ink-mute);
       margin-bottom: 8px
     }
     .mem-status {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 32px;
       font-weight: 700;
       color: var(--ink);
@@ -2957,7 +2945,7 @@
       margin: 14px 0;
     }
     .mem-seq-arrow {
-      font-family: 'Caveat', cursive;
+      font-family: 'Nunito', cursive;
       font-size: 30px;
       padding: 4px 12px;
       background: #fff;
@@ -2987,7 +2975,7 @@
     .mem-btn {
       height: 80px;
       border-radius: 12px;
-      font-family: 'Caveat', 'Marker Felt', cursive;
+      font-family: 'Nunito', 'Marker Felt', cursive;
       font-size: 42px;
       font-weight: 700;
       background: #fffdf4;
@@ -3477,7 +3465,7 @@
         <div class="header-r">
           <div class="conn-badge" id="irBadge" title="VL53L0X Distanz (mm), Hindernis < 100mm" style="background:rgba(255,255,255,.05);display:none;">
             <span style="font-size:11px;opacity:.75;">DIST</span>
-            <span id="irStatus" style="font-family:'Patrick Hand',monospace;min-width:14px;display:inline-block;">–</span>
+            <span id="irStatus" style="font-family:'Nunito',monospace;min-width:14px;display:inline-block;">–</span>
           </div>
           <div class="conn-badge">
             <div class="conn-dot" id="statusDot"></div><span id="statusText">Nicht verbunden</span>
@@ -3903,7 +3891,7 @@
           </div>
           <div style="margin-top:18px;">
             <div
-              style="font-family:'Caveat',cursive;font-size:20px;font-weight:700;color:var(--ink-mute);margin-bottom:10px;">
+              style="font-family:'Nunito',cursive;font-size:20px;font-weight:700;color:var(--ink-mute);margin-bottom:10px;">
               Deine Antworten:</div>
             <div id="cqAnswerList"></div>
           </div>
@@ -4157,10 +4145,10 @@
           </div>
           <div id="slalomTargetDisplay" style="display:none;text-align:center;margin:24px 0;padding:24px;background:linear-gradient(135deg,#fff8e1,#ffe082);border:4px solid var(--ink);border-radius:20px;box-shadow:0 6px 0 var(--ink);">
             <div style="font-size:18px;color:var(--ink-mute);font-weight:700;letter-spacing:2px;"><svg class="ic" aria-hidden="true"><use href="#ic-target"></use></svg> ZIELFARBE</div>
-            <div id="slalomTargetName" style="font-family:'Caveat','Marker Felt',cursive;font-size:96px;font-weight:700;margin-top:8px;line-height:1;text-shadow:4px 4px 0 rgba(0,0,0,0.15);"></div>
+            <div id="slalomTargetName" style="font-family:'Nunito','Marker Felt',cursive;font-size:96px;font-weight:700;margin-top:8px;line-height:1;text-shadow:4px 4px 0 rgba(0,0,0,0.15);"></div>
             <div id="slalomTargetHint" style="font-size:14px;color:var(--ink-mute);font-weight:700;margin-top:10px;">Baue jetzt dein Programm und drücke Bereit!</div>
           </div>
-          <div id="slalomCountdownArea" style="display:none;font-family:'Caveat','Marker Felt',cursive;font-size:120px;font-weight:700;color:var(--teal-mark);margin:40px 0;animation:pulseCount 1s infinite;line-height:1;text-shadow:4px 4px 0 var(--ink);">3</div>
+          <div id="slalomCountdownArea" style="display:none;font-family:'Nunito','Marker Felt',cursive;font-size:120px;font-weight:700;color:var(--teal-mark);margin:40px 0;animation:pulseCount 1s infinite;line-height:1;text-shadow:4px 4px 0 var(--ink);">3</div>
           <div id="slalomActiveArea" style="display:none;">
             <div class="prog-section-label" style="margin-bottom:10px;">Dein Weg<span class="prog-hint" id="slalomProgHint"></span></div>
             <div class="prog-cols">
@@ -4186,7 +4174,7 @@
           </div>
           <div id="slalomStatus" style="text-align:center;font-size:15px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;"></div>
           <div class="feedback-msg" id="slalomFeedback"></div>
-          <div id="slalomWinnerMsg" style="font-family:'Caveat',cursive;font-size:36px;font-weight:700;margin-top:18px;text-align:center;"></div>
+          <div id="slalomWinnerMsg" style="font-family:'Nunito',cursive;font-size:36px;font-weight:700;margin-top:18px;text-align:center;"></div>
         </div>
       </div>
     </div>
@@ -4194,7 +4182,7 @@
     <div id="slalomInvitePopup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:1000;align-items:center;justify-content:center;">
       <div style="background:#fffbe7;border:4px solid var(--ink);border-radius:18px;padding:28px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 0 var(--ink);">
         <div style="line-height:1;"><svg class="ic ic-xl" aria-hidden="true"><use href="#ic-mail"></use></svg></div>
-        <div style="font-family:'Caveat',cursive;font-size:32px;font-weight:700;margin-top:8px;">Einladung!</div>
+        <div style="font-family:'Nunito',cursive;font-size:32px;font-weight:700;margin-top:8px;">Einladung!</div>
         <div style="font-size:15px;color:var(--ink-mute);font-weight:700;margin-top:8px;">
           Ein anderer EduBot laedt dich zu einer Runde Farben-Slalom ein.
         </div>
@@ -8509,7 +8497,7 @@ function updateConnectionUI(isConn, text) {
           row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fff;border:2px solid var(--ink);border-radius:10px;margin-top:8px;';
           const name = document.createElement('span');
           name.textContent = 'EduBot ' + mac;
-          name.style.cssText = 'font-family:\'Patrick Hand\',monospace;font-size:14px;color:var(--ink-soft);font-weight:700;';
+          name.style.cssText = 'font-family:\'Nunito\',monospace;font-size:14px;color:var(--ink-soft);font-weight:700;';
           const btn = document.createElement('button');
           btn.className = 'btn btn-primary';
           btn.style.fontSize = '13px';
