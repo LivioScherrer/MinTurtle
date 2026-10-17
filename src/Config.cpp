@@ -31,14 +31,6 @@ void configLoad() {
   config.tmcMicrosteps = prefs.getUShort("tmcMS", 64);
   config.tmcSpread     = prefs.getBool("tmcSpread", false);
 
-  config.tmcMicrosteps = 64;
-  config.tmcSpread = true;
-  config.driveSpeedMM = 150.0f;
-  prefs.putUShort("tmcMS", config.tmcMicrosteps);
-  prefs.putBool("tmcSpread", config.tmcSpread);
-  prefs.putFloat("driveSpeed", config.driveSpeedMM);
-  Serial.println("[FIX-TEST] 150 mm/s, 64 Microsteps, SpreadCycle (fest verdrahtet)");
-
   const uint32_t sig = geoSignature();
   const bool     geoChanged = (prefs.getUInt("geoSig", 0) != sig);
   config.quizForwardMM = prefs.getFloat("quizMM", QUIZ_STEP_MM);
@@ -47,7 +39,8 @@ void configLoad() {
     config.quizForwardMM = QUIZ_STEP_MM;
     config.quizTurnDeg   = TURN_DEG_DEFAULT;
   }
-  (void)prefs.getFloat("driveSpeed", 150.0f);
+  if (prefs.isKey("driveSpeed")) config.driveSpeedMM = prefs.getFloat("driveSpeed", 150.0f);
+  else { config.driveSpeedMM = 150.0f; prefs.putFloat("driveSpeed", config.driveSpeedMM); }
 
   config.rampMs    = prefs.getUShort("rampMs", RAMP_MS_DEFAULT);
   config.spinSpeed = prefs.getUShort("spinSpeed", SPIN_SPEED_DEFAULT);

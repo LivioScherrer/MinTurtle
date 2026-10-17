@@ -34,7 +34,7 @@ constexpr float   QUIZ_TURN_DEG = 90.0f;
 constexpr float   TURN_DEG_DEFAULT = 90.0f;
 constexpr float FORWARD_MM_MIN = 5.0f,  FORWARD_MM_MAX = 150.0f;
 constexpr float TURN_DEG_MIN   = 10.0f,  TURN_DEG_MAX   = 360.0f;
-constexpr float SPEED_MM_S_MIN = 20.0f,  SPEED_MM_S_MAX = 600.0f;
+constexpr float SPEED_MM_S_MIN = 20.0f,  SPEED_MM_S_MAX = 200.0f;
 
 constexpr uint16_t RAMP_MS_MIN = 0, RAMP_MS_MAX = 2000, RAMP_MS_DEFAULT = 150;
 
@@ -87,7 +87,7 @@ struct Config {
 
   uint32_t commandTimeoutMs = 500;
   uint16_t tmcMicrosteps = 64;
-  bool     tmcSpread = true;
+  bool     tmcSpread = false;
 
   float quizForwardMM  = QUIZ_STEP_MM;
   float quizTurnDeg    = TURN_DEG_DEFAULT;

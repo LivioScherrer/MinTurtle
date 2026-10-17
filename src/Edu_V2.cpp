@@ -872,13 +872,47 @@ static bool cmdTmc(const String& cmd) {
     return true;
   }
   if (cmd.startsWith("TMC:MS:")) {
-    sendStatus("TMC:FIX-TEST-64");
-    Serial.println("[FIX-TEST] TMC:MS blockiert - fest 64 Microsteps");
+    int v = cmd.substring(7).toInt();
+    if (tmcSetMicrosteps((uint16_t)v)) {
+      configSaveUShort("tmcMS", config.tmcMicrosteps);
+      const float maxReachMS = MAX_DRIVE_STEPS_S / configStepsPerMM();
+      if (config.driveSpeedMM > maxReachMS) {
+        config.driveSpeedMM = floorf(maxReachMS);
+        configSaveField("driveSpeed", config.driveSpeedMM);
+        motorUpdateSpeeds();
+        Serial.printf("[SPEED] Tempo auf %.0f mm/s gekappt (%u Microsteps)\n",
+                      (double)config.driveSpeedMM, config.tmcMicrosteps);
+      }
+      Serial.printf("[GEO] %u Microsteps: %.1f mm = %ld Schritte, %.1f Grad = %ld Schritte\n",
+                    config.tmcMicrosteps, (double)config.quizForwardMM,
+                    (long)configForwardSteps(), (double)config.quizTurnDeg,
+                    (long)configTurnSteps());
+      snprintf(buf, sizeof(buf), "TMC:MS=%u", tmcGetMicrosteps()); sendStatus(buf);
+      snprintf(buf, sizeof(buf), "SPEED=%.0f,%.0f", (double)config.driveSpeedMM,
+               (double)FIXED_DRIVE_SPEED); sendStatus(buf);
+      tmcSendCompactStatus();
+    } else {
+      sendStatus("TMC:BAD_MS");
+    }
     return true;
   }
   if (cmd == "TMC:MODE:SPREAD" || cmd == "TMC:MODE:STEALTH") {
-    sendStatus("TMC:FIX-TEST-SPREAD");
-    Serial.println("[FIX-TEST] TMC:MODE blockiert - fest SpreadCycle");
+    const bool want = (cmd == "TMC:MODE:SPREAD");
+    if (tmcSpreadCycle() == want) {
+      sendStatus(want ? "TMC:MODE=SPREAD" : "TMC:MODE=STEALTH");
+      tmcSendCompactStatus();
+      return true;
+    }
+    tmcSetSpreadCycle(want);
+    if (tmcSpreadCycle() != want) {
+      sendStatus("TMC:BUSY");
+      Serial.println("[CMD] Moduswechsel abgelehnt (Roboter faehrt)");
+      return true;
+    }
+    config.tmcSpread = want;
+    configSaveBool("tmcSpread", want);
+    sendStatus(want ? "TMC:MODE=SPREAD" : "TMC:MODE=STEALTH");
+    tmcSendCompactStatus();
     return true;
   }
   if (cmd == "TMC:EN:1") { tmcEnable(); sendStatus("TMC:EN=1"); tmcSendCompactStatus(); return true; }
@@ -958,8 +992,27 @@ static bool cmdSpeed(const String& cmd) {
     return true;
   }
   if (cmd.startsWith("SPEED:")) {
-    sendStatus("SPEED:FIX-TEST-150");
-    Serial.println("[FIX-TEST] SPEED blockiert - fest 150 mm/s");
+    float mmS = cmd.substring(6).toFloat();
+    if (!inRange(mmS, SPEED_MM_S_MIN, SPEED_MM_S_MAX)) { sendStatus("SPEED:BAD"); return true; }
+
+    uint16_t optimalMS = configOptimalMicrosteps(mmS);
+    if (optimalMS != config.tmcMicrosteps) {
+      Serial.printf("[SPEED] Auto-Microsteps: %u -> %u fuer %.0f mm/s\n",
+                    config.tmcMicrosteps, optimalMS, (double)mmS);
+      if (tmcSetMicrosteps(optimalMS)) {
+        configSaveUShort("tmcMS", config.tmcMicrosteps);
+      } else {
+        Serial.println("[SPEED] Microstep-Aenderung fehlgeschlagen, behalte aktuellen Wert");
+      }
+    }
+
+    config.driveSpeedMM = mmS;
+    configSaveField("driveSpeed", mmS);
+    motorUpdateSpeeds();
+    snprintf(buf, sizeof(buf), "SPEED=%.0f,%.0f", (double)mmS, (double)FIXED_DRIVE_SPEED);
+    sendStatus(buf);
+    Serial.printf("[SPEED] %.0f mm/s = %.0f Schritte/s (%u Microsteps)\n",
+                  (double)mmS, (double)FIXED_DRIVE_SPEED, config.tmcMicrosteps);
     return true;
   }
   return false;

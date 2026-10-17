@@ -3661,7 +3661,7 @@
           <div class="speed-panel">
             <div class="speed-row">
               <label class="speed-label" for="driveSpeed">Tempo</label>
-              <input type="range" id="driveSpeed" min="20" max="600" step="10" value="150"
+              <input type="range" id="driveSpeed" min="20" max="200" step="10" value="150"
                      aria-label="Fahrgeschwindigkeit in Millimetern pro Sekunde">
               <span class="speed-value"><b id="driveSpeedVal">150</b> mm/s</span>
             </div>
@@ -4218,7 +4218,7 @@
               <div class="game-desc">Wie schnell der Roboter fährt.</div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
                 <label class="game-desc" for="settingsSpeed">Tempo (mm/s):</label>
-                <input type="number" id="settingsSpeed" min="20" max="600" step="10" value="150"
+                <input type="number" id="settingsSpeed" min="20" max="200" step="10" value="150"
                        style="width:92px;padding:8px;border-radius:10px;border:1px solid var(--line);font:inherit;background:var(--card);color:var(--ink)">
                 <button class="btn btn-primary" onclick="settingsSetSpeed()">Setzen</button>
               </div>
@@ -6514,8 +6514,8 @@ function updateConnectionUI(isConn, text) {
         const st = document.getElementById('edgeGuardState');
         if (!el) return;
         const v = parseFloat(el.value);
-        if (isNaN(v) || v < 20 || v > 600) {
-          if (st) st.textContent = 'Bitte ein Tempo zwischen 20 und 600 mm/s eintragen.';
+        if (isNaN(v) || v < 20 || v > 200) {
+          if (st) st.textContent = 'Bitte ein Tempo zwischen 20 und 200 mm/s eintragen.';
           return;
         }
         sendCommand('SPEED:' + v);
@@ -9284,7 +9284,7 @@ function slalomRefreshUi() {
         B: { label: 'rückwärts', unit: 'cm', def: 10, min: 1, max: 200, loop: false, slot: 'num' },
         L: { label: 'drehe links', unit: '°', def: 90, min: 5, max: 360, loop: false, slot: 'num' },
         R: { label: 'drehe rechts', unit: '°', def: 90, min: 5, max: 360, loop: false, slot: 'num' },
-        T: { label: 'Tempo', unit: 'mm/s', def: 150, min: 20, max: 600, loop: false, slot: 'num',
+        T: { label: 'Tempo', unit: 'mm/s', def: 150, min: 20, max: 200, loop: false, slot: 'num',
              hint: 'Gilt für alles, was danach im Programm fährt – nach dem Programm gilt wieder das alte Tempo.' },
         P: { label: 'fahre bis', unit: '', def: 0, min: 0, max: 5, loop: false, slot: 'color',
              hint: 'Fährt los und hält an, sobald die Farbe da ist. Findet er sie nicht, hält er nach 1,5 m oder 20 s. Solange der Tischkanten-Wächter an ist, fährt er dafür langsamer – so bleibt er sicher vor der Kante stehen.' },
