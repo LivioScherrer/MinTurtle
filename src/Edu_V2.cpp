@@ -17,7 +17,6 @@
 #include "EspNow.h"
 #include "MemoryGame.h"
 #include "GameEngine.h"
-#include "LineFollower.h"
 #include "ProgGame.h"
 #include "LedStrip.h"
 #include "DistanceSensor.h"
@@ -339,7 +338,6 @@ static void clientLost() {
   slalomTargetColor[0] = '\0';
   slalomSetPhase(SLALOM_IDLE);
   memoryStop();
-  lineFollowerStop();
   progStop();
   ampelStop();
   zahlStop();
@@ -394,7 +392,6 @@ void hardStop() {
   korrigierenRunning = false;
   raceActive = false;
   memoryStop();
-  lineFollowerStop();
   progStop();
   ampelStop();
   zahlStop();
@@ -420,7 +417,7 @@ static void cmdHalt() {
 }
 
 static bool cmdIsGameStop(const String& cmd) {
-  return cmd == "LINE:STOP"  || cmd == "MEMORY:STOP" || cmd == "QUIZ:STOP"
+  return cmd == "MEMORY:STOP" || cmd == "QUIZ:STOP"
       || cmd == "RACE:STOP"  || cmd == "PROG:STOP"  || cmd == "SLALOM:STOP"
       || cmd == "AMPEL:STOP" || cmd == "ZAHL:STOP" || cmd == "GEHEIM:STOP"
       || cmd == "PARK:STOP"  || cmd == "ZEIT:STOP";
@@ -1199,28 +1196,6 @@ static bool claimGameSlot(const char* busyMsg, const char* what) {
   return true;
 }
 
-static bool cmdLine(const String& cmd) {
-  if (!cmd.startsWith("LINE:")) return false;
-  String sub = cmd.substring(5);
-  if (sub == "START") {
-    if (claimGameSlot("LINE:BUSY", "LINE")) return true;
-    if (!lineFollowerActive) {
-      currentGame = GAME_LINEFOLLOWER;
-      lineFollowerStart();
-      sendStatus("LINE:RUNNING");
-    } else {
-      sendStatus("LINE:BUSY");
-    }
-  } else if (sub == "STOP") {
-    lineFollowerStop();
-    currentGame = GAME_NONE;
-    sendStatus("LINE:STOPPED");
-  } else {
-    sendStatus((String("UNKNOWN:") + cmd).c_str());
-  }
-  return true;
-}
-
 static bool cmdMemory(const String& cmd) {
   if (!cmd.startsWith("MEMORY:")) return false;
   String sub = cmd.substring(7);
@@ -1384,7 +1359,6 @@ void handleCommand(const char* cmdStr) {
   if (cmdRace(cmd))  return;
   if (cmdSlalom(cmd))return;
   if (lobbyCmd(cmd))  return;
-  if (cmdLine(cmd))  return;
   if (cmdMemory(cmd))return;
   if (cmdProg(cmd))  return;
   if (ampelCmd(cmd)) return;
@@ -1499,10 +1473,6 @@ static void ledPatternUpdate() {
     ledStripShowBreathe(LED_C_WHITE, 1600);
     return;
   }
-  if (currentGame == GAME_LINEFOLLOWER) {
-    ledStripShowLine(lineFollowerLedState());
-    return;
-  }
   if (currentGame == GAME_RENNEN) {
     ledStripShowRace();
     return;
@@ -1531,14 +1501,6 @@ void loop() {
   parkTick();
   zeitTick();
   duelTick();
-  if (currentGame == GAME_LINEFOLLOWER) {
-    bool wasActive = lineFollowerActive;
-    lineFollowerTick();
-    if (wasActive && !lineFollowerActive) {
-      currentGame = GAME_NONE;
-      sendStatus("LINE:LOST");
-    }
-  }
 
   if (slalomGoPending && !slalomRunning && slalomPhase == SLALOM_COUNTDOWN &&
       millis() >= slalomGoTimer) {

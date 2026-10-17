@@ -28,13 +28,6 @@ enum LedDriveDir : uint8_t {
   LED_DIR_BACK
 };
 
-enum LedLineState : uint8_t {
-  LED_LINE_IDLE = 0,
-  LED_LINE_FOLLOW,
-  LED_LINE_SEARCH,
-  LED_LINE_OBSTACLE
-};
-
 void ledStripSetup();
 void ledStripTick();
 bool ledIsOverrideActive();
@@ -51,7 +44,6 @@ void ledStripShowDrive(LedDriveDir dir);
 void ledStripShowProgress(uint8_t done, uint8_t total, LedColorId color);
 void ledStripShowMemoryShow();
 inline void ledStripShowMemory() { ledStripShowMemoryShow(); }
-void ledStripShowLine(LedLineState state);
 void ledStripShowRace();
 void ledStripShowCountdown(uint32_t msLeft, uint32_t totalMs);
 void ledStripShowResult(bool iWon);

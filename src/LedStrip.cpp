@@ -19,7 +19,6 @@ enum LedPattern : uint8_t {
   PAT_DRIVE,
   PAT_PROGRESS,
   PAT_MEMORY,
-  PAT_LINE,
   PAT_RACE,
   PAT_COUNTDOWN,
   PAT_WIN,
@@ -108,13 +107,6 @@ static uint8_t breatheScale(uint32_t now, uint32_t periodMs, uint8_t minV, uint8
   return (uint8_t)(minV + (uint16_t)wave(now, periodMs) * (maxV - minV) / 255);
 }
 
-static uint8_t pingPong(uint32_t now, uint32_t periodMs, uint8_t last) {
-  if (periodMs == 0 || last == 0) return 0;
-  const uint32_t t = now % periodMs;
-  const uint32_t half = periodMs / 2;
-  return (uint8_t)(t < half ? (t * last / half) : (last - (t - half) * last / half));
-}
-
 static void setPattern(uint8_t p, uint32_t color, uint8_t p1, uint8_t p2) {
   const uint32_t now = millis();
   if (now < s_holdUntil) return;
@@ -187,10 +179,6 @@ void ledStripShowProgress(uint8_t done, uint8_t total, LedColorId color) {
 
 void ledStripShowMemoryShow() {
   setPattern(PAT_MEMORY, 0, 0, 0);
-}
-
-void ledStripShowLine(LedLineState state) {
-  setPattern(PAT_LINE, 0, state, 0);
 }
 
 void ledStripShowRace() {
@@ -347,22 +335,6 @@ void ledStripTick() {
     case PAT_MEMORY: {
       ledStrip.clear();
       setDot((uint8_t)((now / 110) % LED_STRIP_COUNT), ledColor(LED_C_VIOLET), 3);
-      break;
-    }
-
-    case PAT_LINE: {
-      ledStrip.clear();
-      if (s_p1 == LED_LINE_FOLLOW) {
-        const uint8_t last = LED_STRIP_COUNT - 1;
-        const uint8_t pos = pingPong(now, 1400, last);
-        ledStrip.setPixelColor(pos, ledColor(LED_C_GREEN));
-        if (pos > 0)      ledStrip.setPixelColor(pos - 1, ledStrip.Color(0, 90, 0));
-        if (pos < last)   ledStrip.setPixelColor(pos + 1, ledStrip.Color(0, 90, 0));
-      } else if (s_p1 == LED_LINE_OBSTACLE) {
-        fillAll(blinkOn(now, 1000) ? ledColor(LED_C_RED) : 0);
-      } else if (s_p1 == LED_LINE_SEARCH) {
-        fillAll(blinkOn(now, 500) ? ledColor(LED_C_ORANGE) : 0);
-      }
       break;
     }
 
