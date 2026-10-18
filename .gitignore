@@ -1,1 +1,13 @@
 .pio/
+
+# KiCad-Benutzer- und Sitzungsdateien
+*.kicad_prl
+*.kicad_prl.lock
+*.lck
+_autosave-*
+fp-info-cache
+
+# Sicherungskopien
+*.bak
+*.bak_*
+*~
