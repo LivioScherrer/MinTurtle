@@ -14,7 +14,7 @@ extern uint8_t memoryInputIdx;
 extern bool    memoryActive;
 extern bool    memoryAwaitInput;
 
-void memoryStart(uint8_t startLen = 3);
+void memoryStart(uint8_t startLen = 1);
 void memoryStop();
 bool memoryInput(uint8_t move);
 void memoryTick();

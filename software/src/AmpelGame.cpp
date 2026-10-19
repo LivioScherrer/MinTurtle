@@ -11,8 +11,8 @@ constexpr float    AMPEL_ROLL_MM_S    = 60.0f;
 constexpr uint32_t AMPEL_RED_MIN_MS   = 2000;
 constexpr uint32_t AMPEL_RED_MAX_MS   = 6000;
 constexpr uint32_t AMPEL_CHEAT_WINDOW = 3000;
-constexpr int32_t  AMPEL_STAR_MM      = 50;
-constexpr int32_t  AMPEL_GOOD_MM      = 150;
+constexpr uint32_t AMPEL_STAR_MS      = 600;
+constexpr uint32_t AMPEL_GOOD_MS      = 1200;
 constexpr int32_t  AMPEL_MISS_MM      = 1500;
 constexpr uint32_t AMPEL_MISS_MS      = 20000;
 constexpr uint8_t  AMPEL_CHEAT_DENOM  = 6;
@@ -120,14 +120,16 @@ void ampelTick() {
     case AMPEL_RED: {
       if (gameHaltRequested()) {
         gameHaltClear();
+        const uint32_t ms = now - s_phaseAt;
         const int32_t mm = probeMM();
         uint8_t score = 0;
-        if (mm < AMPEL_STAR_MM)      score = 2;
-        else if (mm < AMPEL_GOOD_MM) score = 1;
+        if (ms < AMPEL_STAR_MS)      score = 2;
+        else if (ms < AMPEL_GOOD_MS) score = 1;
         if (score > 0) s_success++;
         duelAddPoints(score);
-        char msg[48];
-        snprintf(msg, sizeof(msg), "AMPEL:RESULT:%ld,%u", (long)mm, (unsigned)score);
+        char msg[64];
+        snprintf(msg, sizeof(msg), "AMPEL:RESULT:%ld,%u,%lu",
+                 (long)mm, (unsigned)score, (unsigned long)ms);
         ampelFinishRound(msg);
         ledStripShowResultFlash(score > 0);
         ledStripTick();

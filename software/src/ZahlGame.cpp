@@ -11,8 +11,6 @@ constexpr float   ZAHL_SPEED_MM_S = 100.0f;
 constexpr float   ZAHL_SPEED_PER_STAGE = 20.0f;
 constexpr uint8_t ZAHL_STAGE_EVERY = 3;
 constexpr uint8_t ZAHL_STAGE_MAX   = 5;
-constexpr int16_t ZAHL_TARGET_MIN = 100;
-constexpr int16_t ZAHL_TARGET_MAX = 1000;
 constexpr int32_t ZAHL_OVERRUN_MM = 500;
 
 static bool    s_active = false;
@@ -27,6 +25,12 @@ static uint8_t zahlStage() {
 }
 static float zahlSpeed() {
   return ZAHL_SPEED_MM_S + (float)(zahlStage() - 1) * ZAHL_SPEED_PER_STAGE;
+}
+static uint8_t zahlScoreForMM(int32_t abw) {
+  int score = 100 - (int)((abw * 5 + 5) / 10);
+  if (score < 0) score = 0;
+  if (score > 100) score = 100;
+  return (uint8_t)score;
 }
 
 void zahlStop() {
@@ -68,14 +72,14 @@ void zahlTick() {
     const int32_t driven = probeMM();
     const int32_t delta  = driven - s_targetMM;
     const int32_t abw    = (delta < 0) ? -delta : delta;
-    const uint8_t score = probeScoreMM(abw);
-    if (score > 0) s_success++;
-    duelAddPoints(score);
+    const uint8_t score = zahlScoreForMM(abw);
+    if (score >= 80) s_success++;
+    duelAddPoints(score >= 80 ? 2 : (score >= 40 ? 1 : 0));
     gameSpeedRestore();
     char msg[48];
     snprintf(msg, sizeof(msg), "ZAHL:RESULT:%ld,%u", (long)delta, (unsigned)score);
     sendStatus(msg);
-    ledStripShowResultFlash(score > 0);
+    ledStripShowResultFlash(score >= 80);
     ledStripTick();
   }
 }
@@ -93,10 +97,17 @@ bool zahlCmd(const String& cmd) {
       sendStatus("ZAHL:BUSY");
       return true;
     }
-    int v = sub.substring(6).toInt();
-    v = ((v + 5) / 10) * 10;
-    if (v < 10)  v = 10;
-    if (v > 100) v = 100;
+    const String arg = sub.substring(6);
+    int v = 0;
+    if (arg.startsWith("RANDOM:")) {
+      int maxCm = arg.substring(7).toInt();
+      if (maxCm != 20) maxCm = 40;
+      v = random(5, maxCm + 1);
+    } else {
+      v = arg.toInt();
+      if (v < 5)   v = 5;
+      if (v > 100) v = 100;
+    }
     s_targetMM = (int16_t)(v * 10);
     s_active  = true;
     s_driving = true;

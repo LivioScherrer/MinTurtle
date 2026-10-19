@@ -51,6 +51,7 @@ void memoryShowSequence() {
 
 void memoryStart(uint8_t startLen) {
   if (memoryActive) return;
+  if (startLen < 1) startLen = 1;
   if (startLen > MEMORY_MAX_LEN) startLen = MEMORY_MAX_LEN;
   if (startLen > memoryLen && memoryLen > 0) {
     for (uint8_t i = memoryLen; i < startLen; i++) memorySeq[i] = random(0, 4);

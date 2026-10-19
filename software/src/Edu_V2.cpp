@@ -228,12 +228,14 @@ uint8_t raceTargetScore = RENNEN_TARGET_SCORE;
 uint8_t raceStage = 0;
 float raceMMPerPoint = 0.0f;
 unsigned long raceLastOppMs = 0;
+static bool raceWinLed = false;
 
 void raceExecuteStart(bool remote = false) {
   currentGame = GAME_RENNEN;
   raceMyScore = 0;
   raceOppScore = 0;
   raceActive = true;
+  raceWinLed = false;
   raceLastOppMs = 0;
   sendStatus(remote ? "RACE:REMOTE_START" : "RACE:STARTED");
 }
@@ -254,6 +256,7 @@ void raceForwardStep() { raceForwardStepMM(raceMMPerPoint); }
 
 void raceAbort(bool notifyPeer) {
   raceActive = false;
+  raceWinLed = false;
   currentGame = GAME_NONE;
   stopMotors(); speedL = 0; speedR = 0;
   if (notifyPeer) raceSendPacket((uint8_t)raceMyScore, false);
@@ -275,6 +278,7 @@ void onRacePacket(const EduPacket* pkt) {
   if (pkt->flags & RACE_FLAG_WINNER || pkt->score >= raceTargetScore) {
     raceOppScore = pkt->score;
     raceActive = false;
+    raceWinLed = false;
     currentGame = GAME_NONE;
     stopMotors(); speedL = 0; speedR = 0;
     sendStatus("RACE:OPP_WIN");
@@ -1166,6 +1170,8 @@ static bool cmdRace(const String& cmd) {
   } else if (sub == "STEP") {
     if (!raceActive) return true;
     raceMyScore++;
+    ledStripShowResultFlash(true);
+    ledStripTick();
     raceForwardStep();
     if (!raceActive) return true;
     raceSendPacket((uint8_t)raceMyScore, raceMyScore >= raceTargetScore);
@@ -1173,8 +1179,11 @@ static bool cmdRace(const String& cmd) {
     sendStatus(buf);
     if (raceMyScore >= raceTargetScore) {
       raceActive = false;
+      raceWinLed = true;
       currentGame = GAME_NONE;
       stopMotors(); speedL = 0; speedR = 0;
+      ledStripShowResult(true);
+      ledStripTick();
       sendStatus("RACE:YOU_WIN");
     }
   } else if (sub.startsWith("STEP:")) {
@@ -1183,6 +1192,8 @@ static bool cmdRace(const String& cmd) {
     raceMMPerPoint = mm;
     if (!raceActive) return true;
     raceMyScore++;
+    ledStripShowResultFlash(true);
+    ledStripTick();
     raceForwardStepMM(mm);
     if (!raceActive) return true;
     raceSendPacket((uint8_t)raceMyScore, raceMyScore >= raceTargetScore);
@@ -1190,17 +1201,28 @@ static bool cmdRace(const String& cmd) {
     sendStatus(buf);
     if (raceMyScore >= raceTargetScore) {
       raceActive = false;
+      raceWinLed = true;
       currentGame = GAME_NONE;
       stopMotors(); speedL = 0; speedR = 0;
+      ledStripShowResult(true);
+      ledStripTick();
       sendStatus("RACE:YOU_WIN");
     }
+  } else if (sub == "WRONG") {
+    if (!raceActive) return true;
+    ledStripShowResultFlash(false);
+    ledStripTick();
   } else if (sub == "WIN") {
     raceActive = false;
+    raceWinLed = true;
     currentGame = GAME_NONE;
     stopMotors(); speedL = 0; speedR = 0;
+    ledStripShowResult(true);
+    ledStripTick();
     raceSendPacket((uint8_t)raceTargetScore, true);
   } else if (sub == "LOSE") {
     raceActive = false;
+    raceWinLed = false;
     currentGame = GAME_NONE;
     stopMotors(); speedL = 0; speedR = 0;
     raceSendPacket((uint8_t)raceMyScore, false);
@@ -1255,11 +1277,11 @@ static bool cmdMemory(const String& cmd) {
   if (sub == "START") {
     if (claimGameSlot("MEMORY:BUSY", "MEMORY")) return true;
     currentGame = GAME_MEMORY;
-    memoryStart(3);
+    memoryStart(1);
   } else if (sub.startsWith("START:")) {
     if (claimGameSlot("MEMORY:BUSY", "MEMORY")) return true;
     uint8_t n = (uint8_t)sub.substring(6).toInt();
-    if (n < 3) n = 3;
+    if (n < 1) n = 1;
     if (n > MEMORY_MAX_LEN) n = MEMORY_MAX_LEN;
     currentGame = GAME_MEMORY;
     memoryStart(n);
@@ -1359,6 +1381,9 @@ static bool cmdSlalom(const String& cmd) {
     }
     if (claimGameSlot("SLALOM:BUSY", "SLALOM")) return true;
     slalomStartGame();
+  } else if (sub.startsWith("TIME_START:")) {
+    if (claimGameSlot("SLALOM:BUSY", "SLALOM")) return true;
+    slalomStartSoloTime(sub.substring(11).c_str());
   } else if (sub == "STOP") {
     slalomAbortGame();
   } else {
@@ -1483,10 +1508,14 @@ static void ledPatternUpdate() {
       default: break;
     }
   }
+  if (raceWinLed) {
+    ledStripShowResult(true);
+    return;
+  }
   if (slalomPhase == SLALOM_COUNTDOWN) {
     const uint32_t now = millis();
     const uint32_t left = (slalomGoTimer > now) ? (slalomGoTimer - now) : 0;
-    ledStripShowCountdown(left, slalomIsHost ? 3000 : 4500);
+    ledStripShowCountdown(left, (slalomSoloTime || slalomIsHost) ? 3000 : 4500);
     return;
   }
   if (slalomPhase == SLALOM_DONE) {
@@ -1558,13 +1587,18 @@ void loop() {
   if (slalomGoPending && !slalomRunning && slalomPhase == SLALOM_COUNTDOWN &&
       millis() >= slalomGoTimer) {
     slalomGoPending = false;
-    if (slalomIsHost) {
-      slalomSendPacket(SLALOM_CMD_GO, nullptr, true);
-      Serial.println("[SLALOM] HOST-GO-Timer: GO gesendet (reliable), starte selbst");
+    if (slalomSoloTime) {
+      Serial.println("[SLALOM] Solo-GO: Zeitfahrt startet");
+      slalomExecuteSoloTime();
     } else {
-      Serial.println("[SLALOM] Client-Fallback-GO: kein Paket erhalten, starte trotzdem");
+      if (slalomIsHost) {
+        slalomSendPacket(SLALOM_CMD_GO, nullptr, true);
+        Serial.println("[SLALOM] HOST-GO-Timer: GO gesendet (reliable), starte selbst");
+      } else {
+        Serial.println("[SLALOM] Client-Fallback-GO: kein Paket erhalten, starte trotzdem");
+      }
+      slalomExecute();
     }
-    slalomExecute();
   }
   slalomCheckRetry();
   slalomTick();

@@ -14,6 +14,7 @@ static const char* const SLALOM_PHASE_NAMES[6] = {
 char slalomTargetColor[16] = "";
 char slalomMyProgram[PROG_MAX_ENC + 1] = "";
 bool slalomRunning   = false;
+bool slalomSoloTime  = false;
 bool slalomIsHost    = false;
 bool slalomReady     = false;
 bool slalomOppReady  = false;
@@ -129,6 +130,7 @@ void slalomUnpair() {
   }
   slalomHasPeer_       = false;
   slalomIsHost        = false;
+  slalomSoloTime      = false;
   slalomInvitePending_ = false;
   slalomInviteSent_   = false;
   memset(slalomPeerMac, 0, 6);
@@ -165,6 +167,7 @@ void slalomEndGame(bool iWon) {
     slalomRunning = false;
     currentGame = GAME_NONE;
   }
+  slalomSoloTime = false;
   slalomResetRuntime();
   slalomWon = true;
   slalomIWonLast = iWon;
@@ -179,14 +182,44 @@ void slalomAbortGame(bool notifyPeer) {
     slalomRunning = false;
     currentGame = GAME_NONE;
   }
+  const bool wasSolo = slalomSoloTime;
+  slalomSoloTime = false;
   slalomResetRuntime();
   slalomTargetColor[0] = '\0';
-  slalomSetPhase(SLALOM_PAIRED);
+  slalomSetPhase(wasSolo ? SLALOM_IDLE : SLALOM_PAIRED);
   sendStatus("SLALOM:STOPPED");
   Serial.println("[SLALOM] Spiel abgebrochen");
-  if (notifyPeer && slalomHasPeer_) {
+  if (notifyPeer && !wasSolo && slalomHasPeer_) {
     slalomSendPacket(SLALOM_CMD_ABORT, nullptr, true);
   }
+}
+
+void slalomStartSoloTime(const char* color) {
+  if (slalomRunning || currentGame != GAME_NONE) {
+    sendStatus("SLALOM:BUSY");
+    return;
+  }
+  if (!color || color[0] == '\0') {
+    sendStatus("SLALOM:ERROR:NO_TARGET");
+    return;
+  }
+  bool known = false;
+  for (uint8_t i = 0; i < 4; i++) {
+    if (strcasecmp(color, SLALOM_COLOR_NAMES[i]) == 0) { known = true; break; }
+  }
+  if (!known) {
+    sendStatus("SLALOM:ERROR:NO_TARGET");
+    return;
+  }
+  slalomSoloTime = true;
+  slalomResetRuntime();
+  strlcpy(slalomTargetColor, color, sizeof(slalomTargetColor));
+  slalomSetPhase(SLALOM_BUILD);
+  char msg[48];
+  snprintf(msg, sizeof(msg), "SLALOM:TARGET:%s", slalomTargetColor);
+  sendStatus(msg);
+  sendStatus("SLALOM:MATCH_STARTED");
+  Serial.printf("[SLALOM] Zeitfahrt gestartet, Zielfarbe %s\n", slalomTargetColor);
 }
 
 void slalomStartGame() {
@@ -194,6 +227,7 @@ void slalomStartGame() {
     Serial.println("[SLALOM] Start blockiert: kein Peer gepaart");
     return;
   }
+  slalomSoloTime = false;
   slalomResetRuntime();
   slalomSetPhase(SLALOM_BUILD);
   uint8_t idx = random(0, 4);
@@ -209,6 +243,7 @@ void slalomStartGame() {
 void slalomOnStartReceived(const char* col) {
   if (slalomPhase == SLALOM_BUILD || slalomPhase == SLALOM_COUNTDOWN ||
       slalomPhase == SLALOM_RACING) return;
+  slalomSoloTime = false;
   slalomResetRuntime();
   if (col && col[0] != '\0') {
     strlcpy(slalomTargetColor, col, sizeof(slalomTargetColor));
@@ -225,7 +260,11 @@ void slalomSetProgram(const char* enc) {
   strlcpy(slalomMyProgram, enc, sizeof(slalomMyProgram));
   slalomReady = true;
   sendStatus("SLALOM:READY");
-  slalomSendPacket(SLALOM_CMD_PROG, slalomMyProgram, true);
+  if (slalomSoloTime) {
+    slalomOppReady = true;
+  } else {
+    slalomSendPacket(SLALOM_CMD_PROG, slalomMyProgram, true);
+  }
   slalomMaybeStart();
 }
 
@@ -236,13 +275,17 @@ void slalomMaybeStart() {
   if (slalomTargetColor[0] == '\0') return;
   slalomSetPhase(SLALOM_COUNTDOWN);
   sendStatus("SLALOM:BOTH_READY");
-  if (slalomIsHost) {
+  if (slalomSoloTime) {
+    slalomGoTimer = millis() + 3000;
+  } else if (slalomIsHost) {
     slalomGoTimer = millis() + 3000;
   } else {
     slalomGoTimer = millis() + 4500;
   }
   slalomGoPending = true;
-  Serial.printf("[SLALOM] Beide bereit. %s-Countdown 3s bis GO\n", slalomIsHost ? "Host" : "Client");
+  Serial.printf("[SLALOM] %s bereit. %s-Countdown 3s bis GO\n",
+                slalomSoloTime ? "Zeitfahrt" : "Beide",
+                slalomIsHost ? "Host" : (slalomSoloTime ? "Solo" : "Client"));
 }
 
 void slalomExecute() {
@@ -280,6 +323,41 @@ void slalomExecute() {
       slalomOppWaitStart = millis();
     }
   }
+}
+
+void slalomExecuteSoloTime() {
+  if (!slalomSoloTime) return;
+  if (slalomTargetColor[0] == '\0') {
+    sendStatus("SLALOM:ERROR:NO_TARGET");
+    slalomSetPhase(SLALOM_BUILD);
+    return;
+  }
+  slalomFinished = false;
+  slalomWon = false;
+  slalomRunning = true;
+  currentGame = GAME_SLALOM;
+  slalomSetPhase(SLALOM_RACING);
+  sendStatus("SLALOM:RUNNING");
+  ledStripClear();
+  progSetFromString(slalomMyProgram);
+  const uint32_t startMs = millis();
+  progRunSlalom(slalomTargetColor);
+  const uint32_t elapsedMs = millis() - startMs;
+  const bool hit = slalomFinished;
+  slalomFinished = false;
+  slalomRunning = false;
+  currentGame = GAME_NONE;
+  if (!slalomSoloTime) return;
+  slalomIWonLast = hit;
+  slalomSetPhase(SLALOM_DONE);
+  char msg[48];
+  snprintf(msg, sizeof(msg), "SLALOM:TIME_RESULT:%lu,%u",
+           (unsigned long)elapsedMs, hit ? 1u : 0u);
+  sendStatus(msg);
+  ledStripShowResultFlash(hit);
+  ledStripTick();
+  Serial.printf("[SLALOM] Zeitfahrt %.2f s, Treffer=%d\n",
+                elapsedMs / 1000.0f, hit ? 1 : 0);
 }
 
 void slalomCheckRetry() {
@@ -324,6 +402,11 @@ void onSlalomPacket(const EduPacket* pkt) {
         return;
       }
       break;
+  }
+
+  if (slalomSoloTime && pkt->cmd != SLALOM_CMD_SLALOM_UNPAIR &&
+      pkt->cmd != SLALOM_CMD_START) {
+    return;
   }
 
   switch (pkt->cmd) {

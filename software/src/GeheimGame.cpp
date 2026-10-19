@@ -7,11 +7,8 @@
 #include "LedStrip.h"
 #include "Duel.h"
 
-static int16_t geheimRangeMin(uint8_t st) { return (st <= 1) ? 200 : 100; }
-static int16_t geheimRangeMax(uint8_t st) { return (st <= 1) ? 500 : (st == 2 ? 800 : 1000); }
-static int32_t geheimTolPerfect(uint8_t st) { return (st <= 1) ? 20 : (st == 2 ? 15 : 10); }
-static int32_t geheimTolGood(uint8_t st)    { return (st <= 1) ? 50 : (st == 2 ? 40 : 30); }
 constexpr uint8_t GEHEIM_STAGE_MAX = 3;
+constexpr int16_t GEHEIM_MIN_MM     = 50;
 
 static bool    s_active = false;
 static bool    s_driving = false;
@@ -26,12 +23,18 @@ static uint8_t geheimStage() {
   return (st > GEHEIM_STAGE_MAX) ? GEHEIM_STAGE_MAX : st;
 }
 
-static void geheimNewSecret() {
-  const uint8_t st = geheimStage();
-  s_secretMM = (int16_t)random(geheimRangeMin(st), geheimRangeMax(st) + 1);
+static void geheimNewSecret(uint8_t maxCm) {
+  if (maxCm != 20 && maxCm != 100) maxCm = 40;
+  s_secretMM = (int16_t)(random(GEHEIM_MIN_MM / 10, maxCm + 1) * 10);
   s_haveSecret = true;
-  sendStatusF("GEHEIM:STAGE:%u", (unsigned)st);
+  sendStatusF("GEHEIM:STAGE:%u", (unsigned)geheimStage());
   sendStatus("GEHEIM:READY");
+}
+static uint8_t geheimScoreForMM(int32_t abw) {
+  int score = 100 - (int)((abw * 5 + 5) / 10);
+  if (score < 0) score = 0;
+  if (score > 100) score = 100;
+  return (uint8_t)score;
 }
 
 void geheimStop() {
@@ -59,16 +62,13 @@ void geheimTick() {
   s_driving = false;
   const int32_t diff = (int32_t)s_secretMM - (int32_t)s_guessMM;
   const int32_t abw = (diff < 0) ? -diff : diff;
-  const uint8_t st = geheimStage();
-  uint8_t score = 0;
-  if (abw <= geheimTolPerfect(st))      score = 2;
-  else if (abw <= geheimTolGood(st))    score = 1;
-  if (score == 2) s_wins++;
-  duelAddPoints(score);
+  const uint8_t score = geheimScoreForMM(abw);
+  if (score >= 80) s_wins++;
+  duelAddPoints(score >= 80 ? 2 : (score >= 40 ? 1 : 0));
   char msg[48];
   snprintf(msg, sizeof(msg), "GEHEIM:RESULT:%ld,%u", (long)diff, (unsigned)score);
   sendStatus(msg);
-  ledStripShowResultFlash(score > 0);
+  ledStripShowResultFlash(score >= 80);
   ledStripTick();
 }
 
@@ -88,7 +88,24 @@ bool geheimCmd(const String& cmd) {
     s_active = true;
     currentGame = GAME_GEHEIM;
     gameHaltClear();
-    geheimNewSecret();
+    geheimNewSecret(40);
+    return true;
+  }
+
+  if (sub.startsWith("START:RANDOM:")) {
+    if (currentGame != GAME_NONE && currentGame != GAME_GEHEIM) {
+      sendStatus("GEHEIM:BUSY");
+      return true;
+    }
+    if (s_driving) {
+      sendStatus("GEHEIM:BUSY");
+      return true;
+    }
+    const int maxCm = sub.substring(13).toInt();
+    s_active = true;
+    currentGame = GAME_GEHEIM;
+    gameHaltClear();
+    geheimNewSecret((uint8_t)maxCm);
     return true;
   }
 
@@ -101,15 +118,14 @@ bool geheimCmd(const String& cmd) {
       sendStatus("GEHEIM:BUSY");
       return true;
     }
+    if (!s_haveSecret) {
+      sendStatus("GEHEIM:ERROR:NO_SECRET");
+      return true;
+    }
     int v = sub.substring(6).toInt();
-    if (v < 10)  v = 10;
+    if (v < 5)   v = 5;
     if (v > 100) v = 100;
     s_guessMM = (int16_t)(v * 10);
-    if (!s_haveSecret) {
-      s_active = true;
-      currentGame = GAME_GEHEIM;
-      geheimNewSecret();
-    }
     s_active = true;
     currentGame = GAME_GEHEIM;
     gameHaltClear();

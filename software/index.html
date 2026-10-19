@@ -3685,17 +3685,6 @@
               <div class="tile-desc">So nah wie möglich ran</div>
             </div>
           </div>
-          <div class="tile" data-view="zeit" data-cat="games">
-            <div class="tile-ic" style="background:#eef1f4;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-                stroke="#3a4652" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="13" r="8" />
-                <path d="M12 9v4l3 2M9 2h6" />
-              </svg></div>
-            <div>
-              <div class="tile-ttl">Zeitfahren</div>
-              <div class="tile-desc">Schnell zur Zielfarbe</div>
-            </div>
-          </div>
           <div id="setupGroup" class="setup-group" data-cat="setup">
             <div class="tile" data-view="progress" data-cat="setup">
               <div class="tile-ic" style="background:#fff2cf;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -3888,7 +3877,6 @@
               </div>
             </div>
             <div id="raceMetaRow">
-              <span class="race-chip" id="raceTopicChip">Plus</span>
               <span class="race-chip race-chip-streak" id="raceStreakChip" style="display:none;"><svg class="ic" aria-hidden="true"><use href="#ic-flame"></use></svg> Serie ×1</span>
               <span class="race-chip" id="raceTimeChip" style="display:none;"><svg class="ic" aria-hidden="true"><use href="#ic-clock"></use></svg> 60 s</span>
             </div>
@@ -3933,7 +3921,7 @@
           <div style="margin-top:18px;">
             <div
               style="font-family:'Nunito',cursive;font-size:20px;font-weight:700;color:var(--ink-mute);margin-bottom:10px;">
-              Deine Antworten:</div>
+              Deine Farbfolge:</div>
             <div id="cqAnswerList"></div>
           </div>
           <div class="feedback-msg" id="cqFeedback"></div>
@@ -3947,7 +3935,7 @@
       </div>
           <div class="game-body">
         <div class="arena">
-          <div class="mem-meta">Schritt <span id="memProgress">0</span> / <span id="memTotal">3</span></div>
+          <div class="mem-meta">Schritt <span id="memProgress">0</span> / <span id="memTotal">1</span></div>
           <div id="memStatus" class="mem-status">Bereit?</div>
           <div id="memSeqDisplay" class="mem-seq"></div>
           <div id="memInputArea" style="display:none;">
@@ -4006,19 +3994,18 @@
       <div class="game-body">
         <div class="arena">
           <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0 6px;">
-            <label for="zahlSelect" style="font-weight:700;">Zahl (cm):</label>
-            <select id="zahlSelect" style="font-size:18px;padding:8px 12px;border:3px solid var(--ink);border-radius:12px;font-weight:700;background:#fff;">
-              <option>10</option><option>20</option><option>30</option><option selected>40</option><option>50</option>
-              <option>60</option><option>70</option><option>80</option><option>90</option><option>100</option>
+            <label for="zahlRange" style="font-weight:700;">Bereich:</label>
+            <select id="zahlRange" style="font-size:18px;padding:8px 12px;border:3px solid var(--ink);border-radius:12px;font-weight:700;background:#fff;">
+              <option value="20">0–20 cm</option><option value="40" selected>0–40 cm</option>
             </select>
           </div>
           <div style="max-width:440px;margin:6px auto 0;padding-top:22px;">
             <div style="position:relative;height:54px;border:4px solid var(--ink);border-radius:14px;background:#fff;box-shadow:0 4px 0 var(--ink);">
               <div style="position:absolute;left:0;right:0;top:0;bottom:0;border-radius:10px;background:repeating-linear-gradient(90deg,transparent 0 calc(10% - 2px),#d8d8d8 calc(10% - 2px) 10%);"></div>
-              <div id="zahlTargetMark" style="position:absolute;top:-12px;bottom:-12px;left:40%;width:6px;margin-left:-3px;background:#2a6db5;border-radius:3px;"></div>
-              <div id="zahlStopMark" style="display:none;position:absolute;top:-22px;left:40%;width:0;height:0;margin-left:-10px;border-left:10px solid transparent;border-right:10px solid transparent;border-top:14px solid #d63a3a;"></div>
+              <div id="zahlTargetMark" style="position:absolute;top:-12px;bottom:-12px;left:0%;width:6px;margin-left:-3px;background:#2a6db5;border-radius:3px;"></div>
+              <div id="zahlStopMark" style="display:none;position:absolute;top:-22px;left:0%;width:0;height:0;margin-left:-10px;border-left:10px solid transparent;border-right:10px solid transparent;border-top:14px solid #d63a3a;"></div>
             </div>
-            <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--ink-mute);font-weight:700;margin-top:6px;"><span>0</span><span>50 cm</span><span>100 cm</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--ink-mute);font-weight:700;margin-top:6px;"><span>0</span><span id="zahlScaleMid">20 cm</span><span id="zahlScaleMax">40 cm</span></div>
           </div>
           <div id="zahlStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit?</div>
           <div class="mem-meta">Runde <span id="zahlRound">0</span> · Punkte <span id="zahlPts">0</span> · Stufe <span id="zahlStage">1</span></div>
@@ -4040,15 +4027,22 @@
       <div class="game-body">
         <div class="arena">
           <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0 6px;">
-            <label for="geheimRange" style="font-weight:700;">Schätzung:</label>
-            <input type="range" id="geheimRange" min="10" max="100" step="1" value="40"
-                   style="width:min(320px,80vw);accent-color:#7b2fc2;" aria-label="Schätzung in Zentimetern">
-            <span style="font-weight:800;font-size:20px;"><b id="geheimVal">40</b> cm</span>
+            <label for="geheimRangeSel" style="font-weight:700;">Bereich:</label>
+            <select id="geheimRangeSel" style="font-size:18px;padding:8px 12px;border:3px solid var(--ink);border-radius:12px;font-weight:700;background:#fff;">
+              <option value="20">0–20 cm</option><option value="40" selected>0–40 cm</option><option value="100">0–100 cm</option>
+            </select>
           </div>
-          <div id="geheimStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit?</div>
+          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:6px 0;">
+            <label for="geheimRange" style="font-weight:700;">Schätzung:</label>
+            <input type="range" id="geheimRange" min="5" max="100" step="1" value="20"
+                   style="width:min(320px,80vw);accent-color:#7b2fc2;" aria-label="Schätzung in Zentimetern">
+            <span style="font-weight:800;font-size:20px;"><b id="geheimVal">20</b> cm</span>
+          </div>
+          <div id="geheimStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit? Neue Strecke würfeln.</div>
           <div class="mem-meta">Runde <span id="geheimRound">0</span> · Punkte <span id="geheimPts">0</span> · Stufe <span id="geheimStage">1</span></div>
           <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0;">
-            <button class="btn btn-lg btn-primary" id="btnGeheimStart">Start</button>
+            <button class="btn btn-lg btn-primary" id="btnGeheimNew">Neue Strecke</button>
+            <button class="btn btn-lg btn-success" id="btnGeheimConfirm" disabled>Schätzung bestätigen</button>
             <button class="btn btn-grey" id="btnGeheimStop">✕ Beenden</button>
           </div>
           <div class="feedback-msg" id="geheimFeedback"></div>
@@ -4075,31 +4069,6 @@
         </div>
       </div>
     </div>
-    <div id="view-zeit" class="view game-view">
-      <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
-        <div class="gv-title">Zeitfahren</div>
-        <div class="conn-dot" id="zeitConnDot"></div>
-      </div>
-      <div class="game-body">
-        <div class="arena">
-          <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:14px 0 6px;">
-            <label for="zeitSelect" style="font-weight:700;">Zielfarbe:</label>
-            <select id="zeitSelect" style="font-size:18px;padding:8px 12px;border:3px solid var(--ink);border-radius:12px;font-weight:700;background:#fff;">
-              <option value="0">Rot</option><option value="1">Gelb</option><option value="2">Grün</option><option value="3">Blau</option>
-            </select>
-          </div>
-          <div id="zeitClock" style="text-align:center;font-size:44px;font-weight:800;margin:4px 0;">0.0 s</div>
-          <div id="zeitStatus" style="text-align:center;font-size:17px;font-weight:700;color:var(--ink-mute);margin-bottom:14px;">Bereit?</div>
-          <div class="mem-meta">Runde <span id="zeitRound">0</span> · Punkte <span id="zeitPts">0</span> · Bestzeit <span id="zeitBest">–</span></div>
-          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0;">
-            <button class="btn btn-lg btn-primary" id="btnZeitStart">Start</button>
-            <button class="btn btn-grey" id="btnZeitStop">✕ Beenden</button>
-          </div>
-          <div class="feedback-msg" id="zeitFeedback"></div>
-          <div id="duelHost-zeit"></div>
-        </div>
-      </div>
-    </div>
     <div id="view-slalom" class="view game-view">
       <div class="game-header"><button class="back-btn" data-view="dashboard">&larr;</button>
         <div class="gv-title">Farben-Slalom</div>
@@ -4108,6 +4077,20 @@
       <div class="game-body">
         <div class="arena">
           <div class="game-title">Farben-Slalom</div>
+          <div id="slalomModeArea" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:8px 0 18px;">
+            <button class="btn btn-primary" id="btnSlalomModeDuel">Gegen Gegner</button>
+            <button class="btn btn-grey" id="btnSlalomModeTime">Gegen die Zeit</button>
+          </div>
+          <div id="slalomSoloSetupArea" style="display:none;text-align:center;margin:8px 0 18px;">
+            <div style="font-size:15px;font-weight:700;color:var(--ink-mute);margin-bottom:8px;">Zielfarbe für die Zeitfahrt</div>
+            <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;">
+              <select id="slalomSoloColor" style="font-size:18px;padding:8px 12px;border:3px solid var(--ink);border-radius:12px;font-weight:700;background:#fff;">
+                <option value="ROT">Rot</option><option value="GELB">Gelb</option><option value="GRUEN">Grün</option><option value="BLAU">Blau</option>
+              </select>
+              <button class="btn btn-lg btn-success" id="btnSlalomSoloStart">Zeitfahrt starten</button>
+            </div>
+            <div style="font-size:15px;font-weight:700;color:var(--ink-mute);margin-top:10px;">Bestzeit: <span id="slalomBestTime">–</span></div>
+          </div>
           <div id="slalomSetupArea">
             <div class="mesh-section" style="margin-bottom:18px;">
               <div class="mesh-section-title">Gegner einladen</div>
@@ -4210,7 +4193,6 @@
               <button class="btn btn-success" data-lobby-duel="ZAH">Zahlentreffer</button>
               <button class="btn btn-success" data-lobby-duel="GEH">Geheim-Strecke</button>
               <button class="btn btn-success" data-lobby-duel="PAR">Parken</button>
-              <button class="btn btn-success" data-lobby-duel="ZEI">Zeitfahren</button>
             </div>
             <button class="btn btn-danger" id="btnLobbyStop" style="margin-top:12px;">Spiel stoppen</button>
           </div>
@@ -4255,7 +4237,7 @@
           </div>
           <div class="prog-cols">
             <div class="prog-col prog-col-palette">
-              <div class="prog-section-label">Bausteine<span class="prog-hint">zurück = löschen</span></div>
+              <div class="prog-section-label">Bausteine</div>
               <div class="prog-palette" id="progPalette"></div>
             </div>
             <div class="prog-col prog-col-prog">
@@ -4750,7 +4732,9 @@ let slalomState = {
   targetAnimTimer: null,
   showEditor: false,
   invitePending: false,
-  inviterMac: ''
+  inviterMac: '',
+  timeMode: false,
+  bestMs: null
 };
 let slalomProgBlocks = [];
 function setSlalomPhase(newPhase) {
@@ -4919,7 +4903,28 @@ function updateConnectionUI(isConn, text) {
             fb.className = 'feedback-msg show feedback-warning';
             fb.textContent = BUSY_TEXT[msg] || msg;
           }
+          if (msg === 'QUIZ:BUSY') {
+            sendCommand('QUIZ:STOP');
+            cqChecking = false;
+            const start = document.getElementById('btnCqStart');
+            if (start) { start.style.display = 'inline-flex'; start.textContent = 'Nochmal'; }
+            const check = document.getElementById('btnCqCheck');
+            if (check) check.style.display = 'none';
+            const stop = document.getElementById('btnCqStop');
+            if (stop) { stop.style.display = 'none'; stop.textContent = 'Abbrechen'; }
+            if (fb) {
+              fb.className = 'feedback-msg show feedback-warning';
+              fb.textContent = 'Eine alte Korrektur lief noch. Ich habe sie gestoppt – bitte nochmal starten.';
+            }
+          }
           if (msg === 'MEMORY:BUSY') memReset();
+          if (msg === 'SLALOM:BUSY' && slalomState.timeMode) {
+            slalomState.racing = false;
+            setSlalomPhase(SLALOM_PHASE.IDLE);
+            hideSlalomAllSections();
+            slalomRefreshUi();
+            updateSlalomReadyState();
+          }
           return;
         }
         if (msg.startsWith('COLOR:')) {
@@ -4951,8 +4956,6 @@ function updateConnectionUI(isConn, text) {
           handleGeheimMessage(msg);
         } else if (msg.startsWith('PARK:')) {
           handleParkMessage(msg);
-        } else if (msg.startsWith('ZEIT:')) {
-          handleZeitMessage(msg);
         } else if (msg === 'BAT:LOW') {
           document.getElementById('batBanner').style.display = 'block';
         } else if (msg.startsWith('DUEL:')) {
@@ -5346,7 +5349,8 @@ function updateConnectionUI(isConn, text) {
         '<svg class="ic" aria-hidden="true"><use href="#ic-arrow-left"></use></svg>'
       ];
       const MEM_ARROW_NAMES = ['vor', 'rechts', 'zurück', 'links'];
-      let memLen = 3;
+      let memLen = 1;
+      let memNextLen = 1;
       let memCurrent = 0;
       let memShowStep = -1;
       let memShowing = false;
@@ -5355,12 +5359,8 @@ function updateConnectionUI(isConn, text) {
       let memTimer = null;
       let memWaitLeft = 0;
       let memAutoRestart = null;
-      function memLenForStage() {
-        const st = profile().stage;
-        return st <= 1 ? 3 : (st <= 2 ? 4 : (st <= 3 ? 6 : (st <= 4 ? 8 : 10)));
-      }
       function memStartGame() {
-        memLen = memLenForStage();
+        memLen = Math.max(1, memNextLen);
         memCurrent = 0; memShowStep = -1; memShowing = true; memSeq = [];
         memEnableInput(false);
         document.getElementById('memStatus').textContent = 'Der Roboter zeigt die Folge...';
@@ -5428,7 +5428,8 @@ function updateConnectionUI(isConn, text) {
         document.getElementById('memInputArea').style.display = enabled ? 'block' : 'none';
       }
       function memReset() {
-        memLen = memLenForStage();
+        memLen = 1;
+        memNextLen = 1;
         memCurrent = 0;
         memShowStep = -1;
         memShowing = false;
@@ -5449,8 +5450,10 @@ function updateConnectionUI(isConn, text) {
           const move = parseInt(d[1], 10);
           if (!isNaN(idx) && !isNaN(move) && move >= 0 && move <= 3) memShowRealStep(idx, move);
         } else if (msg.startsWith('MEMORY:START:')) {
-          const want = parseInt(msg.substring(13)) || 3;
-          if (memLen !== want) { memLen = want; memSeq = []; }
+          const want = parseInt(msg.substring(13)) || 1;
+          if (memLen !== want) memSeq = [];
+          memLen = want;
+          memNextLen = want;
           memCurrent = 0;
           memShowStep = -1;
           memShowing = true;
@@ -5490,12 +5493,14 @@ function updateConnectionUI(isConn, text) {
           if (memAutoRestart) clearTimeout(memAutoRestart);
           memAutoRestart = null;
           const nextLen = Math.min(16, n + 1);
+          memNextLen = nextLen;
           showGameResult('memory', {
             title: 'Geschafft!',
             big: n + ' Schritte',
             sub: 'Nächste Runde: ' + nextLen + ' Schritte',
             again: () => {
               memLen = nextLen;
+              memNextLen = nextLen;
               memSeq = []; memCurrent = 0; memShowing = true; memShowStep = -1;
               memEnableInput(false);
               document.getElementById('btnMemStart').style.display = 'none';
@@ -5508,6 +5513,7 @@ function updateConnectionUI(isConn, text) {
           memShowing = false;
           memEnableInput(false);
           memStopCountdown();
+          memNextLen = 1;
           fx.wrong();
           document.getElementById('memStatus').textContent = 'Falsch!';
           const wrongBtn = document.querySelector('.mem-btn[data-move="' + (parseInt(msg.substring(12).split(',')[1]) || 0) + '"]');
@@ -5587,12 +5593,13 @@ function updateConnectionUI(isConn, text) {
           const d = msg.substring(13).split(',');
           const mm = parseInt(d[0], 10) || 0;
           const score = parseInt(d[1], 10) || 0;
+          const ms = parseInt(d[2], 10) || Math.round(mm / 60 * 1000);
           ampelPts += score; ampelScore();
           duelSetPlaying(false);
           ampelSetLight('off');
-          st.textContent = 'Nachrollweg: ' + mm + ' mm';
-          if (score === 2) { fx.win(); showFeedback('ampelFeedback', 'success', 'Perfekt! Unter 5 cm - volle Punktzahl!'); }
-          else if (score === 1) { showFeedback('ampelFeedback', 'success', 'Gut! Unter 15 cm.'); }
+          st.textContent = 'Reaktionszeit: ' + ms + ' ms';
+          if (score === 2) { fx.win(); showFeedback('ampelFeedback', 'success', 'Perfekt! Unter 0,6 s - volle Punktzahl!'); }
+          else if (score === 1) { showFeedback('ampelFeedback', 'success', 'Gut! Unter 1,2 s.'); }
           else { fx.wrong(); showFeedback('ampelFeedback', 'error', 'Erwischt! Zu spät gebremst.'); }
           ampelSetStartLabel('Nochmal', false);
           ampelSetHaltEnabled(false);
@@ -5641,6 +5648,8 @@ function updateConnectionUI(isConn, text) {
         } else if (msg === 'AMPEL:STOPPED') {
           ampelResetLocal();
         } else if (msg === 'AMPEL:BUSY') {
+          ampelSetStartLabel('Start', false);
+          ampelSetHaltEnabled(false);
           showFeedback('ampelFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
         }
       }
@@ -5654,7 +5663,8 @@ function updateConnectionUI(isConn, text) {
       document.getElementById('btnAmpelStop').addEventListener('click', () => sendCommand('AMPEL:STOP'));
       document.getElementById('btnAmpelCheat').addEventListener('click', () => sendCommand('AMPEL:CHEATPRESS'));
 
-      let zahlTargetCm = 40;
+      let zahlTargetCm = 20;
+      let zahlScaleMaxCm = 40;
       let zahlRound = 0, zahlPts = 0, zahlStageN = 1;
       function zahlScore() {
         document.getElementById('zahlRound').textContent = zahlRound;
@@ -5663,15 +5673,27 @@ function updateConnectionUI(isConn, text) {
       }
       function zahlSetTargetMark(cm) {
         const m = document.getElementById('zahlTargetMark');
-        if (m) m.style.left = cm + '%';
+        if (m) m.style.left = (cm / zahlScaleMaxCm * 100) + '%';
       }
       function zahlSetStopMark(cm) {
         const m = document.getElementById('zahlStopMark');
         if (!m) return;
         if (cm === null) { m.style.display = 'none'; return; }
-        m.style.left = Math.max(1, Math.min(99, cm)) + '%';
+        m.style.left = Math.max(0, Math.min(100, cm / zahlScaleMaxCm * 100)) + '%';
         m.style.display = 'block';
       }
+      function zahlSetRange(maxCm) {
+        zahlScaleMaxCm = maxCm === 20 ? 20 : 40;
+        const mid = document.getElementById('zahlScaleMid');
+        const max = document.getElementById('zahlScaleMax');
+        if (mid) mid.textContent = (zahlScaleMaxCm / 2) + ' cm';
+        if (max) max.textContent = zahlScaleMaxCm + ' cm';
+        zahlSetTargetMark(0);
+        zahlSetStopMark(null);
+      }
+      document.getElementById('zahlRange').addEventListener('change', (e) => {
+        zahlSetRange(parseInt(e.target.value, 10) || 40);
+      });
       function zahlResetLocal() {
         zahlRound = 0; zahlPts = 0; zahlStageN = 1; zahlScore();
         const st = document.getElementById('zahlStatus');
@@ -5680,20 +5702,25 @@ function updateConnectionUI(isConn, text) {
         if (b) { b.textContent = 'Start'; b.disabled = false; }
         const h = document.getElementById('btnZahlHalt');
         if (h) h.disabled = true;
-        zahlSetStopMark(null);
+        const sel = document.getElementById('zahlRange');
+        if (sel) { sel.disabled = false; zahlSetRange(parseInt(sel.value, 10) || 40); }
+        else { zahlSetTargetMark(0); zahlSetStopMark(null); }
         duelSetPlaying(false);
       }
       function handleZahlMessage(msg) {
         const st = document.getElementById('zahlStatus');
         if (!st) return;
         if (msg.startsWith('ZAHL:GO:')) {
-          zahlTargetCm = parseInt(msg.substring(8), 10) || 40;
+          const sel = document.getElementById('zahlRange');
+          if (sel) zahlSetRange(parseInt(sel.value, 10) || 40);
+          zahlTargetCm = parseInt(msg.substring(8), 10) || 20;
           zahlRound++; zahlScore();
           duelSetPlaying(true);
           zahlSetTargetMark(zahlTargetCm);
           zahlSetStopMark(null);
           st.textContent = 'Fährt los... bremse genau bei ' + zahlTargetCm + ' cm!';
           document.getElementById('btnZahlStart').disabled = true;
+          if (sel) sel.disabled = true;
           const h = document.getElementById('btnZahlHalt');
           if (h) h.disabled = false;
           clearFeedback('zahlFeedback');
@@ -5707,15 +5734,18 @@ function updateConnectionUI(isConn, text) {
           const stopCm = zahlTargetCm + delta / 10;
           zahlSetStopMark(stopCm);
           if (Math.abs(delta) < 10) {
-            st.textContent = 'Volltreffer!';
+            st.textContent = 'Volltreffer! ' + score + ' Punkte';
             fx.win(); showFeedback('zahlFeedback', 'success', 'Perfekt! Unter 1 cm Abweichung.');
           } else {
-            st.textContent = abwCm.toFixed(1) + ' cm ' + (delta > 0 ? 'zu weit' : 'zu kurz');
-            if (score === 1) { showFeedback('zahlFeedback', 'success', 'Gut! Unter 3 cm Abweichung.'); }
+            st.textContent = abwCm.toFixed(1) + ' cm ' + (delta > 0 ? 'zu weit' : 'zu kurz') + ' · ' + score + ' Punkte';
+            if (score >= 80) { fx.win(); showFeedback('zahlFeedback', 'success', 'Stark! Nur ' + abwCm.toFixed(1) + ' cm daneben.'); }
+            else if (score >= 40) { showFeedback('zahlFeedback', 'success', 'Gut! Noch ' + abwCm.toFixed(1) + ' cm daneben - das geht näher.'); }
             else { fx.wrong(); showFeedback('zahlFeedback', 'error', (delta > 0 ? 'Zu weit gefahren!' : 'Zu früh gestoppt!') + ' Nochmal!'); }
           }
           const b = document.getElementById('btnZahlStart');
           b.disabled = false; b.textContent = 'Nochmal';
+          const sel = document.getElementById('zahlRange');
+          if (sel) sel.disabled = false;
           const h2 = document.getElementById('btnZahlHalt');
           if (h2) h2.disabled = true;
         } else if (msg === 'ZAHL:OVERRUN') {
@@ -5726,6 +5756,8 @@ function updateConnectionUI(isConn, text) {
           zahlSetStopMark(null);
           const b = document.getElementById('btnZahlStart');
           b.disabled = false; b.textContent = 'Nochmal';
+          const sel = document.getElementById('zahlRange');
+          if (sel) sel.disabled = false;
           const h3 = document.getElementById('btnZahlHalt');
           if (h3) h3.disabled = true;
         } else if (msg.startsWith('ZAHL:STAGE:')) {
@@ -5735,49 +5767,88 @@ function updateConnectionUI(isConn, text) {
         } else if (msg === 'ZAHL:STOPPED') {
           zahlResetLocal();
         } else if (msg === 'ZAHL:BUSY') {
+          const b = document.getElementById('btnZahlStart');
+          if (b) { b.disabled = false; b.textContent = 'Start'; }
+          const sel = document.getElementById('zahlRange');
+          if (sel) sel.disabled = false;
+          const h = document.getElementById('btnZahlHalt');
+          if (h) h.disabled = true;
           showFeedback('zahlFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
         }
       }
       document.getElementById('btnZahlStart').addEventListener('click', () => {
-        const sel = document.getElementById('zahlSelect');
-        sendCommand('ZAHL:START:' + sel.value);
+        const sel = document.getElementById('zahlRange');
+        zahlSetRange(parseInt(sel.value, 10) || 40);
+        sendCommand('ZAHL:START:RANDOM:' + zahlScaleMaxCm);
         document.getElementById('btnZahlStart').disabled = true;
+        sel.disabled = true;
         clearFeedback('zahlFeedback');
       });
       document.getElementById('btnZahlHalt').addEventListener('click', () => sendCommand('HALT'));
       document.getElementById('btnZahlStop').addEventListener('click', () => sendCommand('ZAHL:STOP'));
 
-      let geheimRound = 0, geheimPts = 0, geheimStageN = 1;
+      let geheimRound = 0, geheimPts = 0, geheimStageN = 1, geheimRangeMaxCm = 40;
       function geheimGuess() {
-        return parseInt(document.getElementById('geheimRange').value, 10) || 40;
+        return parseInt(document.getElementById('geheimRange').value, 10) || 20;
       }
       function geheimScore() {
         document.getElementById('geheimRound').textContent = geheimRound;
         document.getElementById('geheimPts').textContent = geheimPts;
         document.getElementById('geheimStage').textContent = geheimStageN;
       }
+      function geheimSetRange(maxCm) {
+        geheimRangeMaxCm = (maxCm === 20 || maxCm === 100) ? maxCm : 40;
+        const r = document.getElementById('geheimRange');
+        if (!r) return;
+        r.max = String(geheimRangeMaxCm);
+        if (parseInt(r.value, 10) > geheimRangeMaxCm) r.value = String(geheimRangeMaxCm);
+        if (parseInt(r.value, 10) < 5) r.value = '5';
+        const val = document.getElementById('geheimVal');
+        if (val) val.textContent = r.value;
+      }
+      function geheimEnableInputs(on) {
+        const n = document.getElementById('btnGeheimNew');
+        const c = document.getElementById('btnGeheimConfirm');
+        const r = document.getElementById('geheimRange');
+        const s = document.getElementById('geheimRangeSel');
+        if (n) n.disabled = !on;
+        if (c) c.disabled = !on;
+        if (r) r.disabled = !on;
+        if (s) s.disabled = !on;
+      }
       function geheimResetLocal() {
         geheimRound = 0; geheimPts = 0; geheimStageN = 1; geheimScore();
         const st = document.getElementById('geheimStatus');
-        if (st) st.textContent = 'Bereit?';
-        const b = document.getElementById('btnGeheimStart');
-        if (b) { b.textContent = 'Start'; b.disabled = false; }
+        if (st) st.textContent = 'Bereit? Neue Strecke würfeln.';
+        const sel = document.getElementById('geheimRangeSel');
+        if (sel) { sel.disabled = false; sel.value = String(geheimRangeMaxCm); }
+        geheimSetRange(geheimRangeMaxCm);
+        geheimEnableInputs(true);
+        const c = document.getElementById('btnGeheimConfirm');
+        if (c) c.disabled = true;
+        const n = document.getElementById('btnGeheimNew');
+        if (n) n.textContent = 'Neue Strecke';
         duelSetPlaying(false);
       }
       function handleGeheimMessage(msg) {
         const st = document.getElementById('geheimStatus');
         if (!st) return;
         if (msg === 'GEHEIM:READY') {
-          st.textContent = 'Geheim-Strecke bereit – wähle deine Schätzung!';
+          st.textContent = 'Strecke bereit – schätze die Länge und bestätige!';
+          const n = document.getElementById('btnGeheimNew');
+          const c = document.getElementById('btnGeheimConfirm');
+          const s = document.getElementById('geheimRangeSel');
+          if (n) n.disabled = true;
+          if (c) { c.disabled = false; c.textContent = 'Schätzung bestätigen'; }
+          if (s) s.disabled = true;
           clearFeedback('geheimFeedback');
         } else if (msg.startsWith('GEHEIM:STAGE:')) {
           const n = parseInt(msg.substring(13), 10) || 1;
-          if (n > geheimStageN) showFeedback('geheimFeedback', 'success', 'Stufe ' + n + ': grösserer Bereich, strengere Wertung!');
           geheimStageN = n; geheimScore();
         } else if (msg === 'GEHEIM:GO') {
           geheimRound++; geheimScore();
           st.textContent = 'Fährt die Geheim-Strecke...';
-          document.getElementById('btnGeheimStart').disabled = true;
+          geheimEnableInputs(false);
           duelSetPlaying(true);
           clearFeedback('geheimFeedback');
         } else if (msg.startsWith('GEHEIM:RESULT:')) {
@@ -5788,35 +5859,51 @@ function updateConnectionUI(isConn, text) {
           duelSetPlaying(false);
           const abwCm = (Math.abs(delta) / 10).toFixed(1);
           const dir = (delta > 0) ? 'zu kurz geraten' : 'zu weit geraten';
-          const b = document.getElementById('btnGeheimStart');
-          if (score === 2) {
-            st.textContent = 'Geknackt!';
-            fx.win(); showFeedback('geheimFeedback', 'success', 'Geknackt! Nur ' + abwCm + ' cm daneben. Neue Strecke?');
-            b.disabled = false; b.textContent = 'Neue Strecke';
-          } else if (score === 1) {
-            st.textContent = abwCm + ' cm ' + dir;
-            showFeedback('geheimFeedback', 'success', 'Nah dran! Nochmal raten.');
-            b.disabled = false; b.textContent = 'Nochmal raten';
+          st.textContent = abwCm + ' cm ' + dir + ' · ' + score + ' Punkte';
+          geheimEnableInputs(true);
+          const c = document.getElementById('btnGeheimConfirm');
+          if (c) c.textContent = 'Nochmal raten';
+          if (score >= 80) {
+            fx.win(); showFeedback('geheimFeedback', 'success', 'Geknackt! Nur ' + abwCm + ' cm daneben.');
+          } else if (score >= 40) {
+            showFeedback('geheimFeedback', 'success', 'Nah dran! Nochmal raten oder neue Strecke.');
           } else {
-            st.textContent = abwCm + ' cm ' + dir;
-            fx.wrong(); showFeedback('geheimFeedback', 'error', 'Daneben! Nochmal raten.');
-            b.disabled = false; b.textContent = 'Nochmal raten';
+            fx.wrong(); showFeedback('geheimFeedback', 'error', 'Daneben! Nochmal raten oder neue Strecke.');
           }
         } else if (msg === 'GEHEIM:STOPPED') {
           geheimResetLocal();
+        } else if (msg === 'GEHEIM:ERROR:NO_SECRET') {
+          geheimEnableInputs(true);
+          const c = document.getElementById('btnGeheimConfirm');
+          if (c) c.disabled = true;
+          st.textContent = 'Erst eine neue Strecke würfeln.';
         } else if (msg === 'GEHEIM:BUSY') {
+          geheimEnableInputs(true);
+          const c = document.getElementById('btnGeheimConfirm');
+          if (c) c.disabled = true;
           showFeedback('geheimFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
         }
       }
-      document.getElementById('btnGeheimStart').addEventListener('click', () => {
-        const b = document.getElementById('btnGeheimStart');
-        sendCommand(b.textContent === 'Neue Strecke' ? 'GEHEIM:START' : 'GEHEIM:START:' + geheimGuess());
-        document.getElementById('btnGeheimStart').disabled = true;
+      document.getElementById('btnGeheimNew').addEventListener('click', () => {
+        const s = document.getElementById('geheimRangeSel');
+        geheimSetRange(parseInt(s.value, 10) || 40);
+        sendCommand('GEHEIM:START:RANDOM:' + geheimRangeMaxCm);
+        geheimEnableInputs(false);
+        const st = document.getElementById('geheimStatus');
+        if (st) st.textContent = 'Würfle eine Geheim-Strecke...';
+        clearFeedback('geheimFeedback');
+      });
+      document.getElementById('btnGeheimConfirm').addEventListener('click', () => {
+        sendCommand('GEHEIM:START:' + geheimGuess());
+        geheimEnableInputs(false);
         clearFeedback('geheimFeedback');
       });
       document.getElementById('btnGeheimStop').addEventListener('click', () => sendCommand('GEHEIM:STOP'));
       document.getElementById('geheimRange').addEventListener('input', (e) => {
         document.getElementById('geheimVal').textContent = e.target.value;
+      });
+      document.getElementById('geheimRangeSel').addEventListener('change', (e) => {
+        geheimSetRange(parseInt(e.target.value, 10) || 40);
       });
 
       let parkRound = 0, parkPts = 0, parkStageN = 1;
@@ -5851,7 +5938,6 @@ function updateConnectionUI(isConn, text) {
           clearFeedback('parkFeedback');
         } else if (msg.startsWith('PARK:STAGE:')) {
           const n = parseInt(msg.substring(11), 10) || 1;
-          if (n > parkStageN) showFeedback('parkFeedback', 'success', 'Stufe ' + n + ': enger dran!');
           parkStageN = n; parkScore();
         } else if (msg.startsWith('PARK:RESULT:')) {
           const d = msg.substring(12).split(',');
@@ -5860,9 +5946,9 @@ function updateConnectionUI(isConn, text) {
           parkPts += score; parkScore();
           duelSetPlaying(false);
           parkSetHaltEnabled(false);
-          st.textContent = 'Noch ' + (mm / 10).toFixed(1) + ' cm!';
-          if (score === 2) { fx.win(); showFeedback('parkFeedback', 'success', 'Perfekt eingeparkt!'); }
-          else if (score === 1) { showFeedback('parkFeedback', 'success', 'Gut! Noch näher ran?'); }
+          st.textContent = 'Noch ' + (mm / 10).toFixed(1) + ' cm · ' + score + ' Punkte';
+          if (score >= 80) { fx.win(); showFeedback('parkFeedback', 'success', 'Perfekt eingeparkt!'); }
+          else if (score >= 40) { showFeedback('parkFeedback', 'success', 'Gut! Noch näher ran?'); }
           else { fx.wrong(); showFeedback('parkFeedback', 'error', 'Zu weit weg. Nochmal!'); }
           const b = document.getElementById('btnParkStart');
           b.disabled = false; b.textContent = 'Nochmal';
@@ -5884,6 +5970,9 @@ function updateConnectionUI(isConn, text) {
         } else if (msg === 'PARK:STOPPED') {
           parkResetLocal();
         } else if (msg === 'PARK:BUSY') {
+          const b = document.getElementById('btnParkStart');
+          if (b) { b.disabled = false; b.textContent = 'Start'; }
+          parkSetHaltEnabled(false);
           showFeedback('parkFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
         }
       }
@@ -5895,89 +5984,11 @@ function updateConnectionUI(isConn, text) {
       document.getElementById('btnParkHalt').addEventListener('click', () => sendCommand('HALT'));
       document.getElementById('btnParkStop').addEventListener('click', () => sendCommand('PARK:STOP'));
 
-      let zeitRound = 0, zeitPts = 0, zeitTimer = null, zeitT0 = 0;
-      function zeitClockShow(ms) {
-        document.getElementById('zeitClock').textContent = (ms / 1000).toFixed(1) + ' s';
-      }
-      function zeitClockStart() {
-        zeitClockStop();
-        zeitT0 = Date.now();
-        zeitTimer = setInterval(() => zeitClockShow(Date.now() - zeitT0), 100);
-      }
-      function zeitClockStop() {
-        if (zeitTimer) { clearInterval(zeitTimer); zeitTimer = null; }
-      }
-      function zeitScore() {
-        document.getElementById('zeitRound').textContent = zeitRound;
-        document.getElementById('zeitPts').textContent = zeitPts;
-      }
-      function zeitResetLocal() {
-        zeitRound = 0; zeitPts = 0; zeitScore();
-        zeitClockStop(); zeitClockShow(0);
-        document.getElementById('zeitBest').textContent = '–';
-        const st = document.getElementById('zeitStatus');
-        if (st) st.textContent = 'Bereit?';
-        const b = document.getElementById('btnZeitStart');
-        if (b) { b.textContent = 'Start'; b.disabled = false; }
-        duelSetPlaying(false);
-      }
-      function handleZeitMessage(msg) {
-        const st = document.getElementById('zeitStatus');
-        if (!st) return;
-        if (msg === 'ZEIT:GO') {
-          zeitRound++; zeitScore();
-          st.textContent = 'Fährt zur Zielfarbe...';
-          document.getElementById('btnZeitStart').disabled = true;
-          zeitClockStart();
-          duelSetPlaying(true);
-          clearFeedback('zeitFeedback');
-        } else if (msg.startsWith('ZEIT:RESULT:')) {
-          const d = msg.substring(12).split(',');
-          const ms = parseInt(d[0], 10) || 0;
-          const score = parseInt(d[1], 10) || 0;
-          zeitPts += score; zeitScore();
-          zeitClockStop(); zeitClockShow(ms);
-          duelSetPlaying(false);
-          st.textContent = (ms / 1000).toFixed(1) + ' s!';
-          if (score === 2) {
-            document.getElementById('zeitBest').textContent = (ms / 1000).toFixed(1) + ' s';
-            fx.win(); showFeedback('zeitFeedback', 'success', 'Neue Bestzeit!');
-          } else {
-            showFeedback('zeitFeedback', 'success', 'Im Ziel! Nochmal?');
-          }
-          const b = document.getElementById('btnZeitStart');
-          b.disabled = false; b.textContent = 'Nochmal';
-          showGameResult('zeit', {
-            title: score === 2 ? 'Neue Bestzeit!' : 'Im Ziel!',
-            big: (ms / 1000).toFixed(1) + ' s',
-            sub: 'Bestzeit: ' + document.getElementById('zeitBest').textContent
-          });
-        } else if (msg === 'ZEIT:NOTFOUND') {
-          st.textContent = 'Nichts gefunden.';
-          zeitClockStop();
-          duelSetPlaying(false);
-          showFeedback('zeitFeedback', 'warning', 'Keine Zielfarbe erreicht. Leg eine in den Weg.');
-          const b = document.getElementById('btnZeitStart');
-          b.disabled = false; b.textContent = 'Nochmal';
-        } else if (msg === 'ZEIT:STOPPED') {
-          zeitResetLocal();
-        } else if (msg === 'ZEIT:BUSY') {
-          showFeedback('zeitFeedback', 'warning', 'Es läuft schon ein Spiel. Erst beenden.');
-        }
-      }
-      document.getElementById('btnZeitStart').addEventListener('click', () => {
-        const sel = document.getElementById('zeitSelect');
-        sendCommand('ZEIT:START:' + sel.value);
-        document.getElementById('btnZeitStart').disabled = true;
-        clearFeedback('zeitFeedback');
-      });
-      document.getElementById('btnZeitStop').addEventListener('click', () => sendCommand('ZEIT:STOP'));
-
       const lobbyState = { phase: 'IDLE', role: '', peerMac: '', peers: [], scanTimer: null };
       const LOBBY_GAME_NAMES = { SLALOM: 'Farben-Slalom', RACE: 'Mathe-Rennen', DUEL: 'Duell',
                                  ampel: 'Ampel', zahl: 'Zahlentreffer', geheim: 'Geheim-Strecke',
-                                 park: 'Parken', zeit: 'Zeitfahren' };
-      const LOBBY_DUEL_VIEWS = { AMP: 'ampel', ZAH: 'zahl', GEH: 'geheim', PAR: 'park', ZEI: 'zeit' };
+                                 park: 'Parken' };
+      const LOBBY_DUEL_VIEWS = { AMP: 'ampel', ZAH: 'zahl', GEH: 'geheim', PAR: 'park' };
       function lobbySetPeerMac(mac) {
         lobbyState.peerMac = mac || '';
         try { window.localStorage.setItem('edubot.lobby.peer', lobbyState.peerMac); } catch (e) {}
@@ -6204,7 +6215,7 @@ function updateConnectionUI(isConn, text) {
           }
           if (spiel === 'RACE' && race.mode !== 'multi') raceSetMode('multi');
           if (ziel) nav(ziel);
-          const fbMap = { slalom: 'slalomFeedback', mathrace: 'raceFeedback', ampel: 'ampelFeedback', zahl: 'zahlFeedback', geheim: 'geheimFeedback', park: 'parkFeedback', zeit: 'zeitFeedback' };
+          const fbMap = { slalom: 'slalomFeedback', mathrace: 'raceFeedback', ampel: 'ampelFeedback', zahl: 'zahlFeedback', geheim: 'geheimFeedback', park: 'parkFeedback' };
           const fbId = fbMap[ziel] || 'lobbyFeedback';
           showFeedback(fbId, 'success', name + ' gestartet!');
           return;
@@ -6252,7 +6263,7 @@ function updateConnectionUI(isConn, text) {
 
       const duel = { peers: [], paired: null, active: false, my: 0, opp: 0, won: false, lost: false,
                      open: false, playing: false };
-      const DUEL_VIEWS = ['ampel', 'zahl', 'geheim', 'park', 'zeit'];
+      const DUEL_VIEWS = ['ampel', 'zahl', 'geheim', 'park'];
       function duelBuildPanels() {
         DUEL_VIEWS.forEach(v => {
           const host = document.getElementById('duelHost-' + v);
@@ -6375,7 +6386,6 @@ function updateConnectionUI(isConn, text) {
       zahlResetLocal();
       geheimResetLocal();
       parkResetLocal();
-      zeitResetLocal();
 
       function memStartCountdown(sec) {
         memStopCountdown();
@@ -6396,7 +6406,9 @@ function updateConnectionUI(isConn, text) {
         if (st && st.textContent.indexOf('Noch') >= 0) st.textContent = 'Dein Zug!';
       }
       document.getElementById('btnMemStart').addEventListener('click', () => {
+        const next = memNextLen;
         memReset();
+        memNextLen = Math.max(1, next);
         memStartGame();
         setStep('memory', 1);
       });
@@ -6470,13 +6482,13 @@ function updateConnectionUI(isConn, text) {
         if (progRunning) { progRunning = false; progRender(); }
         memReset();
         if (motorTestTimer) { clearTimeout(motorTestTimer); motorTestTimer = null; }
-        if (cqTask) { clearInterval(cqTask); cqTask = null; }
-        cqAnswers = [];
+        cqReset();
         if (race.timer) { clearInterval(race.timer); race.timer = null; }
         if (raceCountdownTimer) { clearInterval(raceCountdownTimer); raceCountdownTimer = null; }
         if (raceScanTimer) { clearInterval(raceScanTimer); raceScanTimer = null; }
         raceScanPeers = [];
         race.active = false;
+        race.finished = false;
         if (slalomState.targetAnimTimer) { clearTimeout(slalomState.targetAnimTimer); slalomState.targetAnimTimer = null; }
         if (slalomState.scanTimer) { clearInterval(slalomState.scanTimer); slalomState.scanTimer = null; }
         if (lobbyState.scanTimer) { clearInterval(lobbyState.scanTimer); lobbyState.scanTimer = null; }
@@ -6491,7 +6503,6 @@ function updateConnectionUI(isConn, text) {
         zahlResetLocal();
         geheimResetLocal();
         parkResetLocal();
-        zeitResetLocal();
         duelResetLocal();
       }
       async function onDisconnected() {
@@ -6581,8 +6592,7 @@ function updateConnectionUI(isConn, text) {
         if (progRunning) { progRunning = false; progRender(); }
         memReset();
         if (motorTestTimer) { clearTimeout(motorTestTimer); motorTestTimer = null; }
-        if (cqTask) { clearInterval(cqTask); cqTask = null; }
-        cqAnswers = [];
+        cqReset();
         if (race.timer) { clearInterval(race.timer); race.timer = null; }
         if (raceCountdownTimer) { clearInterval(raceCountdownTimer); raceCountdownTimer = null; }
         race.active = false;
@@ -6680,16 +6690,14 @@ function updateConnectionUI(isConn, text) {
           'Roboter-Fahrt ansehen', 'Pfeile in gleicher Reihenfolge tippen', 'Die Reihe wird jede Runde länger'] },
         ampel: { title: 'Ampel', sub: 'Bei Rot sofort stoppen', steps: [
           'Roboter rollt los', 'Wird die Ampel ROT: sofort bremsen', 'Schnelle Reaktion bringt Punkte'] },
-        zahl: { title: 'Zahlentreffer', sub: 'Genau auf der Markierung stoppen', steps: [
-          'Start drücken', 'Genau auf der Markierung anhalten', 'Je genauer, desto besser'] },
+        zahl: { title: 'Distanz', sub: 'Bremse so nah wie möglich am Ziel', steps: [
+          'Bereich 20 oder 40 cm wählen', 'Ziel ist zufällig, in 1-cm-Schritten', 'Je näher, desto mehr Punkte'] },
         geheim: { title: 'Geheim-Strecke', sub: 'Errate die geheime Strecke', steps: [
-          'Start drücken', 'Die geheime Strecke erraten', 'Nach jeder Fahrt Ergebnis prüfen'] },
+          'Bereich wählen und „Neue Strecke“ drücken', 'Schätzung einstellen', '„Schätzung bestätigen“ – je näher, desto mehr Punkte'] },
         park: { title: 'Einparken', sub: 'So nah wie möglich ran', steps: [
-          'Start drücken', 'So nah wie möglich an das Hindernis fahren', 'Der Abstand wird gemessen'] },
-        zeit: { title: 'Zeitfahren', sub: 'Schnell zur Zielfarbe', steps: [
-          'Start drücken', 'So schnell wie möglich zur Zielfarbe', 'Die Zeit wird gestoppt'] },
-        slalom: { title: 'Farben-Slalom', sub: 'Fahre die Zielfarbe an', steps: [
-          'Gegner verbinden (Zusammen spielen)', 'Programm bauen: Zielfarbe anfahren', 'Start - wer zuerst ankommt, gewinnt'] },
+          'Start drücken', 'So nah wie möglich an das Hindernis fahren', 'Je näher, desto mehr Punkte – zu nah = 0'] },
+        slalom: { title: 'Farben-Slalom', sub: 'Gegen Gegner oder gegen die Zeit', steps: [
+          'Gegner verbinden oder Zeitfahrt wählen', 'Programm bauen: Zielfarbe anfahren', 'Start - schnell und fehlerfrei ankommen'] },
         lobby: { title: 'Zusammen spielen', sub: 'Zwei Roboter verbinden', steps: [
           'Beide Roboter einschalten', 'Gegner suchen und auswählen', 'Spiel wählen - beide starten gleichzeitig'] }
       };
@@ -6736,7 +6744,7 @@ function updateConnectionUI(isConn, text) {
         });
       }
 
-      const DUEL_STOP_CMD = { ampel: 'AMPEL:STOP', zahl: 'ZAHL:STOP', geheim: 'GEHEIM:STOP', park: 'PARK:STOP', zeit: 'ZEIT:STOP' };
+      const DUEL_STOP_CMD = { ampel: 'AMPEL:STOP', zahl: 'ZAHL:STOP', geheim: 'GEHEIM:STOP', park: 'PARK:STOP' };
 
       function gameCategory(viewId) {
         const t = document.querySelector('.tile[data-view="' + viewId + '"]');
@@ -6840,7 +6848,7 @@ function updateConnectionUI(isConn, text) {
         if (viewId === 'parents') { sendCommand('TMC?'); sendCommand('SPEED?'); sendCommand('RAMP?'); sendCommand('SPIN?'); }
         if (viewId === 'dist') { sendCommand('OBSDIST?'); sendCommand('OBSREL?'); distCal3Reset(); }
         if (viewId !== 'prog' && progRunning) { sendCommand('PROG:STOP'); }
-        if (viewId !== 'mathrace' && (race.active || raceCountdownTimer)) {
+        if (viewId !== 'mathrace' && (race.active || raceCountdownTimer || race.finished)) {
           sendCommand('RACE:STOP');
           raceStopLocal('Rennen beendet.');
         }
@@ -6860,6 +6868,10 @@ function updateConnectionUI(isConn, text) {
           if (pb) pb.style.display = 'block';
           profileRender();
           parentsLoadFromRobot();
+        }
+        if (prevId === 'colorquiz' && viewId !== 'colorquiz' && cqChecking) {
+          sendCommand('QUIZ:STOP');
+          cqChecking = false;
         }
         if (viewId === 'colorquiz') cqReset();
         if (viewId === 'slalom') {
@@ -6894,7 +6906,7 @@ function updateConnectionUI(isConn, text) {
           slalomState.racing = false;
           slalomState.myReady = false;
           slalomState.oppReady = false;
-          setSlalomPhase(SLALOM_PHASE.PAIRED);
+          setSlalomPhase(slalomState.timeMode ? SLALOM_PHASE.IDLE : SLALOM_PHASE.PAIRED);
           slalomRefreshUi();
         }
         if (viewId !== 'slalom' && slalomState.scanTimer) {
@@ -7362,6 +7374,40 @@ function updateConnectionUI(isConn, text) {
         const mm = m % 60;
         return h + ':' + (mm < 10 ? '0' : '') + mm;
       }
+      function clockFace(min) {
+        const m = ((Math.round(min) % 720) + 720) % 720;
+        const minuteAngle = (m % 60) * 6;
+        const hourAngle = (m / 60) * 30;
+        const point = (angle, len) => {
+          const rad = (angle - 90) * Math.PI / 180;
+          return [60 + Math.cos(rad) * len, 60 + Math.sin(rad) * len];
+        };
+        let ticks = '';
+        for (let i = 0; i < 12; i++) {
+          const a = i * 30;
+          const [x1, y1] = point(a, 48);
+          const [x2, y2] = point(a, 53);
+          ticks += '<line x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) +
+            '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) +
+            '" stroke="currentColor" stroke-width="' + (i % 3 === 0 ? '2.4' : '1.2') + '" />';
+        }
+        const labels = [[12, 60, 23], [3, 97, 64], [6, 60, 102], [9, 22, 64]]
+          .map(l => '<text x="' + l[1] + '" y="' + l[2] + '" text-anchor="middle" ' +
+            'font-size="12" font-weight="700" fill="currentColor" stroke="none">' + l[0] + '</text>')
+          .join('');
+        const [hx, hy] = point(hourAngle, 26);
+        const [mx, my] = point(minuteAngle, 39);
+        return '<svg class="clock-face" viewBox="0 0 120 120" aria-hidden="true" ' +
+          'style="display:block;width:160px;height:160px;margin:10px auto 0;color:var(--ink);">' +
+          '<circle cx="60" cy="60" r="55" fill="#fff" stroke="currentColor" stroke-width="3" />' +
+          ticks + labels +
+          '<line x1="60" y1="60" x2="' + hx.toFixed(1) + '" y2="' + hy.toFixed(1) +
+          '" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+          '<line x1="60" y1="60" x2="' + mx.toFixed(1) + '" y2="' + my.toFixed(1) +
+          '" stroke="currentColor" stroke-width="3" stroke-linecap="round" />' +
+          '<circle cx="60" cy="60" r="4.2" fill="currentColor" stroke="none" />' +
+          '</svg>';
+      }
       function numShort(x) {
         const v = Math.round(x * 1000) / 1000;
         let s = String(v);
@@ -7372,11 +7418,12 @@ function updateConnectionUI(isConn, text) {
         if (typeof a !== 'number') return String(a);
         return numShort(a).replace('.', ',');
       }
-      function clockTask(q, minutes, wrongMins, hint) {
+      function clockTask(q, minutes, wrongMins, hint, faceMinutes) {
         const correct = fmtTime(minutes);
         const wrong = [];
         wrongMins.forEach(w => { const s = fmtTime(minutes + w); if (s !== correct && wrong.indexOf(s) < 0) wrong.push(s); });
-        return { q: q, a: correct, opts: shuffle([correct].concat(wrong)), clock: true, hint: hint };
+        const face = (typeof faceMinutes === 'number') ? clockFace(faceMinutes) : '';
+        return { q: q + face, a: correct, opts: shuffle([correct].concat(wrong)), clock: true, hint: hint };
       }
       const GENS = {
         plus: [
@@ -7428,11 +7475,11 @@ function updateConnectionUI(isConn, text) {
              () => { const a = R(11, 999) / 10; return { q: 'Runde ' + decAuto(a) + ' auf ganze Zahlen.', a: Math.round(a), hint: 'Ab 5 am Nachkommateil wird aufgerundet.' }; }
         ],
         clock: [
-             () => { const h = R(1, 12); const m = pick([0, 30]); return clockTask('Wie viel Uhr ist es? ' + h + ' Uhr ' + (m ? 'halb' : 'gerade'), h * 60 + m, [30, -30, 60], 'Der kurze Zeiger zeigt die Stunde, der lange die Minuten.'); },
-             () => { const h = R(1, 12); const m = pick([15, 30, 45]); return clockTask('Wie viel Uhr ist es? ' + h + ' Uhr ' + (m === 15 ? 'Viertel nach' : (m === 30 ? 'halb' : 'Viertel vor')), h * 60 + m, [15, -15, 30], 'Am Rand des Zifferblatts sind immer 5 Minuten.'); },
-             () => { const h = R(1, 12); const m = R(1, 58); return clockTask('Wie viel Uhr ist es? ' + h + ':' + (m < 10 ? '0' : '') + m, h * 60 + m, [5, -5, 30], 'Der lange Zeiger wandert in 5-Minuten-Schritten.'); },
-             () => { const h = R(13, 23); const m = pick([0, 15, 30, 45]); return clockTask('Es ist nachmittags ' + h + ' Uhr. Wie viel Uhr ist das auf der Uhr?', h * 60 + m, [60, -60, 15], 'Nachmittags: 13 Uhr = 1 Uhr nachmittags.'); },
-             () => { const h = R(1, 11); const m = pick([15, 30, 45]); const add = pick([15, 30, 45]); const tot = h * 60 + m + add; const res = tot >= 720 ? tot - 720 : tot; return clockTask('Es ist ' + fmtTime(h * 60 + m) + '. Wie viel Uhr ist es ' + add + ' Minuten später?', res, [15, 30, -15], 'Gehe den kurzen Zeiger weiter im Uhrzeigersinn.'); },
+             () => { const h = R(1, 12); const m = pick([0, 30]); return clockTask('Wie viel Uhr ist es?', h * 60 + m, [30, -30, 60], 'Der kurze Zeiger zeigt die Stunde, der lange die Minuten.', h * 60 + m); },
+             () => { const h = R(1, 12); const m = pick([15, 30, 45]); return clockTask('Wie viel Uhr ist es?', h * 60 + m, [15, -15, 30], 'Am Rand des Zifferblatts sind immer 5 Minuten.', h * 60 + m); },
+             () => { const h = R(1, 12); const m = R(1, 58); return clockTask('Wie viel Uhr ist es?', h * 60 + m, [5, -5, 30], 'Der lange Zeiger wandert in 5-Minuten-Schritten.', h * 60 + m); },
+             () => { const h = R(13, 23); const m = pick([0, 15, 30, 45]); return clockTask('Es ist nachmittags. Wie viel Uhr ist das in 24-Stunden-Schreibweise?', h * 60 + m, [60, -60, 15], 'Nachmittags: 13 Uhr = 1 Uhr nachmittags.', (h % 12) * 60 + m); },
+             () => { const h = R(1, 11); const m = pick([15, 30, 45]); const add = pick([15, 30, 45]); const res = h * 60 + m + add; return clockTask('Wie viel Uhr ist es ' + add + ' Minuten später?', res, [15, 30, -15], 'Gehe den kurzen Zeiger weiter im Uhrzeigersinn.', h * 60 + m); },
              () => { const d = R(2, 9); return { q: 'Eine Stunde hat ' + d + ' · 15 Minuten. Wie viele Minuten sind das?', a: d * 15, hint: '4 · 15 = 60, das ist eine Stunde.' }; }
         ],
         money: [
@@ -7905,7 +7952,7 @@ function updateConnectionUI(isConn, text) {
         target: 10, stage: 1, timeLimit: 30, timeLeft: 30, timer: null,
         topics: [], task: null, streak: 0, bestStreak: 0, neg: false,
         ok: 0, wrong: 0, wrongTopics: {}, hints: 0, asked: 0, startTs: 0,
-        finishReason: ''
+        finishReason: '', finished: false
       };
       let racePairedMac = null, raceScanPeers = [], raceScanTimer = null,
           raceScanEndTime = 0, raceCountdownTimer = null;
@@ -8115,6 +8162,7 @@ function updateConnectionUI(isConn, text) {
         if (race.timer) clearInterval(race.timer);
         race.timer = null;
         race.finishReason = '';
+        race.finished = false;
         document.getElementById('raceWinnerMsg').style.display = 'none';
         document.getElementById('raceAnswer').value = '';
         updateRaceUI();
@@ -8167,8 +8215,6 @@ function updateConnectionUI(isConn, text) {
           inp.placeholder = race.neg ? '− (negative Zahl)' : 'Antwort';
           inp.focus();
         }
-        const chip = document.getElementById('raceTopicChip');
-        if (chip) chip.textContent = topicIco(t.topic) + ' ' + topicName(t.topic);
         if (profile().settings.speech && t.say) speak(t.say);
       }
       function raceChoose(i) {
@@ -8183,6 +8229,7 @@ function updateConnectionUI(isConn, text) {
         } else {
           fx.wrong();
           buzz(60);
+          sendCommand('RACE:WRONG');
           if (race.streak > 0) race.streak = 0;
           raceStreakChip();
           showFeedback('raceFeedback', 'error', 'Fast! Versuch es nochmal.');
@@ -8210,6 +8257,7 @@ function updateConnectionUI(isConn, text) {
         } else {
           fx.wrong();
           buzz(60);
+          sendCommand('RACE:WRONG');
           race.wrong++;
           race.wrongTopics[race.task.topic] = (race.wrongTopics[race.task.topic] || 0) + 1;
           if (race.streak > 0) race.streak = 0;
@@ -8312,6 +8360,7 @@ function updateConnectionUI(isConn, text) {
         if (race.timer) { clearInterval(race.timer); race.timer = null; }
         if (raceCountdownTimer) { clearInterval(raceCountdownTimer); raceCountdownTimer = null; }
         race.finishReason = reason;
+        race.finished = true;
         document.getElementById('btnRaceStop').style.display = 'none';
         document.getElementById('raceActiveArea').style.display = 'none';
         document.getElementById('raceCountdownArea').style.display = 'none';
@@ -8332,6 +8381,7 @@ function updateConnectionUI(isConn, text) {
       }
       function raceStopLocal(text) {
         race.active = false;
+        race.finished = false;
         if (race.timer) { clearInterval(race.timer); race.timer = null; }
         if (raceCountdownTimer) { clearInterval(raceCountdownTimer); raceCountdownTimer = null; }
         document.getElementById('raceActiveArea').style.display = 'none';
@@ -8505,6 +8555,7 @@ function updateConnectionUI(isConn, text) {
         race.timeLeft = race.timeLimit;
         if (race.timer) { clearInterval(race.timer); race.timer = null; }
         race.finishReason = '';
+        race.finished = false;
         updateRaceUI();
         startRaceCountdown(() => {
           race.active = true;
@@ -8522,7 +8573,7 @@ function updateConnectionUI(isConn, text) {
         if (remote) showFeedback('raceFeedback', 'success', 'Gegner hat das Rennen gestartet!');
         setStep('mathrace', 4);
       }
-      let cqIndex = 0, cqAnswers = [], cqTask = null, cqColors = [];
+      let cqIndex = 0, cqAnswers = [], cqTask = null, cqColors = [], cqChecking = false;
       const CQ_COLORS = [
         { name: 'ROT', bg: '#d63a3a' },
         { name: 'GRUEN', bg: '#1ea36b' },
@@ -8540,27 +8591,50 @@ function updateConnectionUI(isConn, text) {
         for (const e of CQ_COLORS) if (e.name === c) return e.bg;
         return '#ccc';
       }
+      function cqNumericOptions(correct) {
+        const out = [fmtAnswer(correct)];
+        const spread = Math.max(1, Math.round(Math.abs(correct) * 0.12));
+        let guard = 0;
+        while (out.length < 4 && guard++ < 80) {
+          let d = correct + (Math.floor(Math.random() * (spread * 2 + 1)) - spread);
+          if (d < 0 && correct >= 0) d = Math.abs(d);
+          d = Math.round(d * 1000) / 1000;
+          if (d === correct) continue;
+          const s = fmtAnswer(d);
+          if (out.indexOf(s) < 0) out.push(s);
+        }
+        let k = 1;
+        while (out.length < 4) {
+          const s = fmtAnswer(correct + k++ * Math.max(1, spread));
+          if (out.indexOf(s) < 0) out.push(s);
+        }
+        return out;
+      }
       function nextCqQuestion() {
         const st = profile().stage;
-        let topics = stageTopics(st).filter(t => t !== 'clock' && t !== 'money');
+        let topics = stageTopics(st).filter(t => t !== 'clock' && t !== 'money' && t !== 'word');
         if (!topics.length) topics = ['plus', 'minus'];
-        const task = makeTask(topics, st);
-        cqTask = task;
-        const correct = task.a;
-        const opts = new Set([String(correct)]);
-        let guard = 0;
-        while (opts.size < 4 && guard++ < 60) {
-          let c;
-          if (typeof correct === 'number') {
-            const d = correct + (Math.floor(Math.random() * 9) - 4);
-            if (d < 0) continue;
-            c = num(d);
-          } else {
-            c = String(correct) + ' ' + ['?', '!', '…'][Math.floor(Math.random() * 3)];
+        let task = null, arr = null;
+        for (let attempt = 0; attempt < 12 && !task; attempt++) {
+          const t = makeTask(topics, st);
+          if (t.opts && t.opts.length >= 2) {
+            let vals = Array.from(new Set(t.opts.map(String)));
+            if (typeof t.a === 'number') {
+              vals = vals.map(v => /^-?\d+(\.\d+)?$/.test(v) ? fmtAnswer(parseFloat(v)) : v);
+            }
+            if (vals.length >= 2) { task = t; arr = vals.slice(0, 4); }
+          } else if (typeof t.a === 'number') {
+            task = t; arr = cqNumericOptions(t.a);
           }
-          if (c !== String(correct)) opts.add(c);
         }
-        const arr = cqShuffle(Array.from(opts));
+        if (!task) {
+          task = makeTask(['plus', 'minus'], st);
+          arr = cqNumericOptions(task.a);
+        }
+        cqTask = task;
+        const correct = fmtAnswer(task.a);
+        if (arr.indexOf(correct) < 0) arr[0] = correct;
+        arr = cqShuffle(Array.from(new Set(arr)));
         const plan = (cqColors && cqColors[cqIndex]) || pick(CQ_COLORS).name;
         const rest = CQ_COLORS.map(c => c.name).filter(n => n !== plan);
         const colorOrder = arr.map(v => String(v) === String(correct) ? plan : rest.shift() || plan);
@@ -8585,6 +8659,8 @@ function updateConnectionUI(isConn, text) {
         if (profile().settings.speech) speak(task.say);
       }
       function cqReset() {
+        if (cqChecking) sendCommand('QUIZ:STOP');
+        cqChecking = false;
         cqIndex = 0; cqAnswers = []; cqTask = null; cqColors = [];
         HELP.views.colorquiz.schritte[1].chips = [];
         const b = document.getElementById('btnCqStart');
@@ -8597,6 +8673,8 @@ function updateConnectionUI(isConn, text) {
           const el = document.getElementById(id);
           if (el) el.style.display = 'none';
         });
+        const stop = document.getElementById('btnCqStop');
+        if (stop) stop.textContent = 'Abbrechen';
         const num0 = document.getElementById('cqNumber');
         if (num0) num0.textContent = '0';
         const q0 = document.getElementById('cqQuestion');
@@ -8612,6 +8690,7 @@ function updateConnectionUI(isConn, text) {
         return st <= 1 ? 8 : (st <= 4 ? 10 : 12);
       }
       document.getElementById('btnCqStart').addEventListener('click', () => {
+        cqChecking = false;
         cqIndex = 0; cqAnswers = []; cqTask = null;
         cqColors = cqColorPlan(cqTaskCount());
         document.getElementById('btnCqStart').style.display = 'none';
@@ -8619,7 +8698,7 @@ function updateConnectionUI(isConn, text) {
         document.getElementById('btnCqNext').style.display = 'inline-flex';
         document.getElementById('btnCqCheck').style.display = 'none';
         const stop = document.getElementById('btnCqStop');
-        if (stop) stop.style.display = 'inline-flex';
+        if (stop) { stop.style.display = 'inline-flex'; stop.textContent = 'Abbrechen'; }
         document.getElementById('cqAnswerList').innerHTML = '';
         HELP.views.colorquiz.schritte[1].chips = [];
         setStep('colorquiz', 0);
@@ -8636,9 +8715,10 @@ function updateConnectionUI(isConn, text) {
         const list = document.getElementById('cqAnswerList');
         const box = document.createElement('div');
         box.title = value + ' = ' + color + (ok ? ' (richtig)' : ' (falsch)');
+        box.setAttribute('aria-label', value + ' = ' + color + (ok ? ' (richtig)' : ' (falsch)'));
         box.style.background = getColorBg(color);
         box.style.opacity = ok ? '1' : '.55';
-        box.textContent = value;
+        box.textContent = color.charAt(0);
         list.appendChild(box);
         if (ok) { fx.correct(1); } else { fx.wrong(); showFeedback('cqFeedback', 'error', 'Richtig wäre ' + cqTask.a + '.'); }
         setTimeout(() => { if (ok) showFeedback('cqFeedback', 'success', 'Richtig!'); }, ok ? 0 : 200);
@@ -8660,14 +8740,19 @@ function updateConnectionUI(isConn, text) {
       const cqStopBtn = document.getElementById('btnCqStop');
       if (cqStopBtn) cqStopBtn.addEventListener('click', () => {
         sendCommand('QUIZ:STOP');
+        cqChecking = false;
         showFeedback('cqFeedback', 'info', 'Korrektur abgebrochen.');
         cqReset();
         setStep('colorquiz', 0);
       });
       document.getElementById('btnCqCheck').addEventListener('click', () => {
+        if (cqChecking) return;
+        cqChecking = true;
         sendCommand('QUIZ:CHECK:' + cqAnswers.join(','));
-        showFeedback('cqFeedback', 'success', 'Roboter startet die Korrektur!');
+        showFeedback('cqFeedback', 'success', 'Roboter startet die Korrektur! Mit „Korrektur stoppen“ kannst du abbrechen.');
         document.getElementById('btnCqCheck').style.display = 'none';
+        const stop = document.getElementById('btnCqStop');
+        if (stop) { stop.style.display = 'inline-flex'; stop.textContent = 'Korrektur stoppen'; }
         setStep('colorquiz', 2);
       });
       let cqCheckSteps = [];
@@ -8703,6 +8788,11 @@ function updateConnectionUI(isConn, text) {
       function handleQuizMessage(msg) {
         if (msg.startsWith('QUIZ:CHECKING')) {
           cqCheckSteps = [];
+          cqChecking = true;
+          const check = document.getElementById('btnCqCheck');
+          if (check) check.style.display = 'none';
+          const stop = document.getElementById('btnCqStop');
+          if (stop) { stop.style.display = 'inline-flex'; stop.textContent = 'Korrektur stoppen'; }
           showFeedback('cqFeedback', 'success', 'Roboter prüft jetzt...');
           setStep('colorquiz', 2);
         } else if (msg.startsWith('QUIZ:STEP:')) {
@@ -8717,13 +8807,21 @@ function updateConnectionUI(isConn, text) {
           }
         } else if (msg.startsWith('QUIZ:TOO_MANY:')) {
           const d = msg.substring(14).split(',');
+          cqChecking = false;
           showFeedback('cqFeedback', 'error',
             'Die Farbe ' + (d[0] || '?') + ' kommt zu oft vor (' + (d[1] || '?') + 'x). ' +
             'Bitte das Quiz neu starten.');
+          document.getElementById('btnCqStart').style.display = 'inline-flex';
+          document.getElementById('btnCqStart').textContent = 'Nochmal';
+          document.getElementById('btnCqCheck').style.display = 'none';
+          const stop = document.getElementById('btnCqStop');
+          if (stop) { stop.style.display = 'none'; stop.textContent = 'Abbrechen'; }
           setStep('colorquiz', 0);
         } else if (msg === 'QUIZ:STOPPED') {
+          cqChecking = false;
           showFeedback('cqFeedback', 'info', 'Korrektur abgebrochen.');
           cqReset();
+          setStep('colorquiz', 0);
         } else if (msg.startsWith('QUIZ:RESULT:')) {
           const d = msg.substring(12).split(',');
           if (d[0] === 'OK') {
@@ -8735,9 +8833,12 @@ function updateConnectionUI(isConn, text) {
           } else if (d[0] === 'ABORT') {
             showCqResultModal(0, cqCheckSteps.length, [], true);
           }
+          cqChecking = false;
           document.getElementById('btnCqStart').style.display = 'inline-flex';
           document.getElementById('btnCqStart').textContent = 'Nochmal';
           document.getElementById('btnCqCheck').style.display = 'none';
+          const stop = document.getElementById('btnCqStop');
+          if (stop) { stop.style.display = 'none'; stop.textContent = 'Abbrechen'; }
           setStep('colorquiz', 3);
         }
       }
@@ -8771,7 +8872,7 @@ function updateConnectionUI(isConn, text) {
         let readyVisible = false;
         if (slalomState.racing) {
           readyBtn.style.display = 'none';
-        } else if (!slalomState.pairedMac) {
+        } else if (!slalomState.pairedMac && !slalomState.timeMode) {
           readyBtn.style.display = 'none';
         } else if (!slalomState.targetColor) {
           readyBtn.style.display = 'none';
@@ -8824,6 +8925,7 @@ function updateConnectionUI(isConn, text) {
         if (el) el.textContent = text;
       }
       function slalomAutoScan() {
+        if (slalomState.timeMode) return;
         if (slalomState.pairedMac) return;
         if (slalomState.scanTimer) return;
         setSlalomPairStatus('Suche nach EduBots in der Naehe...');
@@ -8844,8 +8946,85 @@ function updateConnectionUI(isConn, text) {
           }
         }, 1000);
       }
+      function slalomUpdateBestTime() {
+        const el = document.getElementById('slalomBestTime');
+        if (!el) return;
+        el.textContent = (slalomState.bestMs == null) ? '–' : (slalomState.bestMs / 1000).toFixed(2) + ' s';
+      }
+      function slalomSetMode(timeMode) {
+        const time = !!timeMode;
+        const inMatchBuild = slalomState.phase === SLALOM_PHASE.BUILD ||
+                             slalomState.phase === SLALOM_PHASE.COUNTDOWN;
+        if (slalomState.racing || (slalomState.timeMode && !time) || inMatchBuild) {
+          sendCommand('SLALOM:STOP');
+        }
+        slalomState.racing = false;
+        slalomState.timeMode = time;
+        slalomState.myReady = false;
+        slalomState.oppReady = false;
+        slalomState.targetColor = '';
+        if (slalomState.targetAnimTimer) {
+          clearTimeout(slalomState.targetAnimTimer);
+          slalomState.targetAnimTimer = null;
+        }
+        hideSlalomAllSections();
+        const td = document.getElementById('slalomTargetDisplay');
+        if (td) { td.className = ''; td.style.cssText = ''; td.style.display = 'none'; }
+        const duelBtn = document.getElementById('btnSlalomModeDuel');
+        const timeBtn = document.getElementById('btnSlalomModeTime');
+        if (duelBtn) duelBtn.className = 'btn ' + (time ? 'btn-grey' : 'btn-primary');
+        if (timeBtn) timeBtn.className = 'btn ' + (time ? 'btn-primary' : 'btn-grey');
+        if (time) {
+          setSlalomPhase(SLALOM_PHASE.IDLE);
+          setSlalomPairStatus('Zeitfahrt: nur du gegen die Uhr.');
+          showFeedback('slalomFeedback', 'info', 'Zeitfahrt: niedrigste Zeit gewinnt.');
+        } else {
+          setSlalomPhase(slalomState.pairedMac ? SLALOM_PHASE.PAIRED : SLALOM_PHASE.IDLE);
+          setSlalomPairStatus(slalomState.pairedMac ? 'Verbunden mit: ' + slalomState.pairedMac : 'Noch nicht verbunden');
+        }
+        slalomSetModeButtons();
+        slalomRefreshUi();
+        updateSlalomReadyState();
+        setStep('slalom', time ? 2 : (slalomState.pairedMac ? 1 : 0));
+        if (!time && !slalomState.pairedMac) slalomAutoScan();
+      }
+      function slalomSetModeButtons() {
+        const duelBtn = document.getElementById('btnSlalomModeDuel');
+        const timeBtn = document.getElementById('btnSlalomModeTime');
+        if (duelBtn) duelBtn.className = 'btn ' + (slalomState.timeMode ? 'btn-grey' : 'btn-primary');
+        if (timeBtn) timeBtn.className = 'btn ' + (slalomState.timeMode ? 'btn-primary' : 'btn-grey');
+      }
+      function slalomTimeStart(color) {
+        const sel = document.getElementById('slalomSoloColor');
+        const c = String(color || (sel ? sel.value : '') || slalomState.targetColor || 'ROT').toUpperCase();
+        if (!SLALOM_COLORS.some(x => x.name === c)) {
+          showFeedback('slalomFeedback', 'error', 'Bitte eine Zielfarbe wählen.');
+          return;
+        }
+        sendCommand('SLALOM:TIME_START:' + c);
+        slalomState.timeMode = true;
+        slalomState.racing = false;
+        slalomState.myReady = false;
+        slalomState.oppReady = false;
+        slalomState.targetColor = '';
+        if (slalomState.targetAnimTimer) {
+          clearTimeout(slalomState.targetAnimTimer);
+          slalomState.targetAnimTimer = null;
+        }
+        hideSlalomAllSections();
+        const td = document.getElementById('slalomTargetDisplay');
+        if (td) { td.className = ''; td.style.cssText = ''; td.style.display = 'none'; }
+        setSlalomPhase(SLALOM_PHASE.BUILD);
+        slalomSetModeButtons();
+        slalomRefreshUi();
+        updateSlalomReadyState();
+        setStep('slalom', 2);
+        clearFeedback('slalomFeedback');
+      }
 function slalomRefreshUi() {
         const setupArea  = document.getElementById('slalomSetupArea');
+        const soloArea   = document.getElementById('slalomSoloSetupArea');
+        const modeArea   = document.getElementById('slalomModeArea');
         const startArea  = document.getElementById('slalomStartArea');
         const waitingArea= document.getElementById('slalomWaitingArea');
         const unpairBtn  = document.getElementById('btnSlalomUnpair');
@@ -8855,8 +9034,20 @@ function slalomRefreshUi() {
         if (slalomState.phase === SLALOM_PHASE.BUILD || slalomState.phase === SLALOM_PHASE.COUNTDOWN ||
             slalomState.phase === SLALOM_PHASE.RACE) {
           setupArea.style.display = 'none';
+          if (soloArea) soloArea.style.display = 'none';
+          if (modeArea) modeArea.style.display = 'none';
           return;
         }
+        if (modeArea) modeArea.style.display = 'flex';
+        if (slalomState.timeMode) {
+          setupArea.style.display = 'none';
+          if (startArea) startArea.style.display = 'none';
+          if (waitingArea) waitingArea.style.display = 'none';
+          if (soloArea) soloArea.style.display = 'block';
+          slalomUpdateBestTime();
+          return;
+        }
+        if (soloArea) soloArea.style.display = 'none';
         setupArea.style.display = 'block';
         if (!slalomState.pairedMac) {
           scanBtn.style.display = 'inline-flex';
@@ -8882,6 +9073,11 @@ function slalomRefreshUi() {
           }
         }
       }
+      document.getElementById('btnSlalomModeDuel').addEventListener('click', () => slalomSetMode(false));
+      document.getElementById('btnSlalomModeTime').addEventListener('click', () => slalomSetMode(true));
+      document.getElementById('btnSlalomSoloStart').addEventListener('click', () => slalomTimeStart());
+      slalomSetModeButtons();
+      slalomUpdateBestTime();
       document.getElementById('btnSlalomScan').addEventListener('click', () => {
         slalomAutoScan();
       });
@@ -8928,12 +9124,15 @@ function slalomRefreshUi() {
         td.className = '';
         td.style.cssText = '';
         td.style.display = 'none';
-        slalomProgBlocks = [];
-        slalomRenderProgram();
-        setSlalomPhase(SLALOM_PHASE.PAIRED);
+        if (!slalomState.timeMode) {
+          slalomProgBlocks = [];
+          slalomRenderProgram();
+        }
+        setSlalomPhase(slalomState.timeMode ? SLALOM_PHASE.IDLE : SLALOM_PHASE.PAIRED);
         slalomRefreshUi();
-        showFeedback('slalomFeedback', 'info', 'Spiel abgebrochen.');
-        setStep('slalom', 1);
+        updateSlalomReadyState();
+        showFeedback('slalomFeedback', 'info', slalomState.timeMode ? 'Zeitfahrt gestoppt.' : 'Spiel abgebrochen.');
+        setStep('slalom', slalomState.timeMode ? 2 : 1);
       });
       function slalomShowInvitePopup(mac) {
         const popup = document.getElementById('slalomInvitePopup');
@@ -9095,6 +9294,10 @@ function slalomRefreshUi() {
           }
           hideSlalomAllSections();
           document.getElementById('slalomSetupArea').style.display = 'none';
+          const soloSetup = document.getElementById('slalomSoloSetupArea');
+          const modeRow = document.getElementById('slalomModeArea');
+          if (soloSetup) soloSetup.style.display = 'none';
+          if (modeRow) modeRow.style.display = 'none';
           const display = document.getElementById('slalomTargetDisplay');
           display.className = '';
           display.style.cssText = '';
@@ -9103,7 +9306,7 @@ function slalomRefreshUi() {
           showFeedback('slalomFeedback', 'info', 'Zielfarbe: ' + color);
           slalomState.targetAnimTimer = setTimeout(() => {
             display.classList.add('slalom-top-badge');
-            if (slalomState.pairedMac) {
+            if (slalomState.pairedMac || slalomState.timeMode) {
               showSlalomEditor();
             }
             showFeedback('slalomFeedback', 'info', 'Baue dein Programm & drücke Bereit!');
@@ -9125,6 +9328,10 @@ function slalomRefreshUi() {
           document.getElementById('slalomActiveArea').classList.remove('shown');
           document.getElementById('slalomReadyArea').style.display = 'none';
           document.getElementById('slalomSetupArea').style.display = 'none';
+          const soloS = document.getElementById('slalomSoloSetupArea');
+          const modeS = document.getElementById('slalomModeArea');
+          if (soloS) soloS.style.display = 'none';
+          if (modeS) modeS.style.display = 'none';
           document.getElementById('slalomStartArea').style.display = 'none';
           document.getElementById('slalomWaitingArea').style.display = 'none';
           const td = document.getElementById('slalomTargetDisplay');
@@ -9139,6 +9346,10 @@ function slalomRefreshUi() {
         } else if (msg === 'SLALOM:MATCH_STARTED') {
           showFeedback('slalomFeedback', 'success', ic('gamepad') + ' Spiel gestartet!');
           document.getElementById('slalomSetupArea').style.display = 'none';
+          const soloM = document.getElementById('slalomSoloSetupArea');
+          const modeM = document.getElementById('slalomModeArea');
+          if (soloM) soloM.style.display = 'none';
+          if (modeM) modeM.style.display = 'none';
           document.getElementById('slalomStartArea').style.display = 'none';
           document.getElementById('slalomWaitingArea').style.display = 'none';
         } else if (msg === 'SLALOM:WIN:ME') {
@@ -9176,6 +9387,46 @@ function slalomRefreshUi() {
           }
           showFeedback('slalomFeedback', 'warning', 'Niemand getroffen - neuer Versuch mit gleicher Farbe!');
           updateSlalomReadyState();
+        } else if (msg.startsWith('SLALOM:TIME_RESULT:')) {
+          const d = msg.substring(19).split(',');
+          const ms = parseInt(d[0], 10) || 0;
+          const hit = (d[1] || '0') === '1';
+          const wasBest = (slalomState.bestMs == null) || (ms < slalomState.bestMs);
+          slalomState.racing = false;
+          slalomState.timeMode = true;
+          slalomState.myReady = false;
+          slalomState.oppReady = false;
+          const soloColorSel = document.getElementById('slalomSoloColor');
+          if (soloColorSel && SLALOM_COLORS.some(x => x.name === slalomState.targetColor)) {
+            soloColorSel.value = slalomState.targetColor;
+          }
+          if (hit && wasBest) slalomState.bestMs = ms;
+          slalomUpdateBestTime();
+          setSlalomPhase(SLALOM_PHASE.DONE);
+          hideSlalomAllSections();
+          const td = document.getElementById('slalomTargetDisplay');
+          if (td) { td.className = ''; td.style.cssText = ''; td.style.display = 'none'; }
+          const secs = (ms / 1000).toFixed(2) + ' s';
+          const w = document.getElementById('slalomWinnerMsg');
+          if (w) {
+            w.innerHTML = hit ? (ic('flag') + ' Zeit: ' + secs) : (ic('face-sad') + ' Zielfarbe verfehlt');
+            w.style.color = hit ? '#1ea36b' : '#d63a3a';
+            w.style.display = 'block';
+          }
+          showGameResult('slalom', {
+            title: hit ? (wasBest ? 'Neue Bestzeit!' : 'Zeitfahrt geschafft!') : 'Zielfarbe verfehlt',
+            big: secs,
+            sub: 'Bestzeit: ' + (slalomState.bestMs == null ? '–' : (slalomState.bestMs / 1000).toFixed(2) + ' s'),
+            again: () => {
+              const color = slalomState.targetColor;
+              gameShowPlay('slalom');
+              slalomTimeStart(color);
+            }
+          });
+          if (hit) { fx.win(); showFeedback('slalomFeedback', 'success', 'Zeitfahrt geschafft: ' + secs); }
+          else { fx.wrong(); showFeedback('slalomFeedback', 'error', 'Zielfarbe verfehlt - Zeit zählt nicht.'); }
+          slalomRefreshUi();
+          updateSlalomReadyState();
         } else if (msg === 'SLALOM:STOPPED') {
           slalomState.racing = false;
           slalomState.myReady = false;
@@ -9190,6 +9441,13 @@ function slalomRefreshUi() {
           td.className = '';
           td.style.cssText = '';
           td.style.display = 'none';
+          if (slalomState.timeMode) {
+            setSlalomPhase(SLALOM_PHASE.IDLE);
+            slalomRefreshUi();
+            updateSlalomReadyState();
+            showFeedback('slalomFeedback', 'info', 'Zeitfahrt gestoppt.');
+            return;
+          }
           slalomProgBlocks = [];
           slalomRenderProgram();
           setSlalomPhase(SLALOM_PHASE.PAIRED);
@@ -9247,6 +9505,10 @@ function slalomRefreshUi() {
       }
       function hideSlalomAllSections() {
         document.getElementById('slalomSetupArea').style.display = 'none';
+        const solo = document.getElementById('slalomSoloSetupArea');
+        const mode = document.getElementById('slalomModeArea');
+        if (solo) solo.style.display = 'none';
+        if (mode) mode.style.display = 'none';
         document.getElementById('slalomStartArea').style.display = 'none';
         document.getElementById('slalomWaitingArea').style.display = 'none';
         document.getElementById('slalomActiveArea').style.display = 'none';
@@ -9264,6 +9526,10 @@ function slalomRefreshUi() {
         editor.classList.add('shown');
         ready.style.display = 'flex';
         document.getElementById('slalomSetupArea').style.display = 'none';
+        const solo = document.getElementById('slalomSoloSetupArea');
+        const mode = document.getElementById('slalomModeArea');
+        if (solo) solo.style.display = 'none';
+        if (mode) mode.style.display = 'none';
         document.getElementById('slalomStartArea').style.display = 'none';
         document.getElementById('slalomWaitingArea').style.display = 'none';
       }
@@ -9271,6 +9537,10 @@ function slalomRefreshUi() {
 
       function slalomHideForCountdown() {
         document.getElementById('slalomSetupArea').style.display = 'none';
+        const solo = document.getElementById('slalomSoloSetupArea');
+        const mode = document.getElementById('slalomModeArea');
+        if (solo) solo.style.display = 'none';
+        if (mode) mode.style.display = 'none';
         document.getElementById('slalomStartArea').style.display = 'none';
         document.getElementById('slalomWaitingArea').style.display = 'none';
         document.getElementById('slalomActiveArea').style.display = 'none';
