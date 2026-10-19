@@ -759,22 +759,6 @@
       border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
-    #irBadge {
-      transition: background .15s var(--ease-snap), color .15s var(--ease-snap);
-    }
-    #irBadge.ir-clear {
-      background: rgba(62, 196, 135, .25) !important;
-      color: #c6ecd4 !important;
-    }
-    #irBadge.ir-blocked {
-      background: rgba(214, 58, 58, .35) !important;
-      color: #fbd2d2 !important;
-      animation: irPulse 0.8s ease-in-out infinite;
-    }
-    @keyframes irPulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(214, 58, 58, .4); }
-      50%      { box-shadow: 0 0 0 6px rgba(214, 58, 58, 0); }
-    }
 
 
     .header .btn {
@@ -1432,6 +1416,8 @@
       align-items: center;
       gap: 14px;
       justify-content: center;
+      flex-wrap: wrap;
+      row-gap: 10px;
       margin-bottom: 22px
     }
 
@@ -1470,6 +1456,49 @@
       font-weight: 700;
       color: var(--ink);
       line-height: 1
+    }
+
+
+    .drive-dist {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      min-width: 92px;
+      padding: 6px 14px;
+      border: var(--ink-line) solid var(--ink);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: var(--shadow-sketch-sm);
+      transition: background .15s var(--ease-snap), border-color .15s var(--ease-snap);
+    }
+    .drive-dist-value {
+      font-family: 'Nunito', cursive;
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--ink);
+    }
+    .drive-dist-unit {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink-mute);
+      margin-left: 2px;
+    }
+    #irBadge.ir-clear {
+      background: #e3f5e9;
+      border-color: #2f6b4a;
+    }
+    #irBadge.ir-clear .drive-dist-value { color: #1f6b45; }
+    #irBadge.ir-blocked {
+      background: #fde2e2;
+      border-color: #a01f1f;
+      animation: irPulse 0.8s ease-in-out infinite;
+    }
+    #irBadge.ir-blocked .drive-dist-value { color: #a01f1f; }
+    @keyframes irPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(214, 58, 58, .4); }
+      50%      { box-shadow: 0 0 0 6px rgba(214, 58, 58, 0); }
     }
 
 
@@ -2262,12 +2291,6 @@
       align-items: center
     }
     .prog-tab-ic .prog-ic { width: 17px; height: 17px }
-    .prog-cat-hint {
-      font-size: 12.5px;
-      line-height: 1.35;
-      color: var(--ink-soft);
-      min-height: 17px
-    }
 
 
     .ic {
@@ -3226,54 +3249,16 @@
       flex: 1 1 auto;
       min-width: 0
     }
-    .prog-cat-info {
-      flex: none;
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      border: var(--ink-line) solid var(--ink);
-      background: var(--amber-200);
-      color: var(--ink);
-      font-family: inherit;
-      font-size: 20px;
-      font-weight: 700;
-      line-height: 1;
-      cursor: pointer;
-      box-shadow: var(--shadow-sketch-sm);
-      transition: transform .12s var(--ease-snap), box-shadow .12s var(--ease-snap), background .2s
-    }
-    .prog-cat-info:hover {
-      transform: translate(-1px, -1px);
-      background: var(--amber-300);
-      box-shadow: 3px 3px 0 var(--ink)
-    }
-    .prog-cat-info:active {
-      transform: translate(1px, 1px);
-      box-shadow: 0 0 0 var(--ink)
-    }
-    .prog-cat-info.on {
-      background: var(--ink);
-      color: var(--paper)
-    }
-    .prog-cat-hint {
-      display: none
-    }
-    .prog-cat-hint.on {
-      display: block;
-      margin-bottom: 8px
-    }
     button,
     .btn,
     .key-btn,
-    .mem-btn,
-    .prog-cat-info {
+    .mem-btn {
       touch-action: manipulation
     }
     .prog-blk-head,
     .prog-blk-label,
     .prog-chip,
     .prog-tab,
-    .prog-cat-info,
     .help-btn,
     .back-btn {
       -webkit-user-select: none;
@@ -3550,10 +3535,6 @@
           </button>
         </div>
         <div class="header-r">
-          <div class="conn-badge" id="irBadge" title="VL53L0X Distanz (mm), Hindernis < 100mm" style="background:rgba(255,255,255,.05);display:none;">
-            <span style="font-size:11px;opacity:.75;">DIST</span>
-            <span id="irStatus" style="font-family:monospace;min-width:14px;display:inline-block;">–</span>
-          </div>
           <div class="conn-badge">
             <div class="conn-dot" id="statusDot"></div><span id="statusText">Nicht verbunden</span>
           </div>
@@ -3785,6 +3766,10 @@
             <div>
               <div class="color-preview-label">Farb-Sensor</div>
               <div id="driveColorName">--</div>
+            </div>
+            <div class="drive-dist" id="irBadge" title="VL53L0X Distanz (mm)" style="display:none;">
+              <div class="color-preview-label">Abstand</div>
+              <div class="drive-dist-value"><span id="irStatus">–</span><span class="drive-dist-unit">mm</span></div>
             </div>
           </div>
           <div class="key-grid">
@@ -4153,11 +4138,7 @@
             <div class="prog-section-label" style="margin-bottom:10px;">Dein Weg<span class="prog-hint" id="slalomProgHint"></span></div>
             <div class="prog-tabbar">
               <div class="prog-tabs" id="slalomTabs" role="tablist"></div>
-              <button type="button" class="prog-cat-info" id="slalomCatInfo" aria-expanded="false"
-                aria-controls="slalomCatHint" aria-label="Erklärung zu dieser Rubrik"
-                title="Was machen diese Bausteine?">?</button>
             </div>
-            <div class="prog-cat-hint" id="slalomCatHint"></div>
             <div class="prog-cols">
               <div class="prog-col prog-col-palette">
                 <div style="font-size:14px;color:var(--ink-mute);font-weight:700;margin-bottom:8px;">Bausteine</div>
@@ -4269,21 +4250,9 @@
       <div class="game-body">
         <div class="arena">
           <div class="game-title">Code-Bausteine</div>
-          <div class="game-desc only-help">Bausteine in dein Programm ziehen, dann <b>Start</b> drücken. Mit dem Baustein <b>bis ROT</b> hält der Roboter an, sobald er <b>ROT</b> sieht.</div>
-          <div class="color-preview-wrap">
-            <div id="progColorPreview"></div>
-            <div>
-              <div class="color-preview-label">Farb-Sensor</div>
-              <div id="progColorName">--</div>
-            </div>
-          </div>
           <div class="prog-tabbar">
             <div class="prog-tabs" id="progTabs" role="tablist"></div>
-            <button type="button" class="prog-cat-info" id="progCatInfo" aria-expanded="false"
-              aria-controls="progCatHint" aria-label="Erklärung zu dieser Rubrik"
-              title="Was machen diese Bausteine?">?</button>
           </div>
-          <div class="prog-cat-hint" id="progCatHint"></div>
           <div class="prog-cols">
             <div class="prog-col prog-col-palette">
               <div class="prog-section-label">Bausteine<span class="prog-hint">zurück = löschen</span></div>
@@ -4961,10 +4930,6 @@ function updateConnectionUI(isConn, text) {
             if (el) el.style.background = 'rgb(' + r + ',' + g + ',' + b + ')';
             const nm = document.getElementById('driveColorName');
             if (nm) nm.textContent = d[3];
-            const progEl = document.getElementById('progColorPreview');
-            if (progEl) progEl.style.background = 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
-            const progNm = document.getElementById('progColorName');
-            if (progNm) progNm.textContent = d[3];
           }
         } else if (msg.startsWith('RACE:')) {
           handleRaceMessage(msg);
@@ -7863,8 +7828,6 @@ function updateConnectionUI(isConn, text) {
         distFeedback('Messung läuft ...');
       }
       initHelpButtons();
-      let progCatHintOpen = { prog: false, slalom: false };
-      initProgCatHints();
       buildGameIntros();
       buildGameResults();
       profileRender();
@@ -9407,32 +9370,26 @@ function slalomRefreshUi() {
           id: 'move', label: 'Fahren',
           icon: _ico('<path d="M4.5 9.5h15v8.5h-15z"/><path d="M12 9.5V5.5"/>' +
                      '<path d="M8.5 13.5h.01M15.5 13.5h.01"/><path d="M7.5 18v2.5M16.5 18v2.5"/>'),
-          hint: 'Eine feste Strecke: so viele Zentimeter vorwärts oder rückwärts, so viele Grad drehen. Tempo stellt die Geschwindigkeit für alles ein, was danach fährt.',
           ops: ['F', 'B', 'L', 'R', 'T']
         },
         {
           id: 'until', label: 'Fahre bis', icon: PROG_ICON.P,
-          hint: 'Der Roboter fährt los und hält von selbst an – bei einer Farbe oder bei einem Abstand. Findet er es nicht, hält er nach 1,5 m.',
           ops: ['P', 'D']
         },
         {
           id: 'wait', label: 'Warten', icon: PROG_ICON.W,
-          hint: 'Stehen bleiben: eine Zeit lang, bis eine Farbe da ist, oder bis wieder Platz ist.',
           ops: ['W', 'V', 'X']
         },
         {
           id: 'loop', label: 'Wiederholen', icon: PROG_ICON.U,
-          hint: 'Mehrere Blöcke als eine Einheit: entweder x-mal hintereinander oder immer weiter, bis etwas da ist.',
           ops: ['U', 'C']
         },
         {
           id: 'mm', label: 'Genau fahren', icon: PROG_ICON.M,
-          hint: 'Wie „Fahren“, aber in Millimetern – für Raster, Linien und kurze Wege.',
           ops: ['M', 'N']
         },
         {
           id: 'more', label: 'Sonstiges', icon: PROG_ICON.S,
-          hint: 'Licht, sofortiger Halt, kurze Pause und „warte, bis wieder frei“.',
           ops: ['S', 'Q', 'Z', 'G']
         }
       ];
@@ -9810,34 +9767,6 @@ let progPaletteSVal = 0;
           b.innerHTML = '<span class="prog-tab-ic" aria-hidden="true">' + c.icon + '</span>' + c.label;
           b.addEventListener('click', () => progSwitchCat(c.id, slal));
           bar.appendChild(b);
-        });
-        const hint = document.getElementById(slal ? 'slalomCatHint' : 'progCatHint');
-        if (hint) {
-          hint.textContent = progActiveCat().hint + ' Antippen setzt den Baustein ans Ende.';
-          hint.classList.toggle('on', !!progCatHintOpen[slal ? 'slalom' : 'prog']);
-        }
-      }
-      function progSetCatHintOpen(slal, open) {
-        progCatHintOpen[slal ? 'slalom' : 'prog'] = !!open;
-        const hint = document.getElementById(slal ? 'slalomCatHint' : 'progCatHint');
-        const btn = document.getElementById(slal ? 'slalomCatInfo' : 'progCatInfo');
-        if (hint) hint.classList.toggle('on', !!open);
-        if (btn) {
-          btn.classList.toggle('on', !!open);
-          btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        }
-      }
-      function initProgCatHints() {
-        [[document.getElementById('progCatInfo'), false],
-         [document.getElementById('slalomCatInfo'), true]].forEach(pair => {
-          const btn = pair[0];
-          if (!btn) return;
-          const slal = pair[1];
-          progSetCatHintOpen(slal, false);
-          btn.addEventListener('click', e => {
-            e.preventDefault();
-            progSetCatHintOpen(slal, !progCatHintOpen[slal ? 'slalom' : 'prog']);
-          });
         });
       }
       function progBuildPalette() {
