@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="EduBot">
+  <meta name="theme-color" content="#f5efe1">
   <link rel="icon" href="data:,">
   <title>EduBot V2</title>
   <style>
@@ -108,10 +113,16 @@
     body {
       height: 100%
     }
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      overscroll-behavior: none
+    }
     body {
       font-family: 'Nunito', 'Comic Sans MS', 'Marker Felt', 'Segoe Print', cursive, system-ui, sans-serif;
       color: var(--ink);
       min-height: 100vh;
+      min-height: 100dvh;
       overflow-x: hidden;
       background-color: var(--paper);
       background-image:
@@ -1247,7 +1258,7 @@
 
 
     .game-body {
-      padding: 28px 32px 60px;
+      padding: 16px 14px calc(24px + env(safe-area-inset-bottom));
       max-width: 1300px;
       margin: 0 auto;
       width: 100%;
@@ -1263,7 +1274,7 @@
       background: #fffdf4;
       border: var(--ink-line) solid var(--ink);
       border-radius: 18px 22px 18px 22px;
-      padding: 30px 26px;
+      padding: 18px 15px;
       text-align: center;
       box-shadow: var(--shadow-sketch-lg);
       position: relative;
@@ -2807,19 +2818,34 @@
       flex-wrap: wrap;
       margin-top: auto
     }
+     #view-slalom.view.active:not(.gs-on):not([data-stage="result"]) {
+       display: flex;
+       flex-direction: column
+     }
      #view-slalom .game-body {
-       padding: 14px 18px 14px;
+       padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
        max-width: 1300px;
-        height: calc(100vh - 68px);
+       flex: 1 1 auto;
+       min-height: 0;
+       overflow: hidden;
+     }
+     #view-slalom.view.active:not(.gs-on):not([data-stage="result"]) .game-body {
        display: flex;
        flex-direction: column;
-       overflow: hidden;
+     }
+     #slalomActiveArea .prog-col-palette {
+       min-height: 0;
+       overflow: hidden
+     }
+     #slalomActiveArea .prog-palette {
+       overflow-y: auto;
+       min-height: 0
      }
      #view-slalom .arena {
        flex: 1;
        display: flex;
        flex-direction: column;
-       padding: 16px 22px 16px;
+       padding: 12px 16px 12px;
        overflow: hidden;
        min-height: 0;
      }
@@ -2866,10 +2892,10 @@
         padding: 24px 28px 60px
       }
       .game-body {
-        padding: 32px 28px 60px
+        padding: 20px 24px calc(32px + env(safe-area-inset-bottom))
       }
       .arena {
-        padding: 36px 34px
+        padding: 20px 22px
       }
       .key-grid {
         grid-template-columns: repeat(3, 82px);
@@ -2879,21 +2905,45 @@
         height: 82px
       }
     }
-    @media (min-width:880px) {
+    @media (min-width:740px) {
       #view-prog .game-body {
         max-width: 1400px
       }
       .prog-cols {
         display: grid;
-        grid-template-columns: minmax(200px, 240px) 1fr;
-        gap: 24px;
+        grid-template-columns: minmax(196px, 236px) 1fr;
+        gap: 20px;
         align-items: stretch;
       }
       .prog-col-prog .prog-strip {
-        min-height: 340px
+        min-height: 260px
+      }
+      .prog-buttons {
+        gap: 8px
+      }
+      .prog-buttons .btn-lg {
+        padding: 12px 18px;
+        font-size: 18px
       }
       .prog-cols .prog-section-label {
         margin-top: 0
+      }
+      .prog-tab {
+        padding: 5px 9px;
+        gap: 4px;
+        font-size: 12.5px
+      }
+      .prog-tab-ic .prog-ic {
+        width: 15px;
+        height: 15px
+      }
+      #slalomActiveArea .prog-col-palette {
+        min-height: 0;
+        overflow: hidden
+      }
+      #slalomActiveArea .prog-palette {
+        overflow-y: auto;
+        min-height: 0
       }
     }
     .mem-meta {
@@ -3014,7 +3064,7 @@
         font-size: 36px
       }
       .arena {
-        padding: 24px 18px
+        padding: 14px 12px
       }
     }
     @media (max-width:560px) {
@@ -3151,6 +3201,94 @@
     .prog-palette .prog-blk-head {
       flex-wrap: wrap;
       row-gap: 4px
+    }
+    .only-help {
+      display: none !important
+    }
+    .help-note {
+      font-size: 15px;
+      line-height: 1.5;
+      font-weight: 500;
+      color: var(--ink-soft);
+      text-align: left;
+      background: #fff;
+      border: 2px dashed var(--ink);
+      border-radius: 10px;
+      padding: 10px 12px
+    }
+    .prog-tabbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px
+    }
+    .prog-tabbar>.prog-tabs {
+      flex: 1 1 auto;
+      min-width: 0
+    }
+    .prog-cat-info {
+      flex: none;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: var(--ink-line) solid var(--ink);
+      background: var(--amber-200);
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: var(--shadow-sketch-sm);
+      transition: transform .12s var(--ease-snap), box-shadow .12s var(--ease-snap), background .2s
+    }
+    .prog-cat-info:hover {
+      transform: translate(-1px, -1px);
+      background: var(--amber-300);
+      box-shadow: 3px 3px 0 var(--ink)
+    }
+    .prog-cat-info:active {
+      transform: translate(1px, 1px);
+      box-shadow: 0 0 0 var(--ink)
+    }
+    .prog-cat-info.on {
+      background: var(--ink);
+      color: var(--paper)
+    }
+    .prog-cat-hint {
+      display: none
+    }
+    .prog-cat-hint.on {
+      display: block;
+      margin-bottom: 8px
+    }
+    button,
+    .btn,
+    .key-btn,
+    .mem-btn,
+    .prog-cat-info {
+      touch-action: manipulation
+    }
+    .prog-blk-head,
+    .prog-blk-label,
+    .prog-chip,
+    .prog-tab,
+    .prog-cat-info,
+    .help-btn,
+    .back-btn {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none
+    }
+    .prog-num,
+    .prog-num * {
+      -webkit-user-select: text;
+      user-select: text
+    }
+    body.fx-dragging {
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none
     }
     @media (prefers-reduced-motion:reduce) {
       .fx-shake,
@@ -3709,7 +3847,7 @@
             </div>
             <div id="raceRulesLine" class="game-desc" style="margin-top:4px;"></div>
             <div id="raceTopicArea" style="display:none;margin-top:12px;">
-              <div class="game-desc" style="margin-bottom:6px;"><b>Welche Themen?</b> Tippe an oder ab.</div>
+              <div class="game-desc only-help" style="margin-bottom:6px;"><b>Welche Themen?</b> Tippe an oder ab.</div>
               <div id="raceTopicChips" class="race-topic-chips"></div>
               <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
                 <button class="btn btn-sm btn-grey" id="btnRaceTopicAll">Alle an</button>
@@ -3719,7 +3857,7 @@
             <div id="raceSetupMulti">
               <div style="font-weight:700;margin-bottom:6px;">Gegner suchen</div>
               <div id="raceStatus">Noch nicht verbunden</div>
-              <div id="raceHint">
+              <div id="raceHint" class="only-help">
                 1. Beide Roboter einschalten<br>
                 2. Auf beiden Seiten "Gegner suchen" drücken<br>
                 3. Gefundenen EduBot auswählen (auch auf Gegner-Seite)<br>
@@ -4013,11 +4151,16 @@
           <div id="slalomCountdownArea" style="display:none;font-family:'Nunito','Marker Felt',cursive;font-size:120px;font-weight:700;color:var(--teal-mark);margin:40px 0;animation:pulseCount 1s infinite;line-height:1;text-shadow:4px 4px 0 var(--ink);">3</div>
           <div id="slalomActiveArea" style="display:none;">
             <div class="prog-section-label" style="margin-bottom:10px;">Dein Weg<span class="prog-hint" id="slalomProgHint"></span></div>
+            <div class="prog-tabbar">
+              <div class="prog-tabs" id="slalomTabs" role="tablist"></div>
+              <button type="button" class="prog-cat-info" id="slalomCatInfo" aria-expanded="false"
+                aria-controls="slalomCatHint" aria-label="Erklärung zu dieser Rubrik"
+                title="Was machen diese Bausteine?">?</button>
+            </div>
+            <div class="prog-cat-hint" id="slalomCatHint"></div>
             <div class="prog-cols">
               <div class="prog-col prog-col-palette">
                 <div style="font-size:14px;color:var(--ink-mute);font-weight:700;margin-bottom:8px;">Bausteine</div>
-                <div class="prog-tabs" id="slalomTabs" role="tablist"></div>
-                <div class="prog-cat-hint" id="slalomCatHint"></div>
                 <div class="prog-palette" id="slalomPalette"></div>
               </div>
               <div class="prog-col prog-col-prog">
@@ -4126,7 +4269,7 @@
       <div class="game-body">
         <div class="arena">
           <div class="game-title">Code-Bausteine</div>
-          <div class="game-desc">Bausteine in dein Programm ziehen, dann <b>Start</b> drücken. Mit dem Baustein <b>bis ROT</b> hält der Roboter an, sobald er <b>ROT</b> sieht.</div>
+          <div class="game-desc only-help">Bausteine in dein Programm ziehen, dann <b>Start</b> drücken. Mit dem Baustein <b>bis ROT</b> hält der Roboter an, sobald er <b>ROT</b> sieht.</div>
           <div class="color-preview-wrap">
             <div id="progColorPreview"></div>
             <div>
@@ -4134,11 +4277,16 @@
               <div id="progColorName">--</div>
             </div>
           </div>
+          <div class="prog-tabbar">
+            <div class="prog-tabs" id="progTabs" role="tablist"></div>
+            <button type="button" class="prog-cat-info" id="progCatInfo" aria-expanded="false"
+              aria-controls="progCatHint" aria-label="Erklärung zu dieser Rubrik"
+              title="Was machen diese Bausteine?">?</button>
+          </div>
+          <div class="prog-cat-hint" id="progCatHint"></div>
           <div class="prog-cols">
             <div class="prog-col prog-col-palette">
               <div class="prog-section-label">Bausteine<span class="prog-hint">zurück = löschen</span></div>
-              <div class="prog-tabs" id="progTabs" role="tablist"></div>
-              <div class="prog-cat-hint" id="progCatHint"></div>
               <div class="prog-palette" id="progPalette"></div>
             </div>
             <div class="prog-col prog-col-prog">
@@ -6965,13 +7113,24 @@ function updateConnectionUI(isConn, text) {
         const m = document.getElementById('helpModal');
         return !!(m && m.classList.contains('open'));
       }
+      function helpIntroHtml(viewId) {
+        const view = document.getElementById('view-' + viewId);
+        if (!view) return '';
+        let html = '';
+        view.querySelectorAll('.only-help').forEach(n => {
+          const t = n.innerHTML.trim();
+          if (t) html += '<div class="help-note">' + t + '</div>';
+        });
+        return html;
+      }
       function renderHelp(viewId) {
         const entry = HELP.views[viewId];
         if (!entry) return;
         const cur = HELP.state[viewId] || 0;
         const safeIdx = Math.max(0, Math.min(entry.schritte.length - 1, cur));
         document.getElementById('helpModalTitle').textContent = entry.titel;
-        document.getElementById('helpModalBody').innerHTML = buildStepList(entry.schritte, safeIdx);
+        document.getElementById('helpModalBody').innerHTML =
+          helpIntroHtml(viewId) + buildStepList(entry.schritte, safeIdx);
       }
       function setStep(viewId, idx) {
         if (!HELP.views[viewId]) return;
@@ -7704,6 +7863,8 @@ function updateConnectionUI(isConn, text) {
         distFeedback('Messung läuft ...');
       }
       initHelpButtons();
+      let progCatHintOpen = { prog: false, slalom: false };
+      initProgCatHints();
       buildGameIntros();
       buildGameResults();
       profileRender();
@@ -9651,7 +9812,33 @@ let progPaletteSVal = 0;
           bar.appendChild(b);
         });
         const hint = document.getElementById(slal ? 'slalomCatHint' : 'progCatHint');
-        if (hint) hint.textContent = progActiveCat().hint + ' Antippen setzt den Baustein ans Ende.';
+        if (hint) {
+          hint.textContent = progActiveCat().hint + ' Antippen setzt den Baustein ans Ende.';
+          hint.classList.toggle('on', !!progCatHintOpen[slal ? 'slalom' : 'prog']);
+        }
+      }
+      function progSetCatHintOpen(slal, open) {
+        progCatHintOpen[slal ? 'slalom' : 'prog'] = !!open;
+        const hint = document.getElementById(slal ? 'slalomCatHint' : 'progCatHint');
+        const btn = document.getElementById(slal ? 'slalomCatInfo' : 'progCatInfo');
+        if (hint) hint.classList.toggle('on', !!open);
+        if (btn) {
+          btn.classList.toggle('on', !!open);
+          btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+      }
+      function initProgCatHints() {
+        [[document.getElementById('progCatInfo'), false],
+         [document.getElementById('slalomCatInfo'), true]].forEach(pair => {
+          const btn = pair[0];
+          if (!btn) return;
+          const slal = pair[1];
+          progSetCatHintOpen(slal, false);
+          btn.addEventListener('click', e => {
+            e.preventDefault();
+            progSetCatHintOpen(slal, !progCatHintOpen[slal ? 'slalom' : 'prog']);
+          });
+        });
       }
       function progBuildPalette() {
         const pal = dndPalette();
@@ -9736,6 +9923,7 @@ let progPaletteSVal = 0;
       function progDragActivate() {
         const d = progDrag;
         d.active = true;
+        document.body.classList.add('fx-dragging');
         const ghostBlk = progBuildBlock(
           { op: d.op, val: d.val, color: d.color, body: [] },
           { where: 'palette' }
@@ -9898,6 +10086,7 @@ let progPaletteSVal = 0;
       function progDragFinish(ev) {
         const d = progDrag;
         if (!d) return;
+        document.body.classList.remove('fx-dragging');
         if (d.ghost) d.ghost.remove();
         if (d.srcEl) d.srcEl.classList.remove('prog-src');
         document.querySelectorAll('.prog-blk-body.drag-over').forEach(el => el.classList.remove('drag-over'));
